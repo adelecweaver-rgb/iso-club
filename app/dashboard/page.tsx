@@ -77,7 +77,7 @@ export default async function DashboardPage() {
               Protected dashboard
             </p>
           </div>
-          <UserButton afterSignOutUrl="/" />
+          <UserButton />
         </div>
 
         <div

@@ -1,7 +1,10 @@
 import Link from "next/link";
-import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
+import { SignInButton, UserButton } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { userId } = await auth();
+
   return (
     <main className="shell">
       <div className="card">
@@ -9,9 +12,7 @@ export default function HomePage() {
           <p className="muted" style={{ margin: 0 }}>
             Iso Club • Member Portal
           </p>
-          <SignedIn>
-            <UserButton />
-          </SignedIn>
+          {userId ? <UserButton /> : null}
         </div>
         <h1 className="title">Your project is fully set up.</h1>
         <p className="muted">
@@ -20,7 +21,8 @@ export default function HomePage() {
         </p>
 
         <div className="actions">
-          <SignedOut>
+          {!userId ? (
+            <>
             <SignInButton mode="modal">
               <button className="btn" type="button">
                 Sign in
@@ -29,12 +31,12 @@ export default function HomePage() {
             <Link className="btn secondary" href="/sign-up">
               Create account
             </Link>
-          </SignedOut>
-          <SignedIn>
+            </>
+          ) : (
             <Link className="btn" href="/dashboard">
               Open member dashboard
             </Link>
-          </SignedIn>
+          )}
         </div>
       </div>
     </main>
