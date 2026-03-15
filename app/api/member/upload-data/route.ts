@@ -14,6 +14,7 @@ type UploadEquipment =
   | "whoop"
   | "oura"
   | "garmin"
+  | "fitbit"
   | "apple_health"
   | "other_wearable";
 
@@ -26,6 +27,7 @@ function normalizeEquipment(input: string): UploadEquipment {
   if (value === "garmin" || value === "garmin_connect" || value === "garmin connect") {
     return "garmin";
   }
+  if (value === "fitbit") return "fitbit";
   if (value === "apple_health" || value === "apple health" || value === "applehealth") {
     return "apple_health";
   }
