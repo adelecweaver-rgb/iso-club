@@ -72,6 +72,7 @@ type DashboardPayload = {
       name: string;
       initials: string;
       tier: string;
+      phoneMissing: boolean;
       recovery: string;
       muscle: string;
       session: string;
@@ -643,7 +644,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       memberIds.length
         ? supabase
             .from("users")
-            .select("id,full_name,membership_tier")
+            .select("id,full_name,membership_tier,phone")
             .in("id", memberIds)
         : Promise.resolve({ data: [], error: null }),
       memberIds.length
@@ -722,6 +723,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
         name,
         initials: initialsFromName(name),
         tier: stringOr(member.membership_tier, "Member"),
+        phoneMissing: stringOr(member.phone, "").length === 0,
         recovery: Math.round(
           numberOr(wearable?.recovery_score, numberOr(wearable?.readiness_score, 60)),
         ).toString(),
@@ -1201,6 +1203,26 @@ export async function DashboardPageView({
         topbarRight.insertBefore(link, topbarRight.firstChild);
       };
 
+      const injectMemberSettingsSidebarLink = () => {
+        const memberNav = document.getElementById("member-nav");
+        if (!memberNav) return;
+        if (document.getElementById("member-settings-sidebar-link")) return;
+
+        const link = document.createElement("a");
+        link.id = "member-settings-sidebar-link";
+        link.href = "/dashboard/settings";
+        link.className = "nav-item";
+        link.style.textDecoration = "none";
+        link.innerHTML = [
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">',
+          '  <circle cx="12" cy="12" r="3.2"></circle>',
+          '  <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .15 1.7 1.7 0 0 0-1 1.56V21.2a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1-.15 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.15-1 1.7 1.7 0 0 0-1.56-1H2.8a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0 .15-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.15 1.7 1.7 0 0 0 1-1.56V2.8a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1 .15 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c0 .35.05.69.15 1a1.7 1.7 0 0 0 1.56 1h.09a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1c-.1.31-.15.65-.15 1z"></path>',
+          "</svg>",
+          '<span class="nav-label">Settings</span>',
+        ].join("");
+        memberNav.appendChild(link);
+      };
+
       const injectCoachPhoneEditor = () => {
         const root = document.getElementById("coach-members");
         if (!root) return;
@@ -1485,10 +1507,58 @@ export async function DashboardPageView({
         (data.coach.members || []).forEach((member, index) => {
           const row = allRows[index];
           if (!row) return;
-          const label = row.querySelector(".metric-label");
-          const value = row.querySelector(".metric-val");
-          if (label) label.textContent = member.name + " · " + member.tier;
-          if (value) value.textContent = "Recovery " + member.recovery;
+          const cells = Array.from(row.children);
+          const memberCell = cells[0];
+          const tierCell = cells[1];
+          const recoveryCell = cells[2];
+          const muscleCell = cells[3];
+          const sessionCell = cells[4];
+
+          if (memberCell) {
+            const avatar = memberCell.querySelector(".mc-av");
+            if (avatar) avatar.textContent = member.initials;
+
+            const nameNode =
+              memberCell.querySelector(".mc-name") ||
+              memberCell.querySelector(".metric-label") ||
+              memberCell.querySelector("div div");
+            if (nameNode) nameNode.textContent = member.name;
+
+            const existingBadge = memberCell.querySelector('[data-phone-missing-badge="true"]');
+            if (existingBadge) existingBadge.remove();
+            if (member.phoneMissing) {
+              const badge = document.createElement("span");
+              badge.setAttribute("data-phone-missing-badge", "true");
+              badge.textContent = "Phone missing";
+              badge.style.display = "inline-block";
+              badge.style.marginLeft = "8px";
+              badge.style.padding = "2px 6px";
+              badge.style.borderRadius = "999px";
+              badge.style.border = "1px solid var(--coral)";
+              badge.style.background = "rgba(240,112,85,0.12)";
+              badge.style.color = "var(--coral)";
+              badge.style.fontSize = "10px";
+              badge.style.letterSpacing = "0.04em";
+              badge.style.textTransform = "uppercase";
+              const parent = nameNode?.parentElement ?? memberCell;
+              parent.appendChild(badge);
+            }
+          }
+
+          if (tierCell) {
+            const tag = tierCell.querySelector(".tag");
+            if (tag) tag.textContent = member.tier;
+          }
+          if (recoveryCell) {
+            recoveryCell.textContent = member.recovery;
+            recoveryCell.style.color = Number(member.recovery) < 50 ? "var(--coral)" : "var(--lime)";
+          }
+          if (muscleCell) {
+            muscleCell.textContent = member.muscle;
+          }
+          if (sessionCell) {
+            sessionCell.textContent = member.session;
+          }
         });
       }
 
@@ -1504,6 +1574,7 @@ export async function DashboardPageView({
         injectMemberRecoveryLogLink();
         injectMemberUploadDataButton();
         injectMemberSettingsButton();
+        injectMemberSettingsSidebarLink();
       }
       wireMemberMessageReply();
     })();
