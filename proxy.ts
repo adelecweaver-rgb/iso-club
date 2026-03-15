@@ -12,6 +12,7 @@ const withClerk = clerkConfigured
         "/sign-in(.*)",
         "/sign-up(.*)",
         "/api/webhooks/clerk(.*)",
+  "/api/cron/sms(.*)",
       ]);
 
       return clerkMiddleware(async (auth, req) => {

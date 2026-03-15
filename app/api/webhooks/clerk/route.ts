@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { NextRequest } from "next/server";
+import { sendWelcomeSms } from "@/lib/server/sms-notifications";
 
 type ClerkWebhookUser = {
   id: string;
@@ -43,6 +44,20 @@ function getPrimaryEmail(data: ClerkWebhookUser): string {
     addresses.find((address) => valueAsString(address.id, "") === primaryId) ??
     addresses[0];
   return valueAsString(primary?.email_address, "");
+}
+
+function getPhoneFromMetadata(metadata: Record<string, unknown>): string {
+  const candidates = [
+    metadata.phone,
+    metadata.phone_number,
+    metadata.mobile,
+    metadata.mobile_phone,
+  ];
+  for (const candidate of candidates) {
+    const value = valueAsString(candidate, "");
+    if (value) return value;
+  }
+  return "";
 }
 
 export async function POST(request: NextRequest) {
@@ -138,6 +153,13 @@ export async function POST(request: NextRequest) {
         { success: false, error: upsertResult.error.message },
         { status: 500 },
       );
+    }
+
+    if (event.type === "user.created" && upsertPayload.role === "member") {
+      const phone = getPhoneFromMetadata(metadata);
+      if (phone) {
+        await sendWelcomeSms(fullName, phone);
+      }
     }
   }
 

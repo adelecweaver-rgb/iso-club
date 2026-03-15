@@ -5,6 +5,10 @@ import {
   getActorContext,
   isCoachRole,
 } from "@/lib/server/actor";
+import {
+  sendLowRecoverySmsForMember,
+  sendScanResultsSmsForMember,
+} from "@/lib/server/sms-notifications";
 
 type Body = {
   member_id?: string;
@@ -94,6 +98,16 @@ export async function POST(request: Request) {
     };
     const extractedNumber = (key: string): number | null =>
       asOptionalNumber(extraction[key]);
+    const extractedBoolean = (key: string): boolean => {
+      const value = extraction[key];
+      if (typeof value === "boolean") return value;
+      if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        return normalized === "true" || normalized === "1" || normalized === "yes";
+      }
+      if (typeof value === "number") return value === 1;
+      return false;
+    };
 
     let memberId = typeof body.member_id === "string" ? body.member_id.trim() : "";
     if (!memberId) {
@@ -217,12 +231,16 @@ export async function POST(request: Request) {
         posture_hip_forward_in: extractedNumber("posture_hip_forward_in"),
       });
       if (fit3dInsert.error) throw new Error(fit3dInsert.error.message);
+      if (extractedBoolean("dustin_reviewed")) {
+        await sendScanResultsSmsForMember(context.supabase, memberId);
+      }
     } else if (equipment.kind === "wearable") {
+      const recoveryScore = extractedNumber("recovery_score");
       const wearableInsert = await context.supabase.from("wearable_data").insert({
         member_id: memberId,
         recorded_date: nowIso,
         device_type: equipment.device,
-        recovery_score: extractedNumber("recovery_score"),
+        recovery_score: recoveryScore,
         readiness_score: extractedNumber("readiness_score"),
         hrv_ms: extractedNumber("hrv_ms"),
         resting_hr: extractedNumber("resting_hr"),
@@ -234,6 +252,14 @@ export async function POST(request: Request) {
         spo2_pct: extractedNumber("spo2_pct"),
       });
       if (wearableInsert.error) throw new Error(wearableInsert.error.message);
+      if (recoveryScore !== null && recoveryScore < 50) {
+        await sendLowRecoverySmsForMember(
+          context.supabase,
+          memberId,
+          recoveryScore,
+          equipment.device,
+        );
+      }
     } else if (equipment.kind === "manual") {
       const extractedDuration = extractedNumber("duration_minutes");
       const outputNumbers = extraction.visible_output_numbers;

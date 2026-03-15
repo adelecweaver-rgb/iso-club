@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { asOptionalNumber, asRequiredString, getActorContext } from "@/lib/server/actor";
+import { sendLowRecoverySmsForMember } from "@/lib/server/sms-notifications";
 
 type Body = {
   equipment?: string;
@@ -148,11 +149,12 @@ export async function POST(request: Request) {
         equipment === "other_wearable"
           ? extractedString("device_name", "other_wearable").toLowerCase()
           : equipment;
+      const recoveryScore = extractedNumber("recovery_score");
       const wearablePayloadBase = {
         member_id: memberId,
         recorded_date: sessionDate,
         device_type: deviceType,
-        recovery_score: extractedNumber("recovery_score"),
+        recovery_score: recoveryScore,
         readiness_score: extractedNumber("readiness_score"),
         hrv_ms: extractedNumber("hrv_ms"),
         resting_hr: extractedNumber("resting_hr"),
@@ -176,6 +178,9 @@ export async function POST(request: Request) {
         insert = await context.supabase.from("wearable_data").insert(wearablePayloadBase);
       }
       if (insert.error) throw new Error(insert.error.message);
+      if (recoveryScore !== null && recoveryScore < 50) {
+        await sendLowRecoverySmsForMember(context.supabase, memberId, recoveryScore, deviceType);
+      }
     }
 
     return NextResponse.json({ success: true });

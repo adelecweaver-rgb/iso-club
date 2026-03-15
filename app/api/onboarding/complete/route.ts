@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { asOptionalNumber, getActorContext } from "@/lib/server/actor";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { sendWelcomeSms } from "@/lib/server/sms-notifications";
 
 type Body = {
   full_name?: string;
@@ -45,6 +46,18 @@ export async function POST(request: Request) {
       );
     }
 
+    const existingUser = await supabaseAdmin
+      .from("users")
+      .select("id,phone")
+      .eq("clerk_id", context.clerkUserId)
+      .limit(1);
+    const existingPhone =
+      !existingUser.error &&
+      Array.isArray(existingUser.data) &&
+      existingUser.data.length > 0
+        ? String(existingUser.data[0]?.phone ?? "").trim()
+        : "";
+
     const fullName =
       (typeof body.full_name === "string" && body.full_name.trim().length > 0
         ? body.full_name.trim()
@@ -87,6 +100,11 @@ export async function POST(request: Request) {
       .single();
 
     if (upserted.error) throw new Error(upserted.error.message);
+
+    const incomingPhone = String(payload.phone ?? "").trim();
+    if (role === "member" && incomingPhone && !existingPhone) {
+      await sendWelcomeSms(fullName, incomingPhone);
+    }
 
     return NextResponse.json({ success: true, user_id: upserted.data.id });
   } catch (err) {
