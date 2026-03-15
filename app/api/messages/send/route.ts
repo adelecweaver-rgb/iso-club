@@ -15,6 +15,17 @@ function asString(value: unknown, fallback = ""): string {
   return fallback;
 }
 
+function isCoachRole(role: string): boolean {
+  const normalized = role.trim().toLowerCase();
+  return normalized === "coach" || normalized === "admin" || normalized === "staff";
+}
+
+function isMissingIsActiveColumnError(message: string): boolean {
+  return /column ["']?is_active["']? .*users.* does not exist|Could not find the 'is_active' column/i.test(
+    message,
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const { context, error } = await getActorContext();
@@ -25,12 +36,16 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Body;
     const messageBody = asRequiredString(body.body, "body");
 
+    const actorRole = asString(context.role, "member").toLowerCase();
     let recipientId =
       typeof body.recipient_id === "string" && body.recipient_id.trim().length > 0
         ? body.recipient_id.trim()
         : "";
 
     if (!recipientId) {
+      if (isCoachRole(actorRole)) {
+        throw new Error("recipient_id is required when sending as coach/staff.");
+      }
       // Allow members to "reply to coach" without picking a recipient manually.
       const staffLookup = await context.supabase
         .from("users")
@@ -39,10 +54,30 @@ export async function POST(request: Request) {
         .eq("is_active", true)
         .order("full_name", { ascending: true })
         .limit(50);
-      if (staffLookup.error || !Array.isArray(staffLookup.data) || staffLookup.data.length === 0) {
+      let staffRows: AnyRow[] = [];
+      if (!staffLookup.error && Array.isArray(staffLookup.data)) {
+        staffRows = staffLookup.data as AnyRow[];
+      } else if (
+        staffLookup.error &&
+        isMissingIsActiveColumnError(staffLookup.error.message)
+      ) {
+        const fallback = await context.supabase
+          .from("users")
+          .select("id,full_name,role")
+          .in("role", ["coach", "admin", "staff"])
+          .order("full_name", { ascending: true })
+          .limit(50);
+        if (!fallback.error && Array.isArray(fallback.data)) {
+          staffRows = fallback.data as AnyRow[];
+        } else {
+          throw new Error(fallback.error?.message ?? "No active coach/staff recipient found.");
+        }
+      } else if (staffLookup.error) {
+        throw new Error(staffLookup.error.message);
+      }
+      if (staffRows.length === 0) {
         throw new Error("No active coach/staff recipient found.");
       }
-      const staffRows = staffLookup.data as AnyRow[];
       const preferredCoach =
         staffRows.find((row) => asString(row.full_name, "").toLowerCase().includes("dustin")) ??
         staffRows[0];
@@ -52,6 +87,47 @@ export async function POST(request: Request) {
 
     const senderId = String(context.dbUser.id ?? "");
     if (!senderId) throw new Error("Sender user id is missing.");
+    if (recipientId === senderId) {
+      throw new Error("Cannot send a message to yourself.");
+    }
+
+    const recipientLookupWithActive = await context.supabase
+      .from("users")
+      .select("id,role,full_name")
+      .eq("id", recipientId)
+      .eq("is_active", true)
+      .limit(1);
+    let recipientRow: AnyRow | null = null;
+    if (!recipientLookupWithActive.error && Array.isArray(recipientLookupWithActive.data)) {
+      recipientRow = recipientLookupWithActive.data[0] as AnyRow | null;
+    } else if (
+      recipientLookupWithActive.error &&
+      isMissingIsActiveColumnError(recipientLookupWithActive.error.message)
+    ) {
+      const fallbackRecipientLookup = await context.supabase
+        .from("users")
+        .select("id,role,full_name")
+        .eq("id", recipientId)
+        .limit(1);
+      if (!fallbackRecipientLookup.error && Array.isArray(fallbackRecipientLookup.data)) {
+        recipientRow = fallbackRecipientLookup.data[0] as AnyRow | null;
+      } else {
+        throw new Error(fallbackRecipientLookup.error?.message ?? "Recipient user not found.");
+      }
+    } else if (recipientLookupWithActive.error) {
+      throw new Error(recipientLookupWithActive.error.message);
+    }
+    if (!recipientRow) {
+      throw new Error("Recipient user not found.");
+    }
+
+    const recipientRole = asString(recipientRow.role, "").toLowerCase();
+    if (actorRole === "member" && !isCoachRole(recipientRole)) {
+      throw new Error("Members can only message coach/staff accounts.");
+    }
+    if (isCoachRole(actorRole) && recipientRole !== "member") {
+      throw new Error("Coach/staff can only message member accounts.");
+    }
 
     const threadId =
       typeof body.thread_id === "string" && body.thread_id.trim().length > 0

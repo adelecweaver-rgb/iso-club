@@ -20,7 +20,7 @@ type MemberSection =
   | "reports"
   | "schedule";
 
-type CoachSection = "morning" | "members" | "log" | "protocols";
+type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 
 type DashboardPayload = {
   role: "member" | "coach";
@@ -160,7 +160,13 @@ function normalizeMemberSection(input: string | undefined): MemberSection {
 
 function normalizeCoachSection(input: string | undefined): CoachSection {
   const value = String(input || "").trim().toLowerCase();
-  if (value === "morning" || value === "members" || value === "log" || value === "protocols") {
+  if (
+    value === "morning" ||
+    value === "members" ||
+    value === "messages" ||
+    value === "log" ||
+    value === "protocols"
+  ) {
     return value;
   }
   return "morning";

@@ -16,7 +16,7 @@ type MemberSection =
   | "reports"
   | "schedule";
 
-type CoachSection = "morning" | "members" | "log" | "protocols";
+type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 
 type CarolSession = {
   sessionDate: string;
@@ -212,8 +212,11 @@ export function DashboardReactClient({
   const [carolTab, setCarolTab] = useState<"rehit" | "fat_burn" | "free_custom" | "fitness_tests">(
     "rehit",
   );
-  const [coachName, setCoachName] = useState("Dustin");
-  const [coachId, setCoachId] = useState(payload.coachId ?? "");
+  const [peerName, setPeerName] = useState("Dustin");
+  const [peerId, setPeerId] = useState(payload.coachId ?? "");
+  const [selectedCoachRecipientId, setSelectedCoachRecipientId] = useState(
+    payload.coach.members[0]?.id ?? "",
+  );
   const [unreadCount, setUnreadCount] = useState(0);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [messagesStatus, setMessagesStatus] = useState("");
@@ -227,6 +230,24 @@ export function DashboardReactClient({
   );
   const greetingName = useMemo(() => firstNameFromName(displayName), [displayName]);
   const userInitials = useMemo(() => initialsFromName(displayName), [displayName]);
+  const isCoachAccount = role !== "member";
+  const coachMessageRecipients = useMemo(
+    () =>
+      Array.isArray(payload.coach.members)
+        ? payload.coach.members.map((member) => ({
+            id: String(member.id || ""),
+            name: String(member.name || "Member"),
+          }))
+        : [],
+    [payload.coach.members],
+  );
+
+  useEffect(() => {
+    if (!isCoachAccount) return;
+    if (selectedCoachRecipientId) return;
+    const first = coachMessageRecipients[0]?.id ?? "";
+    if (first) setSelectedCoachRecipientId(first);
+  }, [coachMessageRecipients, isCoachAccount, selectedCoachRecipientId]);
 
   useEffect(() => {
     if (role === "member") {
@@ -244,15 +265,21 @@ export function DashboardReactClient({
   }, [memberCarolRows, payload.carolSessions]);
 
   const loadMessages = useCallback(
-    async (markRead: boolean) => {
+    async (markRead: boolean, targetPeerId?: string) => {
       try {
+        const params = new URLSearchParams();
+        if (markRead) params.set("mark_read", "1");
+        if (targetPeerId && targetPeerId.trim()) params.set("peer_id", targetPeerId.trim());
         const response = await getJson<{
+          peer?: { id?: string; full_name?: string; role?: string };
           coach?: { id?: string; full_name?: string };
           unread_count?: number;
           messages?: MessageItem[];
-        }>(`/api/messages/inbox${markRead ? "?mark_read=1" : ""}`);
-        setCoachId(String(response.coach?.id || ""));
-        setCoachName(String(response.coach?.full_name || "Dustin"));
+        }>(`/api/messages/inbox${params.toString() ? `?${params.toString()}` : ""}`);
+        const resolvedPeerId = String(response.peer?.id || response.coach?.id || "");
+        const resolvedPeerName = String(response.peer?.full_name || response.coach?.full_name || "Dustin");
+        setPeerId(resolvedPeerId);
+        setPeerName(resolvedPeerName);
         setUnreadCount(markRead ? 0 : Number(response.unread_count || 0));
         const normalizedMessages = Array.isArray(response.messages)
           ? response.messages
@@ -277,11 +304,18 @@ export function DashboardReactClient({
   }, [loadMessages, memberView, role]);
 
   useEffect(() => {
+    if (!isCoachAccount || mode !== "coach" || coachView !== "messages") return;
+    const targetPeerId = selectedCoachRecipientId || coachMessageRecipients[0]?.id || "";
+    if (!targetPeerId) return;
+    void loadMessages(true, targetPeerId);
+  }, [coachMessageRecipients, coachView, isCoachAccount, loadMessages, mode, selectedCoachRecipientId]);
+
+  useEffect(() => {
     if (!threadRef.current) return;
     threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [messages]);
 
-  const sendMemberMessage = useCallback(async () => {
+  const sendMessage = useCallback(async () => {
     if (sendingMessage) return;
     const body = messageDraft.trim();
     if (!body) {
@@ -296,8 +330,12 @@ export function DashboardReactClient({
           .map((item) => String(item.thread_id || ""))
           .filter(Boolean)
           .slice(-1)[0] || undefined;
+      const resolvedRecipientId =
+        mode === "coach"
+          ? selectedCoachRecipientId || peerId
+          : peerId || undefined;
       const response = await postJson<{ message?: MessageItem }>("/api/messages/send", {
-        recipient_id: coachId || undefined,
+        recipient_id: resolvedRecipientId || undefined,
         thread_id: latestThreadId,
         body,
       });
@@ -312,7 +350,7 @@ export function DashboardReactClient({
     } finally {
       setSendingMessage(false);
     }
-  }, [coachId, messageDraft, messages, sendingMessage]);
+  }, [messageDraft, messages, mode, peerId, selectedCoachRecipientId, sendingMessage]);
 
   const messageBadge = unreadCount > 0 ? unreadCount : undefined;
 
@@ -413,6 +451,9 @@ export function DashboardReactClient({
             <button className={activeCoachView("members")} onClick={() => setCoachView("members")} type="button">
               All Members
             </button>
+            <button className={activeCoachView("messages")} onClick={() => setCoachView("messages")} type="button">
+              Messages
+            </button>
             <button className={activeCoachView("log")} onClick={() => setCoachView("log")} type="button">
               Log Session
             </button>
@@ -462,11 +503,17 @@ export function DashboardReactClient({
             ) : null}
             <button
               className="btn notif-wrap btn-sm"
-              onClick={() => setMemberSection("messages")}
+              onClick={() => {
+                if (mode === "coach") {
+                  setCoachView("messages");
+                } else {
+                  setMemberSection("messages");
+                }
+              }}
               type="button"
             >
               Messages
-              {unreadCount > 0 ? <span className="notif-dot" /> : null}
+              {mode === "member" && unreadCount > 0 ? <span className="notif-dot" /> : null}
             </button>
             <button className="btn btn-lime btn-sm" onClick={() => setMemberSection("schedule")} type="button">
               Book Session
@@ -697,32 +744,77 @@ export function DashboardReactClient({
           </div>
         </div>
 
-        <div id="view-messages" className="content" style={{ display: mode === "member" && memberView === "messages" ? "block" : "none" }}>
+        <div
+          id="view-messages"
+          className="content"
+          style={{
+            display:
+              (mode === "member" && memberView === "messages") ||
+              (mode === "coach" && coachView === "messages")
+                ? "block"
+                : "none",
+          }}
+        >
           <div className="sec-header"><div className="sec-title">Messages</div></div>
           <div className="card" style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: 460 }}>
             <div style={{ borderRight: "1px solid var(--border)" }}>
               <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--text3)" }}>
                 Inbox
               </div>
-              <div className={`msg-thread ${unreadCount > 0 ? "unread" : ""}`}>
-                <div className="msg-av" style={{ background: "var(--amber-dim)", color: "var(--amber)" }}>
-                  {initialsFromName(coachName)}
+              {mode === "coach" ? (
+                coachMessageRecipients.length ? (
+                  coachMessageRecipients.map((member) => (
+                    <button
+                      key={member.id}
+                      className={`msg-thread ${selectedCoachRecipientId === member.id ? "unread" : ""}`}
+                      style={{ width: "100%", border: "none", textAlign: "left", background: "transparent" }}
+                      onClick={() => {
+                        setSelectedCoachRecipientId(member.id);
+                        void loadMessages(true, member.id);
+                      }}
+                      type="button"
+                    >
+                      <div className="msg-av" style={{ background: "var(--lime-dim)", color: "var(--lime)" }}>
+                        {initialsFromName(member.name)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="msg-from">{member.name}</div>
+                        <div className="msg-preview">
+                          {selectedCoachRecipientId === member.id
+                            ? messages[messages.length - 1]?.body || "Open thread"
+                            : "Open thread"}
+                        </div>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div style={{ padding: 16, color: "var(--text3)", fontSize: 12 }}>
+                    No members available.
+                  </div>
+                )
+              ) : (
+                <div className={`msg-thread ${unreadCount > 0 ? "unread" : ""}`}>
+                  <div className="msg-av" style={{ background: "var(--amber-dim)", color: "var(--amber)" }}>
+                    {initialsFromName(peerName)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="msg-from">{peerName}</div>
+                    <div className="msg-preview">{messages[messages.length - 1]?.body || "No messages yet"}</div>
+                  </div>
+                  <div className="msg-time">{formatMessageTime(messages[messages.length - 1]?.created_at || "")}</div>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="msg-from">{coachName}</div>
-                  <div className="msg-preview">{messages[messages.length - 1]?.body || "No messages yet"}</div>
-                </div>
-                <div className="msg-time">{formatMessageTime(messages[messages.length - 1]?.created_at || "")}</div>
-              </div>
+              )}
             </div>
             <div style={{ display: "flex", flexDirection: "column", padding: "20px 24px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid var(--border)" }}>
                 <div className="msg-av" style={{ width: 36, height: 36, fontSize: 13, background: "var(--amber-dim)", color: "var(--amber)" }}>
-                  {initialsFromName(coachName)}
+                  {initialsFromName(peerName)}
                 </div>
                 <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>{coachName}</div>
-                  <div style={{ fontSize: 11, color: "var(--text3)" }}>Head Coach · Iso Club</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>{peerName}</div>
+                  <div style={{ fontSize: 11, color: "var(--text3)" }}>
+                    {mode === "coach" ? "Member · Iso Club" : "Head Coach · Iso Club"}
+                  </div>
                 </div>
               </div>
 
@@ -757,7 +849,11 @@ export function DashboardReactClient({
                     );
                   })
                 ) : (
-                  <p style={{ color: "var(--text3)" }}>No messages yet. Send Dustin a note to start the thread.</p>
+                  <p style={{ color: "var(--text3)" }}>
+                    {mode === "coach"
+                      ? "No messages yet. Send a note to start this thread."
+                      : "No messages yet. Send Dustin a note to start the thread."}
+                  </p>
                 )}
               </div>
 
@@ -765,11 +861,11 @@ export function DashboardReactClient({
                 <input
                   className="form-input"
                   style={{ flex: 1 }}
-                  placeholder="Reply to Dustin…"
+                  placeholder={mode === "coach" ? "Message member…" : "Reply to Dustin…"}
                   value={messageDraft}
                   onChange={(event) => setMessageDraft(event.target.value)}
                 />
-                <button className="btn btn-lime" type="button" onClick={() => void sendMemberMessage()} disabled={sendingMessage}>
+                <button className="btn btn-lime" type="button" onClick={() => void sendMessage()} disabled={sendingMessage}>
                   Send
                 </button>
               </div>
