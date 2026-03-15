@@ -111,6 +111,15 @@ type MessageItem = {
   read_at: string | null;
 };
 
+type InboxPeer = {
+  id: string;
+  full_name: string;
+  role?: string;
+  unread_count?: number;
+  latest_at?: string;
+  latest_preview?: string;
+};
+
 function firstNameFromName(name: string): string {
   const first = String(name || "").trim().split(" ")[0];
   return first || "Member";
@@ -217,6 +226,7 @@ export function DashboardReactClient({
   const [selectedCoachRecipientId, setSelectedCoachRecipientId] = useState(
     payload.coach.members[0]?.id ?? "",
   );
+  const [coachPeers, setCoachPeers] = useState<InboxPeer[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [messagesStatus, setMessagesStatus] = useState("");
@@ -231,7 +241,7 @@ export function DashboardReactClient({
   const greetingName = useMemo(() => firstNameFromName(displayName), [displayName]);
   const userInitials = useMemo(() => initialsFromName(displayName), [displayName]);
   const isCoachAccount = role !== "member";
-  const coachMessageRecipients = useMemo(
+  const payloadCoachRecipients = useMemo(
     () =>
       Array.isArray(payload.coach.members)
         ? payload.coach.members.map((member) => ({
@@ -241,13 +251,22 @@ export function DashboardReactClient({
         : [],
     [payload.coach.members],
   );
+  const effectiveCoachRecipients = useMemo(() => {
+    if (coachPeers.length > 0) {
+      return coachPeers.map((peer) => ({
+        id: String(peer.id || ""),
+        name: String(peer.full_name || "Member"),
+      }));
+    }
+    return payloadCoachRecipients;
+  }, [coachPeers, payloadCoachRecipients]);
 
   useEffect(() => {
     if (!isCoachAccount) return;
     if (selectedCoachRecipientId) return;
-    const first = coachMessageRecipients[0]?.id ?? "";
+    const first = effectiveCoachRecipients[0]?.id ?? "";
     if (first) setSelectedCoachRecipientId(first);
-  }, [coachMessageRecipients, isCoachAccount, selectedCoachRecipientId]);
+  }, [effectiveCoachRecipients, isCoachAccount, selectedCoachRecipientId]);
 
   useEffect(() => {
     if (role === "member") {
@@ -272,6 +291,7 @@ export function DashboardReactClient({
         if (targetPeerId && targetPeerId.trim()) params.set("peer_id", targetPeerId.trim());
         const response = await getJson<{
           peer?: { id?: string; full_name?: string; role?: string };
+          peers?: InboxPeer[];
           coach?: { id?: string; full_name?: string };
           unread_count?: number;
           messages?: MessageItem[];
@@ -280,6 +300,16 @@ export function DashboardReactClient({
         const resolvedPeerName = String(response.peer?.full_name || response.coach?.full_name || "Dustin");
         setPeerId(resolvedPeerId);
         setPeerName(resolvedPeerName);
+        if (isCoachAccount) {
+          const peers = Array.isArray(response.peers) ? response.peers : [];
+          setCoachPeers(peers);
+          setSelectedCoachRecipientId((previous) => {
+            if (!resolvedPeerId) return previous;
+            if (!previous) return resolvedPeerId;
+            const previousStillValid = peers.some((peer) => String(peer.id || "") === previous);
+            return previousStillValid ? previous : resolvedPeerId;
+          });
+        }
         setUnreadCount(markRead ? 0 : Number(response.unread_count || 0));
         const normalizedMessages = Array.isArray(response.messages)
           ? response.messages
@@ -295,7 +325,7 @@ export function DashboardReactClient({
         setMessagesStatus(error instanceof Error ? error.message : "Unable to load messages.");
       }
     },
-    [],
+    [isCoachAccount],
   );
 
   useEffect(() => {
@@ -305,10 +335,9 @@ export function DashboardReactClient({
 
   useEffect(() => {
     if (!isCoachAccount || mode !== "coach" || coachView !== "messages") return;
-    const targetPeerId = selectedCoachRecipientId || coachMessageRecipients[0]?.id || "";
-    if (!targetPeerId) return;
+    const targetPeerId = selectedCoachRecipientId || undefined;
     void loadMessages(true, targetPeerId);
-  }, [coachMessageRecipients, coachView, isCoachAccount, loadMessages, mode, selectedCoachRecipientId]);
+  }, [coachView, isCoachAccount, loadMessages, mode, selectedCoachRecipientId]);
 
   useEffect(() => {
     if (!threadRef.current) return;
@@ -334,6 +363,9 @@ export function DashboardReactClient({
         mode === "coach"
           ? selectedCoachRecipientId || peerId
           : peerId || undefined;
+      if (!resolvedRecipientId) {
+        throw new Error("Select a message recipient first.");
+      }
       const response = await postJson<{ message?: MessageItem }>("/api/messages/send", {
         recipient_id: resolvedRecipientId || undefined,
         thread_id: latestThreadId,
@@ -762,8 +794,8 @@ export function DashboardReactClient({
                 Inbox
               </div>
               {mode === "coach" ? (
-                coachMessageRecipients.length ? (
-                  coachMessageRecipients.map((member) => (
+                effectiveCoachRecipients.length ? (
+                  effectiveCoachRecipients.map((member) => (
                     <button
                       key={member.id}
                       className={`msg-thread ${selectedCoachRecipientId === member.id ? "unread" : ""}`}
