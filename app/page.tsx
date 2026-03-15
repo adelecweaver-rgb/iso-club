@@ -1,7 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { promises as fs } from "fs";
 import path from "path";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 type LandingParts = {
   styles: string;
@@ -42,6 +43,34 @@ async function loadLanding(): Promise<LandingParts> {
 export default async function HomePage() {
   const { userId } = await auth();
   if (userId) {
+    const supabase = await createSupabaseServerClient();
+    const clerkUser = await currentUser();
+    const email = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
+    let role = "";
+
+    if (supabase) {
+      const byClerk = await supabase
+        .from("users")
+        .select("role")
+        .eq("clerk_id", userId)
+        .limit(1);
+      if (!byClerk.error && Array.isArray(byClerk.data) && byClerk.data.length > 0) {
+        role = String(byClerk.data[0]?.role ?? "").trim().toLowerCase();
+      } else if (email) {
+        const byEmail = await supabase
+          .from("users")
+          .select("role")
+          .eq("email", email)
+          .limit(1);
+        if (!byEmail.error && Array.isArray(byEmail.data) && byEmail.data.length > 0) {
+          role = String(byEmail.data[0]?.role ?? "").trim().toLowerCase();
+        }
+      }
+    }
+
+    if (role === "coach" || role === "admin" || role === "staff") {
+      redirect("/coach");
+    }
     redirect("/dashboard");
   }
 

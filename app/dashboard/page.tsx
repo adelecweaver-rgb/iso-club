@@ -2,9 +2,11 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import Script from "next/script";
+import { redirect } from "next/navigation";
 import { promises as fs } from "fs";
 import path from "path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { DashboardBootstrapClient } from "@/components/dashboard-bootstrap-client";
 
 type PrototypeParts = {
   styles: string;
@@ -117,6 +119,8 @@ function normalizeMemberSection(input: string | undefined): MemberSection {
   }
   return "dashboard";
 }
+
+type DashboardRouteType = "member" | "coach";
 
 async function loadPrototypeParts(): Promise<PrototypeParts> {
   try {
@@ -307,7 +311,9 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   );
   const userRole = stringOr(userRow?.role, "").toLowerCase();
   const isCoach =
-    userRole.includes("coach") ||
+    userRole === "coach" ||
+    userRole === "admin" ||
+    userRole === "staff" ||
     metadataRole.toLowerCase().includes("coach") ||
     email.toLowerCase().includes("dustin");
   payload.role = isCoach ? "coach" : "member";
@@ -773,8 +779,10 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
 
 export async function DashboardPageView({
   initialSection,
+  routeType = "member",
 }: {
   initialSection?: string;
+  routeType?: DashboardRouteType;
 } = {}) {
   const { userId } = await auth();
   const prototype = await loadPrototypeParts();
@@ -785,6 +793,12 @@ export async function DashboardPageView({
   }
 
   const livePayload = await loadDashboardLiveData(userId);
+  if (routeType === "member" && livePayload.role === "coach") {
+    redirect("/coach");
+  }
+  if (routeType === "coach" && livePayload.role !== "coach") {
+    redirect("/dashboard");
+  }
   const payload = JSON.stringify(livePayload).replace(/</g, "\\u003c");
   const bootstrapScript = `
     (() => {
@@ -1334,6 +1348,7 @@ export async function DashboardPageView({
     })();
   `;
   const combinedScript = `${prototype.script}\n${bootstrapScript}`;
+  const enableLegacyInlineScript = false;
 
   return (
     <>
@@ -1370,9 +1385,12 @@ export async function DashboardPageView({
       </div>
 
       <div dangerouslySetInnerHTML={{ __html: prototype.body }} />
-      <Script id="dashboard-bootstrap-script" strategy="afterInteractive">
-        {combinedScript}
-      </Script>
+      <DashboardBootstrapClient payload={livePayload} initialMemberView={initialMemberView} />
+      {enableLegacyInlineScript ? (
+        <Script id="dashboard-bootstrap-script" strategy="afterInteractive">
+          {combinedScript}
+        </Script>
+      ) : null}
     </>
   );
 }
