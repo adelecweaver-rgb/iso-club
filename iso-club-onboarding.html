@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iso Club — Welcome</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:        #0b0c09;
+  --bg2:       #111209;
+  --bg3:       #181910;
+  --bg4:       #1f2014;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.13);
+  --text:      #edeae0;
+  --text2:     #9b9889;
+  --text3:     #585750;
+  --lime:      #c9f055;
+  --lime2:     #a8d038;
+  --lime-dim:  rgba(201,240,85,0.1);
+  --lime-dim2: rgba(201,240,85,0.05);
+  --amber:     #f0b955;
+  --amber-dim: rgba(240,185,85,0.1);
+  --blue:      #55b8f0;
+  --blue-dim:  rgba(85,184,240,0.1);
+  --coral:     #f07055;
+  --teal:      #55e8c8;
+  --teal-dim:  rgba(85,232,200,0.1);
+  --serif:     'Instrument Serif', Georgia, serif;
+  --sans:      'Instrument Sans', sans-serif;
+  --r:         14px;
+  --r-sm:      8px;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* BACKGROUND TEXTURE */
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(201,240,85,0.03) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(85,184,240,0.03) 0%,transparent 50%);pointer-events:none;z-index:0}
+
+.app{position:relative;z-index:1;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px}
+
+/* PROGRESS BAR */
+.progress-bar{position:fixed;top:0;left:0;right:0;height:2px;background:var(--bg3);z-index:100}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--lime),var(--lime2));transition:width 0.5s ease;border-radius:0 2px 2px 0}
+
+/* LOGO */
+.onboard-logo{position:fixed;top:24px;left:32px;font-family:var(--serif);font-size:20px;color:var(--text);letter-spacing:0.02em}
+.onboard-logo em{color:var(--lime);font-style:normal}
+
+/* STEP INDICATOR */
+.step-indicator{position:fixed;top:28px;right:32px;font-size:11px;color:var(--text3);letter-spacing:0.1em}
+
+/* SCREEN WRAPPER */
+.screen{display:none;width:100%;max-width:560px;animation:fadeUp 0.4s ease both}
+.screen.active{display:block}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+
+/* SCREEN PARTS */
+.screen-eyebrow{font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--lime);margin-bottom:12px}
+.screen-title{font-family:var(--serif);font-size:38px;color:var(--text);line-height:1.15;margin-bottom:12px}
+.screen-title em{color:var(--lime);font-style:italic}
+.screen-sub{font-size:15px;color:var(--text2);line-height:1.7;margin-bottom:32px}
+
+/* FORM ELEMENTS */
+.form-group{margin-bottom:16px}
+.form-label{display:block;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.form-input,.form-select,.form-textarea{width:100%;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r-sm);padding:12px 16px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none;transition:border-color .2s,box-shadow .2s}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--lime);box-shadow:0 0 0 3px rgba(201,240,85,0.08)}
+.form-input::placeholder,.form-textarea::placeholder{color:var(--text3)}
+.form-textarea{resize:vertical;min-height:90px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+/* OPTION CARDS */
+.option-grid{display:grid;gap:10px;margin-bottom:28px}
+.option-grid.cols-2{grid-template-columns:1fr 1fr}
+.option-grid.cols-3{grid-template-columns:1fr 1fr 1fr}
+.option-card{padding:16px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .2s;text-align:left}
+.option-card:hover{border-color:var(--border2);background:var(--bg3)}
+.option-card.selected{border-color:var(--lime);background:var(--lime-dim)}
+.option-card.selected .option-card-title{color:var(--lime)}
+.option-card-icon{font-size:22px;margin-bottom:8px;display:block}
+.option-card-title{font-size:13.5px;font-weight:500;color:var(--text);margin-bottom:3px}
+.option-card-sub{font-size:12px;color:var(--text3);line-height:1.5}
+
+/* CHECKBOX OPTIONS */
+.checkbox-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:28px}
+.checkbox-item{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:var(--r-sm);border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .2s}
+.checkbox-item:hover{border-color:var(--border2)}
+.checkbox-item.checked{border-color:var(--lime);background:var(--lime-dim2)}
+.checkbox-box{width:18px;height:18px;border-radius:4px;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s}
+.checkbox-item.checked .checkbox-box{background:var(--lime);border-color:var(--lime)}
+.checkbox-check{color:var(--bg);font-size:11px;font-weight:700;display:none}
+.checkbox-item.checked .checkbox-check{display:block}
+.checkbox-label{font-size:13px;color:var(--text2)}
+.checkbox-item.checked .checkbox-label{color:var(--text)}
+
+/* SLIDER */
+.slider-wrap{margin-bottom:28px}
+.slider-labels{display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:8px}
+.slider{width:100%;-webkit-appearance:none;height:4px;border-radius:2px;background:var(--bg4);outline:none}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--lime);cursor:pointer;border:2px solid var(--bg);box-shadow:0 0 0 2px var(--lime)}
+.slider-value{text-align:center;font-family:var(--serif);font-size:28px;color:var(--lime);margin-bottom:6px}
+.slider-value-sub{text-align:center;font-size:12px;color:var(--text3)}
+
+/* WEARABLE DEVICES */
+.device-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:28px}
+.device-card{padding:18px 14px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .2s;text-align:center}
+.device-card:hover{border-color:var(--border2)}
+.device-card.selected{border-color:var(--lime);background:var(--lime-dim)}
+.device-card.selected .device-name{color:var(--lime)}
+.device-icon{font-size:28px;margin-bottom:8px;display:block}
+.device-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px}
+.device-sub{font-size:11px;color:var(--text3)}
+
+/* DUSTIN CARD */
+.dustin-card{display:flex;gap:16px;padding:20px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);margin-bottom:28px}
+.dustin-av{width:56px;height:56px;border-radius:50%;background:var(--amber-dim);border:2px solid var(--amber);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:22px;color:var(--amber);flex-shrink:0}
+.dustin-name{font-size:14px;font-weight:500;color:var(--text);margin-bottom:2px}
+.dustin-title{font-size:11px;color:var(--text3);margin-bottom:10px;letter-spacing:0.06em;text-transform:uppercase}
+.dustin-msg{font-size:13.5px;color:var(--text2);line-height:1.7;font-style:italic}
+
+/* PENDING CARD */
+.pending-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:28px;text-align:center;margin-bottom:28px}
+.pending-icon{width:56px;height:56px;border-radius:50%;background:var(--lime-dim);display:flex;align-items:center;justify-content:center;margin:0 auto 16px}
+.pending-steps{display:flex;flex-direction:column;gap:10px;text-align:left;margin-top:20px}
+.pending-step{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--r-sm);background:var(--bg3);border:1px solid var(--border)}
+.pending-step-num{width:24px;height:24px;border-radius:50%;background:var(--lime-dim);border:1px solid var(--lime);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--lime);font-weight:500;flex-shrink:0}
+.pending-step-text{font-size:13px;color:var(--text2)}
+.pending-step-time{font-size:11px;color:var(--text3);margin-left:auto;white-space:nowrap}
+
+/* GOAL SUMMARY */
+.summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:28px}
+.summary-item{padding:14px;border-radius:var(--r-sm);background:var(--bg2);border:1px solid var(--border)}
+.summary-label{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:4px}
+.summary-val{font-size:13.5px;font-weight:500;color:var(--text)}
+
+/* TIER CARDS */
+.tier-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:28px}
+.tier-card{padding:20px 16px;border-radius:var(--r);border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .2s;position:relative}
+.tier-card:hover{border-color:var(--border2)}
+.tier-card.selected{border-color:var(--lime);background:var(--lime-dim2)}
+.tier-card.featured{border-color:var(--amber)}
+.tier-card.featured.selected{border-color:var(--lime)}
+.tier-badge{position:absolute;top:-8px;left:50%;transform:translateX(-50%);background:var(--amber);color:var(--bg);font-size:9px;padding:2px 8px;border-radius:10px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap}
+.tier-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:4px}
+.tier-price{font-family:var(--serif);font-size:26px;color:var(--text);margin-bottom:2px}
+.tier-price-sub{font-size:11px;color:var(--text3);margin-bottom:14px}
+.tier-features{display:flex;flex-direction:column;gap:6px}
+.tier-feature{display:flex;align-items:flex-start;gap:7px;font-size:12px;color:var(--text2)}
+.tier-feature-dot{width:5px;height:5px;border-radius:50%;background:var(--lime);flex-shrink:0;margin-top:5px}
+.tier-feature-dot.muted{background:var(--text3)}
+
+/* BUTTONS */
+.btn-primary{width:100%;padding:14px 24px;background:var(--lime);color:var(--bg);border:none;border-radius:var(--r-sm);font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;margin-bottom:10px}
+.btn-primary:hover{background:var(--lime2)}
+.btn-secondary{width:100%;padding:12px 24px;background:transparent;color:var(--text3);border:1px solid var(--border2);border-radius:var(--r-sm);font-family:var(--sans);font-size:13px;cursor:pointer;transition:all .2s}
+.btn-secondary:hover{color:var(--text2);border-color:var(--border2);background:var(--bg2)}
+.btn-row{display:flex;gap:10px}
+.btn-row .btn-primary{flex:2}
+.btn-row .btn-secondary{flex:1}
+
+/* HEALTH INPUT GROUP */
+.health-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+.health-item{text-align:center;padding:14px 10px;border-radius:var(--r-sm);background:var(--bg2);border:1px solid var(--border)}
+.health-label{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.health-input{width:100%;background:transparent;border:none;outline:none;font-family:var(--serif);font-size:22px;color:var(--text);text-align:center;padding:0}
+.health-unit{font-size:11px;color:var(--text3);margin-top:2px}
+
+/* NOTIFICATION PERMISSION */
+.notif-card{display:flex;align-items:center;gap:14px;padding:16px 18px;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);margin-bottom:28px;cursor:pointer;transition:all .2s}
+.notif-card:hover{border-color:var(--lime)}
+.notif-icon{width:42px;height:42px;border-radius:10px;background:var(--lime-dim);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.notif-title{font-size:13.5px;font-weight:500;color:var(--text);margin-bottom:2px}
+.notif-sub{font-size:12px;color:var(--text3)}
+.notif-toggle{margin-left:auto;width:40px;height:22px;border-radius:11px;background:var(--lime);position:relative;flex-shrink:0;transition:background .2s}
+.notif-thumb{width:16px;height:16px;border-radius:50%;background:var(--bg);position:absolute;top:3px;right:3px;transition:right .2s}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+</style>
+</head>
+<body>
+
+<!-- PROGRESS BAR -->
+<div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:14%"></div></div>
+
+<!-- LOGO -->
+<div class="onboard-logo">Iso<em>.</em></div>
+
+<!-- STEP INDICATOR -->
+<div class="step-indicator" id="step-indicator">Step 1 of 7</div>
+
+<div class="app">
+
+  <!-- ======================== -->
+  <!-- SCREEN 1: WELCOME        -->
+  <!-- ======================== -->
+  <div class="screen active" id="screen-1">
+    <div class="screen-eyebrow">Welcome to Iso Club</div>
+    <h1 class="screen-title">Your health,<br><em>optimized.</em></h1>
+    <p class="screen-sub">You're about to set up your personal Healthspan OS — a precision protocol designed by Dustin, built around your goals and your data. This takes about 5 minutes.</p>
+
+    <div class="dustin-card">
+      <div class="dustin-av">D</div>
+      <div>
+        <div class="dustin-name">Dustin Weaver</div>
+        <div class="dustin-title">Head Coach · Iso Club</div>
+        <div class="dustin-msg">"Every protocol I write is built around one question: what does this specific person need to get meaningfully healthier? Answer this honestly and I'll build you something that actually works."</div>
+      </div>
+    </div>
+
+    <button class="btn-primary" onclick="nextScreen()">Let's get started →</button>
+    <p style="text-align:center;font-size:12px;color:var(--text3);margin-top:8px">Already a member? <span style="color:var(--lime);cursor:pointer">Sign in</span></p>
+  </div>
+
+  <!-- ======================== -->
+  <!-- SCREEN 2: BASIC INFO     -->
+  <!-- ======================== -->
+  <div class="screen" id="screen-2">
+    <div class="screen-eyebrow">About you</div>
+    <h1 class="screen-title">The basics</h1>
+    <p class="screen-sub">Dustin uses this to calibrate your protocol from day one.</p>
+
+    <div class="form-row" style="margin-bottom:16px">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">First name</label>
+        <input type="text" class="form-input" placeholder="Mark">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Last name</label>
+        <input type="text" class="form-input" placeholder="Reynolds">
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-bottom:16px">
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Date of birth</label>
+        <input type="date" class="form-input">
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label class="form-label">Biological sex</label>
+        <select class="form-select">
+          <option value="">Select</option>
+          <option>Male</option>
+          <option>Female</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="health-grid" style="margin-bottom:24px">
+      <div class="health-item">
+        <div class="health-label">Height</div>
+        <input type="text" class="health-input" placeholder="5'11">
+        <div class="health-unit">ft / in</div>
+      </div>
+      <div class="health-item">
+        <div class="health-label">Weight</div>
+        <input type="text" class="health-input" placeholder="185">
+        <div class="health-unit">lbs</div>
+      </div>
+      <div class="health-item">
+        <div class="health-label">Phone</div>
+        <input type="text" class="health-input" placeholder="918-" style="font-size:16px">
+        <div class="health-unit">mobile</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="prevScreen()">← Back</button>
+      <button class="btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ======================== -->
+  <!-- SCREEN 3: PRIMARY GOAL   -->
+  <!-- ======================== -->
+  <div class="screen" id="screen-3">
+    <div class="screen-eyebrow">Your goals</div>
+    <h1 class="screen-title">What matters<br>most to you?</h1>
+    <p class="screen-sub">Dustin will use this to choose your track. Pick the one that resonates most — you can add more later.</p>
+
+    <div class="option-grid cols-2" style="margin-bottom:28px">
+      <div class="option-card" onclick="selectOption(this, 'goal')">
+        <span class="option-card-icon">💪</span>
+        <div class="option-card-title">Build muscle</div>
+        <div class="option-card-sub">Increase lean mass and strength through ARX adaptive resistance</div>
+      </div>
+      <div class="option-card" onclick="selectOption(this, 'goal')">
+        <span class="option-card-icon">🫀</span>
+        <div class="option-card-title">Cardio fitness</div>
+        <div class="option-card-sub">Improve VO₂ max and cardiovascular health via CAROL REHIT</div>
+      </div>
+      <div class="option-card" onclick="selectOption(this, 'goal')">
+        <span class="option-card-icon">⚖️</span>
+        <div class="option-card-title">Lose body fat</div>
+        <div class="option-card-sub">Reduce fat mass while preserving lean tissue and metabolic rate</div>
+      </div>
+      <div class="option-card" onclick="selectOption(this, 'goal')">
+        <span class="option-card-icon">🦴</span>
+        <div class="option-card-title">Bone density</div>
+        <div class="option-card-sub">Strengthen skeletal structure — critical for longevity after 40</div>
+      </div>
+      <div class="option-card" onclick="selectOption(this, 'goal')">
+        <span class="option-card-icon">🧠</span>
+        <div class="option-card-title">Longevity</div>
+        <div class="option-card-sub">Optimize all 5 Healthspan systems for a longer, healthier life</div>
+      </div>
+      <div class="option-card" onclick="selectOption(this, 'goal')">
+        <span class="option-card-icon">⚡</span>
+        <div class="option-card-title">Energy & recovery</div>
+        <div class="option-card-sub">Improve sleep quality, HRV, and daily energy levels</div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="prevScreen()">← Back</button>
+      <button class="btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ======================== -->
+  <!-- SCREEN 4: HEALTH HISTORY -->
+  <!-- ======================== -->
+  <div class="screen" id="screen-4">
+    <div class="screen-eyebrow">Health history</div>
+    <h1 class="screen-title">A few more<br>things Dustin<br>needs to know</h1>
+    <p class="screen-sub">This helps him avoid contraindicated exercises and prescribe safely.</p>
+
+    <div class="form-group">
+      <label class="form-label">Current activity level</label>
+      <select class="form-select">
+        <option>Sedentary — mostly sitting</option>
+        <option>Light — occasional walks, light activity</option>
+        <option>Moderate — exercise 1–3x per week</option>
+        <option>Active — exercise 3–5x per week</option>
+        <option>Very active — daily intense training</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Any injuries or physical limitations?</label>
+      <div class="checkbox-grid">
+        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Lower back</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Knees</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Shoulders</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Hips</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Neck</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">None</span></div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Any relevant medical conditions? (optional)</label>
+      <input type="text" class="form-input" placeholder="e.g. Type 2 diabetes, hypertension, osteoporosis…">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Current medications? (optional)</label>
+      <input type="text" class="form-input" placeholder="e.g. Blood pressure medication, statins…">
+    </div>
+
+    <div class="form-group" style="margin-bottom:24px">
+      <label class="form-label">Anything else Dustin should know?</label>
+      <textarea class="form-textarea" placeholder="Previous training history, specific concerns, goals not covered above…"></textarea>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="prevScreen()">← Back</button>
+      <button class="btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ======================== -->
+  <!-- SCREEN 5: WEARABLES      -->
+  <!-- ======================== -->
+  <div class="screen" id="screen-5">
+    <div class="screen-eyebrow">Connect your data</div>
+    <h1 class="screen-title">Do you wear<br>a <em>tracker?</em></h1>
+    <p class="screen-sub">Connecting your wearable lets Dustin see your recovery and sleep data — so he can adjust your training based on how your body is actually responding between sessions.</p>
+
+    <div class="device-grid" style="margin-bottom:24px">
+      <div class="device-card" onclick="selectDevice(this)">
+        <span class="device-icon">⌚</span>
+        <div class="device-name">Whoop</div>
+        <div class="device-sub">Recovery, HRV, sleep, strain</div>
+      </div>
+      <div class="device-card" onclick="selectDevice(this)">
+        <span class="device-icon">💍</span>
+        <div class="device-name">Oura Ring</div>
+        <div class="device-sub">Readiness, sleep, temp, HRV</div>
+      </div>
+      <div class="device-card" onclick="selectDevice(this)">
+        <span class="device-icon">⌚</span>
+        <div class="device-name">Apple Watch</div>
+        <div class="device-sub">Heart rate, activity, sleep</div>
+      </div>
+      <div class="device-card" onclick="selectDevice(this)">
+        <span class="device-icon">📱</span>
+        <div class="device-name">Garmin</div>
+        <div class="device-sub">HRV, VO₂, sleep, recovery</div>
+      </div>
+      <div class="device-card" onclick="selectDevice(this)">
+        <span class="device-icon">📊</span>
+        <div class="device-name">Eight Sleep</div>
+        <div class="device-sub">Sleep stages, HRV, temp</div>
+      </div>
+      <div class="device-card" onclick="selectDevice(this)" id="no-device">
+        <span class="device-icon">⭕</span>
+        <div class="device-name">None yet</div>
+        <div class="device-sub">You can connect later</div>
+      </div>
+    </div>
+
+    <div id="connect-prompt" style="display:none;background:var(--bg2);border:1px solid var(--lime);border-radius:var(--r);padding:16px 18px;margin-bottom:24px">
+      <div style="font-size:13px;font-weight:500;color:var(--lime);margin-bottom:4px">Whoop selected</div>
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:12px">You'll connect your Whoop account after completing setup. We'll send you a link.</div>
+      <button class="btn-primary" style="margin-bottom:0;padding:10px 16px;width:auto;font-size:13px">Connect Whoop now →</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="prevScreen()">← Back</button>
+      <button class="btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ======================== -->
+  <!-- SCREEN 6: MEMBERSHIP     -->
+  <!-- ======================== -->
+  <div class="screen" id="screen-6">
+    <div class="screen-eyebrow">Your membership</div>
+    <h1 class="screen-title">Choose your<br>level of access</h1>
+    <p class="screen-sub">Every member gets the Healthspan OS dashboard. Higher tiers unlock more direct access to Dustin.</p>
+
+    <div class="tier-grid" style="margin-bottom:24px">
+      <div class="tier-card" onclick="selectTier(this)">
+        <div class="tier-name">Essential</div>
+        <div class="tier-price">$249</div>
+        <div class="tier-price-sub">per month</div>
+        <div class="tier-features">
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Full dashboard access</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Your protocol visible</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Session history</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Healthspan OS scores</div>
+          <div class="tier-feature"><div class="tier-feature-dot muted"></div><span style="color:var(--text3)">Direct messaging</span></div>
+          <div class="tier-feature"><div class="tier-feature-dot muted"></div><span style="color:var(--text3)">1:1 reviews</span></div>
+        </div>
+      </div>
+
+      <div class="tier-card featured" onclick="selectTier(this)">
+        <div class="tier-badge">Most popular</div>
+        <div class="tier-name">Premier</div>
+        <div class="tier-price">$449</div>
+        <div class="tier-price-sub">per month</div>
+        <div class="tier-features">
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Everything in Essential</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Direct messaging Dustin</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Scan analysis reports</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Monthly progress report</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Priority scheduling</div>
+          <div class="tier-feature"><div class="tier-feature-dot muted"></div><span style="color:var(--text3)">Quarterly 1:1 review</span></div>
+        </div>
+      </div>
+
+      <div class="tier-card" onclick="selectTier(this)">
+        <div class="tier-name">Concierge</div>
+        <div class="tier-price">$699</div>
+        <div class="tier-price-sub">per month</div>
+        <div class="tier-features">
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Everything in Premier</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Monthly 1:1 with Dustin</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Monthly scan analysis</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Nutrition protocol</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>Direct Dustin access</div>
+          <div class="tier-feature"><div class="tier-feature-dot"></div>First available booking</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:24px;font-size:12.5px;color:var(--text3);text-align:center">
+      Not sure? Start with Essential. You can upgrade anytime from your dashboard — upsells are available for individual services like scan analysis ($99) and 1:1 sessions ($149).
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-secondary" onclick="prevScreen()">← Back</button>
+      <button class="btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ======================== -->
+  <!-- SCREEN 7: PROTOCOL PENDING -->
+  <!-- ======================== -->
+  <div class="screen" id="screen-7">
+    <div class="screen-eyebrow">You're in</div>
+    <h1 class="screen-title">Welcome to<br><em>Iso Club.</em></h1>
+    <p class="screen-sub">Dustin has been notified and will review your intake to build your personal protocol. Here's what happens next.</p>
+
+    <div class="pending-card">
+      <div class="pending-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--lime)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <div style="font-family:var(--serif);font-size:20px;color:var(--text);margin-bottom:6px">Setup complete</div>
+      <div style="font-size:13px;color:var(--text3)">Your intake has been sent to Dustin</div>
+
+      <div class="pending-steps">
+        <div class="pending-step">
+          <div class="pending-step-num">1</div>
+          <div class="pending-step-text">Dustin reviews your goals and health history</div>
+          <div class="pending-step-time">Within 24 hrs</div>
+        </div>
+        <div class="pending-step">
+          <div class="pending-step-num">2</div>
+          <div class="pending-step-text">Your personal protocol is built and assigned</div>
+          <div class="pending-step-time">Within 48 hrs</div>
+        </div>
+        <div class="pending-step">
+          <div class="pending-step-num">3</div>
+          <div class="pending-step-text">You receive a notification — protocol is live</div>
+          <div class="pending-step-time">You'll be notified</div>
+        </div>
+        <div class="pending-step">
+          <div class="pending-step-num">4</div>
+          <div class="pending-step-text">Schedule your first session at Iso Club</div>
+          <div class="pending-step-time">Book anytime</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notif-card">
+      <div class="notif-icon">🔔</div>
+      <div>
+        <div class="notif-title">Enable notifications</div>
+        <div class="notif-sub">Get notified when Dustin sends your protocol or a message</div>
+      </div>
+      <div class="notif-toggle"><div class="notif-thumb"></div></div>
+    </div>
+
+    <button class="btn-primary" onclick="goToDashboard()">Go to my dashboard →</button>
+  </div>
+
+</div>
+
+<script>
+let currentScreen = 1;
+const totalScreens = 7;
+
+const progressMap = {
+  1: 14, 2: 28, 3: 42, 4: 56, 5: 70, 6: 85, 7: 100
+};
+
+function showScreen(n) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  const el = document.getElementById('screen-' + n);
+  if (el) {
+    el.classList.add('active');
+    window.scrollTo(0, 0);
+  }
+  document.getElementById('progress-fill').style.width = progressMap[n] + '%';
+  document.getElementById('step-indicator').textContent = n < 7 ? `Step ${n} of 7` : 'Complete';
+  currentScreen = n;
+}
+
+function nextScreen() {
+  if (currentScreen < totalScreens) showScreen(currentScreen + 1);
+}
+
+function prevScreen() {
+  if (currentScreen > 1) showScreen(currentScreen - 1);
+}
+
+function selectOption(el, group) {
+  el.closest('.option-grid').querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function selectDevice(el) {
+  document.querySelectorAll('.device-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const prompt = document.getElementById('connect-prompt');
+  if (el.id === 'no-device') {
+    prompt.style.display = 'none';
+  } else {
+    prompt.style.display = 'block';
+    prompt.querySelector('.device-name, div').textContent = el.querySelector('.device-name').textContent + ' selected';
+    prompt.querySelector('button').textContent = 'Connect ' + el.querySelector('.device-name').textContent + ' now →';
+  }
+}
+
+function selectTier(el) {
+  document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function toggleCheck(el) {
+  el.classList.toggle('checked');
+}
+
+function goToDashboard() {
+  alert('In the real app this would take you to your member dashboard.');
+}
+</script>
+</body>
+</html>

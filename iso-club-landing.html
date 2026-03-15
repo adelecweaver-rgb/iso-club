@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iso Club — The Healthspan OS · Tulsa, OK</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:       #0b0c09;
+  --bg2:      #111209;
+  --bg3:      #181910;
+  --bg4:      #1f2014;
+  --border:   rgba(255,255,255,0.07);
+  --border2:  rgba(255,255,255,0.12);
+  --text:     #edeae0;
+  --text2:    #9b9889;
+  --text3:    #585750;
+  --lime:     #c9f055;
+  --lime2:    #a8d038;
+  --lime-dim: rgba(201,240,85,0.1);
+  --amber:    #f0b955;
+  --amber-dim:rgba(240,185,85,0.1);
+  --blue:     #55b8f0;
+  --blue-dim: rgba(85,184,240,0.1);
+  --coral:    #f07055;
+  --coral-dim:rgba(240,112,85,0.1);
+  --teal:     #55e8c8;
+  --teal-dim: rgba(85,232,200,0.1);
+  --serif:    'Instrument Serif', Georgia, serif;
+  --sans:     'Instrument Sans', sans-serif;
+  --max:      1100px;
+}
+
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 32px;height:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid transparent;transition:all .3s;backdrop-filter:blur(0px)}
+nav.scrolled{background:rgba(11,12,9,0.92);border-bottom-color:var(--border);backdrop-filter:blur(12px)}
+.nav-logo{font-family:var(--serif);font-size:22px;color:var(--text);letter-spacing:0.02em;cursor:pointer}
+.nav-logo em{color:var(--lime);font-style:normal}
+.nav-links{display:flex;align-items:center;gap:28px}
+.nav-link{font-size:13.5px;color:var(--text3);cursor:pointer;transition:color .15s;text-decoration:none}
+.nav-link:hover{color:var(--text2)}
+.nav-cta{display:flex;gap:10px;align-items:center}
+.btn-nav{padding:8px 18px;border-radius:7px;font-family:var(--sans);font-size:13px;cursor:pointer;transition:all .2s;border:1px solid var(--border2);background:transparent;color:var(--text2)}
+.btn-nav:hover{color:var(--text);border-color:var(--border2)}
+.btn-nav-lime{background:var(--lime);color:var(--bg);border-color:var(--lime);font-weight:500}
+.btn-nav-lime:hover{background:var(--lime2);border-color:var(--lime2)}
+
+/* SECTIONS */
+section{width:100%;padding:100px 32px}
+.container{max-width:var(--max);margin:0 auto}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;align-items:center;padding:0 32px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 60% 40%,rgba(201,240,85,0.06) 0%,transparent 60%),radial-gradient(ellipse at 20% 80%,rgba(85,184,240,0.04) 0%,transparent 50%);pointer-events:none}
+.hero-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;max-width:var(--max);margin:0 auto;width:100%}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--lime);margin-bottom:20px;padding:5px 12px;border:1px solid rgba(201,240,85,0.2);border-radius:20px;background:var(--lime-dim)}
+.hero-title{font-family:var(--serif);font-size:62px;line-height:1.08;color:var(--text);margin-bottom:20px}
+.hero-title em{color:var(--lime);font-style:italic}
+.hero-sub{font-size:17px;color:var(--text2);line-height:1.7;margin-bottom:32px;max-width:480px}
+.hero-actions{display:flex;gap:12px;align-items:center;margin-bottom:40px}
+.btn-hero{padding:14px 28px;border-radius:8px;font-family:var(--sans);font-size:14px;cursor:pointer;transition:all .2s;border:none;font-weight:500}
+.btn-hero-lime{background:var(--lime);color:var(--bg)}
+.btn-hero-lime:hover{background:var(--lime2)}
+.btn-hero-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2)!important;border:none}
+.btn-hero-ghost:hover{color:var(--text);background:var(--bg2)}
+.hero-social{display:flex;align-items:center;gap:14px}
+.hero-social-label{font-size:12px;color:var(--text3)}
+.hero-faces{display:flex}
+.hero-face{width:28px;height:28px;border-radius:50%;border:2px solid var(--bg);margin-left:-8px;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--serif)}
+.hero-social-text{font-size:12px;color:var(--text2)}
+
+/* HERO DASHBOARD MOCKUP */
+.hero-visual{position:relative}
+.dashboard-mockup{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;overflow:hidden;box-shadow:0 40px 80px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.05);transform:perspective(1000px) rotateY(-4deg) rotateX(2deg)}
+.mockup-bar{height:36px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:6px}
+.mockup-dot{width:10px;height:10px;border-radius:50%}
+.mockup-content{padding:16px}
+.mockup-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.mockup-stat{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px}
+.mockup-stat-label{font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:4px}
+.mockup-stat-val{font-family:var(--serif);font-size:18px;color:var(--text)}
+.mockup-stat-trend{font-size:8px;color:var(--lime);margin-top:2px}
+.mockup-row{display:grid;grid-template-columns:1.4fr 1fr;gap:8px}
+.mockup-card{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px}
+.mockup-card-title{font-size:9px;font-weight:500;color:var(--text);margin-bottom:8px;letter-spacing:0.04em}
+.mockup-session{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+.mockup-session-dot{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0}
+.mockup-session-text{font-size:9px;color:var(--text2)}
+.mockup-bars{display:flex;flex-direction:column;gap:6px}
+.mockup-bar-row{display:flex;align-items:center;gap:6px}
+.mockup-bar-label{font-size:8px;color:var(--text3);width:48px;text-align:right}
+.mockup-bar-bg{flex:1;height:4px;background:var(--bg4);border-radius:2px;overflow:hidden}
+.mockup-bar-fill{height:100%;border-radius:2px}
+.mockup-bar-val{font-size:8px;color:var(--text2);width:20px}
+
+/* SCROLL INDICATOR */
+.scroll-indicator{position:absolute;bottom:32px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--text3);font-size:11px;letter-spacing:0.12em;text-transform:uppercase;animation:bounce 2s ease infinite}
+@keyframes bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
+
+/* LOGO STRIP */
+.logo-strip{padding:40px 32px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:var(--bg2)}
+.logo-strip-inner{max-width:var(--max);margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.logo-strip-label{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text3);white-space:nowrap}
+.logo-strip-logos{display:flex;align-items:center;gap:32px;flex-wrap:wrap}
+.machine-logo{font-size:13px;font-weight:500;color:var(--text3);letter-spacing:0.06em;text-transform:uppercase;padding:6px 14px;border:1px solid var(--border);border-radius:6px;transition:all .2s;cursor:default}
+.machine-logo:hover{color:var(--text2);border-color:var(--border2)}
+
+/* OS SECTION */
+.os-section{background:var(--bg)}
+.os-header{text-align:center;margin-bottom:60px}
+.eyebrow{display:inline-block;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--lime);margin-bottom:14px}
+.section-title{font-family:var(--serif);font-size:48px;color:var(--text);line-height:1.15;margin-bottom:16px}
+.section-sub{font-size:16px;color:var(--text2);line-height:1.7;max-width:560px;margin:0 auto}
+.os-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.os-card{padding:24px 20px;border-radius:14px;border:1px solid var(--border);background:var(--bg2);position:relative;overflow:hidden;transition:all .3s;cursor:default}
+.os-card:hover{border-color:var(--border2);transform:translateY(-3px)}
+.os-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px}
+.os-card.muscle::before{background:var(--lime)}
+.os-card.cardio::before{background:var(--blue)}
+.os-card.metabolic::before{background:var(--amber)}
+.os-card.structural::before{background:var(--coral)}
+.os-card.recovery::before{background:var(--teal)}
+.os-card-icon{font-size:28px;margin-bottom:14px;display:block}
+.os-card-title{font-family:var(--serif);font-size:18px;color:var(--text);margin-bottom:8px}
+.os-card-desc{font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:14px}
+.os-card-sources{display:flex;flex-direction:column;gap:4px}
+.os-source{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px}
+.os-source::before{content:'';width:4px;height:4px;border-radius:50%;flex-shrink:0}
+.os-card.muscle .os-source::before{background:var(--lime)}
+.os-card.cardio .os-source::before{background:var(--blue)}
+.os-card.metabolic .os-source::before{background:var(--amber)}
+.os-card.structural .os-source::before{background:var(--coral)}
+.os-card.recovery .os-source::before{background:var(--teal)}
+
+/* DUSTIN SECTION */
+.dustin-section{background:var(--bg2)}
+.dustin-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center}
+.dustin-visual{position:relative}
+.dustin-photo-wrap{width:100%;aspect-ratio:3/4;border-radius:16px;background:var(--bg3);border:1px solid var(--border2);overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative}
+.dustin-photo-placeholder{font-family:var(--serif);font-size:80px;color:var(--text3)}
+.dustin-badge{position:absolute;bottom:20px;left:20px;right:20px;background:rgba(11,12,9,0.9);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;backdrop-filter:blur(10px)}
+.dustin-badge-name{font-size:15px;font-weight:500;color:var(--text);margin-bottom:2px}
+.dustin-badge-title{font-size:12px;color:var(--text3)}
+.dustin-content{}
+.dustin-quote{font-family:var(--serif);font-size:26px;color:var(--text);line-height:1.4;margin-bottom:24px;font-style:italic}
+.dustin-quote em{color:var(--lime)}
+.dustin-body{font-size:15px;color:var(--text2);line-height:1.8;margin-bottom:28px}
+.dustin-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:32px}
+.d-stat{text-align:center;padding:16px;border-radius:10px;background:var(--bg3);border:1px solid var(--border)}
+.d-stat-val{font-family:var(--serif);font-size:28px;color:var(--lime);margin-bottom:3px}
+.d-stat-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em}
+
+/* EQUIPMENT SECTION */
+.equipment-section{background:var(--bg)}
+.equipment-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:48px}
+.equip-card{padding:28px 24px;border-radius:14px;border:1px solid var(--border);background:var(--bg2);transition:all .3s;cursor:default;position:relative;overflow:hidden}
+.equip-card:hover{border-color:var(--border2);background:var(--bg3)}
+.equip-tag{display:inline-block;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;padding:3px 8px;border-radius:20px;font-weight:500;margin-bottom:14px}
+.equip-name{font-family:var(--serif);font-size:22px;color:var(--text);margin-bottom:8px}
+.equip-desc{font-size:13.5px;color:var(--text2);line-height:1.65;margin-bottom:16px}
+.equip-metrics{display:flex;flex-wrap:wrap;gap:6px}
+.equip-metric{font-size:11px;color:var(--text3);padding:3px 8px;border-radius:5px;background:var(--bg3);border:1px solid var(--border)}
+.equip-card:hover .equip-metric{background:var(--bg4)}
+
+/* HOW IT WORKS */
+.how-section{background:var(--bg2)}
+.steps-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;margin-top:48px;position:relative}
+.steps-grid::before{content:'';position:absolute;top:28px;left:10%;right:10%;height:1px;background:linear-gradient(90deg,transparent,var(--border2),var(--border2),transparent)}
+.step-card{padding:24px 20px;border-radius:14px;border:1px solid var(--border);background:var(--bg);position:relative;z-index:1}
+.step-num{width:40px;height:40px;border-radius:50%;background:var(--bg2);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:16px;color:var(--lime);margin-bottom:16px}
+.step-title{font-family:var(--serif);font-size:18px;color:var(--text);margin-bottom:8px}
+.step-desc{font-size:13px;color:var(--text3);line-height:1.65}
+
+/* WEARABLES */
+.wearable-section{background:var(--bg)}
+.wearable-grid{display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;margin-top:48px}
+.wearable-devices{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.w-device{padding:20px;border-radius:12px;border:1px solid var(--border);background:var(--bg2);transition:all .2s}
+.w-device:hover{border-color:var(--border2)}
+.w-device-icon{font-size:28px;margin-bottom:10px;display:block}
+.w-device-name{font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px}
+.w-device-desc{font-size:12px;color:var(--text3);line-height:1.5}
+.wearable-metrics{display:flex;flex-direction:column;gap:14px}
+.wm-row{display:flex;align-items:center;gap:16px;padding:16px 18px;border-radius:10px;background:var(--bg2);border:1px solid var(--border)}
+.wm-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.wm-title{font-size:13.5px;font-weight:500;color:var(--text);margin-bottom:2px}
+.wm-sub{font-size:12px;color:var(--text3)}
+.wm-val{margin-left:auto;font-family:var(--serif);font-size:20px;white-space:nowrap}
+
+/* TESTIMONIALS */
+.testimonial-section{background:var(--bg2)}
+.testimonial-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:48px}
+.testimonial-card{padding:28px 24px;border-radius:14px;border:1px solid var(--border);background:var(--bg);transition:border-color .2s}
+.testimonial-card:hover{border-color:var(--border2)}
+.t-stars{color:var(--amber);font-size:14px;margin-bottom:14px;letter-spacing:2px}
+.t-quote{font-family:var(--serif);font-size:17px;color:var(--text);line-height:1.55;margin-bottom:16px;font-style:italic}
+.t-author{display:flex;align-items:center;gap:10px}
+.t-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;border:1px solid var(--border2)}
+.t-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:1px}
+.t-detail{font-size:11px;color:var(--text3)}
+
+/* RESULTS */
+.results-section{background:var(--bg)}
+.results-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:48px}
+.result-card{padding:28px 20px;border-radius:14px;border:1px solid var(--border);background:var(--bg2);text-align:center;transition:all .2s}
+.result-card:hover{border-color:var(--border2);transform:translateY(-2px)}
+.result-val{font-family:var(--serif);font-size:48px;color:var(--lime);line-height:1;margin-bottom:6px}
+.result-label{font-size:13px;color:var(--text2);margin-bottom:6px}
+.result-sub{font-size:11px;color:var(--text3)}
+
+/* PRICING */
+.pricing-section{background:var(--bg2)}
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:48px;max-width:860px;margin-left:auto;margin-right:auto}
+.pricing-card{padding:32px 28px;border-radius:14px;border:1.5px solid var(--border);background:var(--bg);position:relative;transition:all .2s}
+.pricing-card:hover{border-color:var(--border2)}
+.pricing-card.featured{border-color:var(--amber);background:var(--bg2)}
+.pricing-featured-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--amber);color:var(--bg);font-size:10px;padding:3px 12px;border-radius:20px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;white-space:nowrap}
+.pricing-name{font-size:13px;font-weight:500;color:var(--text2);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.1em}
+.pricing-price{font-family:var(--serif);font-size:44px;color:var(--text);line-height:1;margin-bottom:4px}
+.pricing-period{font-size:13px;color:var(--text3);margin-bottom:24px}
+.pricing-features{display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
+.pricing-feature{display:flex;align-items:flex-start;gap:8px;font-size:13.5px;color:var(--text2)}
+.pricing-feature-dot{width:16px;height:16px;border-radius:50%;background:var(--lime-dim);border:1px solid var(--lime);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;font-size:9px;color:var(--lime)}
+.pricing-feature-dot.muted{background:var(--bg3);border-color:var(--border2);color:var(--text3)}
+.pricing-feature.muted span{color:var(--text3)}
+.btn-pricing{width:100%;padding:13px;border-radius:8px;font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;transition:all .2s;border:none}
+.btn-pricing-lime{background:var(--lime);color:var(--bg)}
+.btn-pricing-lime:hover{background:var(--lime2)}
+.btn-pricing-ghost{background:transparent;border:1.5px solid var(--border2);color:var(--text2)}
+.btn-pricing-ghost:hover{border-color:var(--border2);color:var(--text);background:var(--bg2)}
+.pricing-note{text-align:center;font-size:12px;color:var(--text3);margin-top:20px}
+
+/* FAQ */
+.faq-section{background:var(--bg)}
+.faq-grid{max-width:700px;margin:48px auto 0;display:flex;flex-direction:column;gap:2px}
+.faq-item{border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .2s;margin-bottom:8px}
+.faq-item:hover{border-color:var(--border2)}
+.faq-q{padding:18px 20px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:15px;font-weight:500;color:var(--text)}
+.faq-arrow{color:var(--text3);font-size:12px;transition:transform .2s;flex-shrink:0}
+.faq-item.open .faq-arrow{transform:rotate(180deg)}
+.faq-a{display:none;padding:0 20px 16px;font-size:14px;color:var(--text2);line-height:1.75}
+.faq-item.open .faq-a{display:block}
+
+/* CTA SECTION */
+.cta-section{background:var(--bg2);text-align:center;position:relative;overflow:hidden}
+.cta-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 50%,rgba(201,240,85,0.06) 0%,transparent 60%)}
+.cta-eyebrow{display:inline-block;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:var(--lime);margin-bottom:16px}
+.cta-title{font-family:var(--serif);font-size:52px;color:var(--text);line-height:1.15;margin-bottom:16px;position:relative}
+.cta-title em{color:var(--lime);font-style:italic}
+.cta-sub{font-size:16px;color:var(--text2);line-height:1.7;max-width:500px;margin:0 auto 36px}
+.cta-actions{display:flex;gap:12px;justify-content:center;align-items:center;margin-bottom:20px}
+.cta-note{font-size:12px;color:var(--text3)}
+
+/* FOOTER */
+footer{background:var(--bg);border-top:1px solid var(--border);padding:40px 32px}
+.footer-inner{max-width:var(--max);margin:0 auto;display:flex;justify-content:space-between;align-items:center;gap:20px}
+.footer-logo{font-family:var(--serif);font-size:18px}
+.footer-logo em{color:var(--lime);font-style:normal}
+.footer-links{display:flex;gap:24px}
+.footer-link{font-size:13px;color:var(--text3);cursor:pointer;transition:color .15s}
+.footer-link:hover{color:var(--text2)}
+.footer-right{font-size:12px;color:var(--text3)}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.fade-up{opacity:0;transform:translateY(20px);transition:opacity .6s ease,transform .6s ease}
+.fade-up.visible{opacity:1;transform:translateY(0)}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  .hero-grid{grid-template-columns:1fr}
+  .hero-visual{display:none}
+  .hero-title{font-size:42px}
+  .os-grid{grid-template-columns:1fr 1fr}
+  .equipment-grid{grid-template-columns:1fr}
+  .steps-grid{grid-template-columns:1fr 1fr}
+  .testimonial-grid{grid-template-columns:1fr}
+  .results-grid{grid-template-columns:1fr 1fr}
+  .pricing-grid{grid-template-columns:1fr}
+  .dustin-grid{grid-template-columns:1fr}
+  .dustin-visual{display:none}
+  .wearable-grid{grid-template-columns:1fr}
+  nav .nav-links{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-logo">Iso<em>.</em></div>
+  <div class="nav-links">
+    <a class="nav-link" href="#os">The OS</a>
+    <a class="nav-link" href="#equipment">Equipment</a>
+    <a class="nav-link" href="#dustin">Coach Dustin</a>
+    <a class="nav-link" href="#results">Results</a>
+    <a class="nav-link" href="#pricing">Pricing</a>
+  </div>
+  <div class="nav-cta">
+    <button class="btn-nav">Sign in</button>
+    <button class="btn-nav btn-nav-lime" onclick="scrollTo('pricing')">Get started</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero" id="hero">
+  <div class="hero-grid">
+    <div>
+      <div class="hero-eyebrow">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--lime);display:inline-block"></span>
+        Now open in Tulsa, Oklahoma
+      </div>
+      <h1 class="hero-title">Your body.<br>Your data.<br><em>Optimized.</em></h1>
+      <p class="hero-sub">Iso Club is a precision health studio powered by the Healthspan OS — a personal protocol designed by Coach Dustin, driven by real machine data, and built to make you measurably healthier.</p>
+      <div class="hero-actions">
+        <button class="btn-hero btn-hero-lime" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Start your protocol →</button>
+        <button class="btn-hero btn-hero-ghost" style="border:1px solid var(--border2)" onclick="document.getElementById('os').scrollIntoView({behavior:'smooth'})">See how it works</button>
+      </div>
+      <div class="hero-social">
+        <div class="hero-faces">
+          <div class="hero-face" style="background:var(--lime-dim);color:var(--lime)">M</div>
+          <div class="hero-face" style="background:var(--amber-dim);color:var(--amber)">J</div>
+          <div class="hero-face" style="background:var(--blue-dim);color:var(--blue)">S</div>
+          <div class="hero-face" style="background:var(--teal-dim);color:var(--teal)">K</div>
+        </div>
+        <div class="hero-social-text">Joined by <strong style="color:var(--text)">40+ members</strong> already tracking their Healthspan</div>
+      </div>
+    </div>
+
+    <!-- Dashboard mockup -->
+    <div class="hero-visual">
+      <div class="dashboard-mockup">
+        <div class="mockup-bar">
+          <div class="mockup-dot" style="background:#ff5f57"></div>
+          <div class="mockup-dot" style="background:#ffbd2e"></div>
+          <div class="mockup-dot" style="background:#28ca41"></div>
+          <div style="flex:1;text-align:center;font-size:10px;color:var(--text3)">Iso Club — Healthspan OS</div>
+        </div>
+        <div class="mockup-content">
+          <div class="mockup-stats">
+            <div class="mockup-stat">
+              <div class="mockup-stat-label">CAROL score</div>
+              <div class="mockup-stat-val" style="color:var(--blue)">36.5</div>
+              <div class="mockup-stat-trend">↑ +0.1</div>
+            </div>
+            <div class="mockup-stat">
+              <div class="mockup-stat-label">ARX output</div>
+              <div class="mockup-stat-val" style="color:var(--amber)">699</div>
+              <div class="mockup-stat-trend" style="color:var(--amber)">↑ +118%</div>
+            </div>
+            <div class="mockup-stat">
+              <div class="mockup-stat-label">Lean mass</div>
+              <div class="mockup-stat-val">159.6</div>
+              <div class="mockup-stat-trend">↑ lbs</div>
+            </div>
+            <div class="mockup-stat">
+              <div class="mockup-stat-label">Recovery</div>
+              <div class="mockup-stat-val" style="color:var(--lime)">74</div>
+              <div class="mockup-stat-trend">Whoop</div>
+            </div>
+          </div>
+          <div class="mockup-row">
+            <div class="mockup-card">
+              <div class="mockup-card-title">Current protocol · Week 7 of 12</div>
+              <div class="mockup-session">
+                <div class="mockup-session-dot" style="background:var(--lime-dim);border:1px solid var(--lime);color:var(--lime)">✓</div>
+                <div class="mockup-session-text">ARX Lower Body — done</div>
+              </div>
+              <div class="mockup-session">
+                <div class="mockup-session-dot" style="background:var(--lime-dim);border:1px solid var(--lime);color:var(--lime)">✓</div>
+                <div class="mockup-session-text">CAROL REHIT — done</div>
+              </div>
+              <div class="mockup-session" style="background:rgba(201,240,85,0.05);border-radius:4px;padding:3px 4px">
+                <div class="mockup-session-dot" style="background:var(--lime);color:var(--bg)">→</div>
+                <div class="mockup-session-text" style="color:var(--lime)">ARX Upper — up next</div>
+              </div>
+              <div class="mockup-session">
+                <div class="mockup-session-dot" style="background:var(--bg4);color:var(--text3)">4</div>
+                <div class="mockup-session-text">Vasper + Proteus</div>
+              </div>
+            </div>
+            <div class="mockup-card">
+              <div class="mockup-card-title">Healthspan OS</div>
+              <div class="mockup-bars">
+                <div class="mockup-bar-row"><div class="mockup-bar-label">Muscle</div><div class="mockup-bar-bg"><div class="mockup-bar-fill" style="width:78%;background:var(--lime)"></div></div><div class="mockup-bar-val" style="color:var(--lime)">78</div></div>
+                <div class="mockup-bar-row"><div class="mockup-bar-label">Cardio</div><div class="mockup-bar-bg"><div class="mockup-bar-fill" style="width:65%;background:var(--blue)"></div></div><div class="mockup-bar-val" style="color:var(--blue)">65</div></div>
+                <div class="mockup-bar-row"><div class="mockup-bar-label">Metabolic</div><div class="mockup-bar-bg"><div class="mockup-bar-fill" style="width:71%;background:var(--amber)"></div></div><div class="mockup-bar-val" style="color:var(--amber)">71</div></div>
+                <div class="mockup-bar-row"><div class="mockup-bar-label">Structural</div><div class="mockup-bar-bg"><div class="mockup-bar-fill" style="width:58%;background:var(--coral)"></div></div><div class="mockup-bar-val" style="color:var(--coral)">58</div></div>
+                <div class="mockup-bar-row"><div class="mockup-bar-label">Recovery</div><div class="mockup-bar-bg"><div class="mockup-bar-fill" style="width:82%;background:var(--teal)"></div></div><div class="mockup-bar-val" style="color:var(--teal)">82</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="scroll-indicator">
+    <span>Scroll</span>
+    <span style="font-size:16px">↓</span>
+  </div>
+</section>
+
+<!-- LOGO STRIP -->
+<div class="logo-strip">
+  <div class="logo-strip-inner">
+    <div class="logo-strip-label">Powered by</div>
+    <div class="logo-strip-logos">
+      <div class="machine-logo">ARX</div>
+      <div class="machine-logo">CAROL</div>
+      <div class="machine-logo">Fit3D</div>
+      <div class="machine-logo">Vasper</div>
+      <div class="machine-logo">Katalyst</div>
+      <div class="machine-logo">Proteus</div>
+      <div class="machine-logo">Quickboard</div>
+      <div class="machine-logo">Whoop</div>
+      <div class="machine-logo">Oura</div>
+    </div>
+  </div>
+</div>
+
+<!-- HEALTHSPAN OS -->
+<section class="os-section fade-up" id="os">
+  <div class="container">
+    <div class="os-header">
+      <div class="eyebrow">The Healthspan OS</div>
+      <h2 class="section-title">Five systems.<br>One score.</h2>
+      <p class="section-sub">Your health isn't one number. It's five interconnected systems — each measured by real machines, tracked over time, and optimized by Dustin's protocol.</p>
+    </div>
+    <div class="os-grid">
+      <div class="os-card muscle fade-up">
+        <span class="os-card-icon">💪</span>
+        <div class="os-card-title">Muscle</div>
+        <div class="os-card-desc">Lean mass, strength output, and adaptive force capacity measured every session.</div>
+        <div class="os-card-sources">
+          <div class="os-source">ARX concentric max</div>
+          <div class="os-source">ARX eccentric max</div>
+          <div class="os-source">Fit3D lean mass</div>
+        </div>
+      </div>
+      <div class="os-card cardio fade-up">
+        <span class="os-card-icon">🫀</span>
+        <div class="os-card-title">Cardio</div>
+        <div class="os-card-desc">VO₂ max proxy, peak power output, and heart rate adaptation over time.</div>
+        <div class="os-card-sources">
+          <div class="os-source">CAROL fitness score</div>
+          <div class="os-source">CAROL peak power</div>
+          <div class="os-source">Whoop resting HR</div>
+        </div>
+      </div>
+      <div class="os-card metabolic fade-up">
+        <span class="os-card-icon">⚡</span>
+        <div class="os-card-title">Metabolic</div>
+        <div class="os-card-desc">Basal metabolic rate, visceral fat, and body composition trends.</div>
+        <div class="os-card-sources">
+          <div class="os-source">Fit3D BMR</div>
+          <div class="os-source">Fit3D body fat %</div>
+          <div class="os-source">Fit3D waist circumference</div>
+        </div>
+      </div>
+      <div class="os-card structural fade-up">
+        <span class="os-card-icon">🦴</span>
+        <div class="os-card-title">Structural</div>
+        <div class="os-card-desc">Posture alignment, balance symmetry, and bone density markers.</div>
+        <div class="os-card-sources">
+          <div class="os-source">Fit3D posture analysis</div>
+          <div class="os-source">Fit3D balance data</div>
+          <div class="os-source">Proteus rotational output</div>
+        </div>
+      </div>
+      <div class="os-card recovery fade-up">
+        <span class="os-card-icon">🌙</span>
+        <div class="os-card-title">Recovery</div>
+        <div class="os-card-desc">HRV trends, sleep quality, and recovery modality consistency.</div>
+        <div class="os-card-sources">
+          <div class="os-source">Whoop / Oura HRV</div>
+          <div class="os-source">Sleep score trend</div>
+          <div class="os-source">Recovery session log</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DUSTIN -->
+<section class="dustin-section fade-up" id="dustin">
+  <div class="container">
+    <div class="dustin-grid">
+      <div class="dustin-visual">
+        <div class="dustin-photo-wrap">
+          <div class="dustin-photo-placeholder">D</div>
+          <div class="dustin-badge">
+            <div class="dustin-badge-name">Dustin Weaver</div>
+            <div class="dustin-badge-title">Head Coach · Iso Club · Tulsa, OK</div>
+          </div>
+        </div>
+      </div>
+      <div class="dustin-content">
+        <div class="eyebrow">The prescription model</div>
+        <div class="dustin-quote">"I don't build generic programs. I build a <em>precise prescription</em> for one person — you."</div>
+        <p class="dustin-body">Every member at Iso Club is on a protocol I designed specifically for them. Your goals, your data, your body — translated into a weekly plan that our technicians execute with you, session by session.</p>
+        <p class="dustin-body" style="margin-top:12px">I review your machine data, your scan results, and your wearable metrics. When something changes I update your protocol. You follow the prescription. The results follow.</p>
+        <div class="dustin-stats">
+          <div class="d-stat">
+            <div class="d-stat-val">12+</div>
+            <div class="d-stat-label">Years coaching</div>
+          </div>
+          <div class="d-stat">
+            <div class="d-stat-val">40+</div>
+            <div class="d-stat-label">Active members</div>
+          </div>
+          <div class="d-stat">
+            <div class="d-stat-val">100%</div>
+            <div class="d-stat-label">Data driven</div>
+          </div>
+        </div>
+        <button class="btn-hero btn-hero-lime" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Get your protocol →</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- EQUIPMENT -->
+<section class="equipment-section fade-up" id="equipment">
+  <div class="container">
+    <div style="text-align:center">
+      <div class="eyebrow">The machines</div>
+      <h2 class="section-title">Tools most gyms<br>don't have.</h2>
+      <p class="section-sub" style="margin:0 auto">Every piece of equipment at Iso Club was chosen because it produces measurable data and delivers results that traditional equipment can't match.</p>
+    </div>
+    <div class="equipment-grid">
+      <div class="equip-card">
+        <span class="equip-tag" style="background:var(--amber-dim);color:var(--amber)">Strength</span>
+        <div class="equip-name">ARX Adaptive Resistance</div>
+        <div class="equip-desc">Computer-controlled resistance that matches your exact force output on every rep — both pushing and resisting. You can't cheat the load. Every session produces precise output data Dustin reviews.</div>
+        <div class="equip-metrics">
+          <div class="equip-metric">Concentric max</div>
+          <div class="equip-metric">Eccentric max</div>
+          <div class="equip-metric">Output per set</div>
+          <div class="equip-metric">Intensity tracking</div>
+        </div>
+      </div>
+      <div class="equip-card">
+        <span class="equip-tag" style="background:var(--blue-dim);color:var(--blue)">Cardio</span>
+        <div class="equip-name">CAROL Bike</div>
+        <div class="equip-desc">Clinically proven REHIT protocol delivers the cardiovascular benefits of 45 minutes of moderate exercise in just 8 minutes. Two 20-second all-out sprints. Fitness score tracked every session.</div>
+        <div class="equip-metrics">
+          <div class="equip-metric">Fitness score</div>
+          <div class="equip-metric">Peak power (watts)</div>
+          <div class="equip-metric">Max HR</div>
+          <div class="equip-metric">Energy output</div>
+        </div>
+      </div>
+      <div class="equip-card">
+        <span class="equip-tag" style="background:var(--teal-dim);color:var(--teal)">Body scan</span>
+        <div class="equip-name">Fit3D Body Scanner</div>
+        <div class="equip-desc">Full 3D body composition scan in 35 seconds. Measures lean mass, body fat, posture alignment, balance, and 14 circumference measurements. Dustin reviews and annotates every scan.</div>
+        <div class="equip-metrics">
+          <div class="equip-metric">Body fat %</div>
+          <div class="equip-metric">Lean mass (lbs)</div>
+          <div class="equip-metric">Posture analysis</div>
+          <div class="equip-metric">Balance symmetry</div>
+        </div>
+      </div>
+      <div class="equip-card">
+        <span class="equip-tag" style="background:var(--lime-dim);color:var(--lime)">Recovery</span>
+        <div class="equip-name">Vasper System</div>
+        <div class="equip-desc">Compression cooling during low-intensity cycling dramatically reduces cortisol while triggering growth hormone. Delivers cardio adaptation without the stress response of traditional training.</div>
+        <div class="equip-metrics">
+          <div class="equip-metric">Cortisol reduction</div>
+          <div class="equip-metric">Zone 2 cardio</div>
+          <div class="equip-metric">Recovery protocol</div>
+        </div>
+      </div>
+      <div class="equip-card">
+        <span class="equip-tag" style="background:var(--coral-dim);color:var(--coral)">EMS</span>
+        <div class="equip-name">Katalyst EMS Suit</div>
+        <div class="equip-desc">Full-body electrical muscle stimulation activates up to 90% of muscle fibers simultaneously. A 20-minute session delivers the muscular stimulus of a 90-minute traditional workout.</div>
+        <div class="equip-metrics">
+          <div class="equip-metric">Full body activation</div>
+          <div class="equip-metric">Time efficient</div>
+          <div class="equip-metric">Low impact</div>
+        </div>
+      </div>
+      <div class="equip-card">
+        <span class="equip-tag" style="background:var(--purple-dim,var(--lime-dim));color:var(--purple,var(--lime))">Power</span>
+        <div class="equip-name">Proteus Motion</div>
+        <div class="equip-desc">3D resistance training system that measures rotational power, force, and movement quality in all planes of motion. Identifies imbalances and builds functional strength traditional machines miss.</div>
+        <div class="equip-metrics">
+          <div class="equip-metric">Rotational power</div>
+          <div class="equip-metric">3D force output</div>
+          <div class="equip-metric">Imbalance detection</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section fade-up" id="how">
+  <div class="container">
+    <div style="text-align:center">
+      <div class="eyebrow">How it works</div>
+      <h2 class="section-title">A system, not a gym.</h2>
+      <p class="section-sub" style="margin:0 auto">Iso Club runs on a clear operating model. Dustin prescribes. Staff executes. Data flows. You improve.</p>
+    </div>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-num">1</div>
+        <div class="step-title">Intake & assessment</div>
+        <div class="step-desc">You complete a health history and goals intake. Your first Fit3D scan establishes your baseline across all 5 Healthspan systems.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">2</div>
+        <div class="step-title">Dustin prescribes</div>
+        <div class="step-desc">Dustin reviews your data and writes a personal protocol — specific machines, specific sessions, specific goals. Delivered to your dashboard within 48 hours.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">3</div>
+        <div class="step-title">Staff executes</div>
+        <div class="step-desc">Our trained technicians run your sessions exactly as prescribed. They follow Dustin's protocol — not their own preferences. Consistency is the point.</div>
+      </div>
+      <div class="step-card">
+        <div class="step-num">4</div>
+        <div class="step-title">Data flows, scores update</div>
+        <div class="step-desc">Every session populates your dashboard automatically. Dustin reviews your data, updates your protocol, and sends you reports. You watch your Healthspan OS improve in real numbers.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- WEARABLES -->
+<section class="wearable-section fade-up">
+  <div class="container">
+    <div style="text-align:center;margin-bottom:0">
+      <div class="eyebrow">Wearable integration</div>
+      <h2 class="section-title">The other<br>22 hours.</h2>
+      <p class="section-sub" style="margin:0 auto">Your Whoop or Oura ring tracks what happens between sessions. Dustin sees your recovery scores before you arrive — so he always knows whether to push or pull back.</p>
+    </div>
+    <div class="wearable-grid">
+      <div class="wearable-devices">
+        <div class="w-device">
+          <span class="w-device-icon">⌚</span>
+          <div class="w-device-name">Whoop 4.0</div>
+          <div class="w-device-desc">Recovery score, HRV, strain, sleep stages, respiratory rate, SpO2</div>
+        </div>
+        <div class="w-device">
+          <span class="w-device-icon">💍</span>
+          <div class="w-device-name">Oura Ring</div>
+          <div class="w-device-desc">Readiness score, sleep quality, body temp, HRV balance, activity</div>
+        </div>
+        <div class="w-device">
+          <span class="w-device-icon">⌚</span>
+          <div class="w-device-name">Apple Watch</div>
+          <div class="w-device-desc">Heart rate, activity trends, sleep tracking, workout data</div>
+        </div>
+        <div class="w-device">
+          <span class="w-device-icon">📊</span>
+          <div class="w-device-name">Garmin</div>
+          <div class="w-device-desc">HRV status, VO₂ max estimate, sleep, recovery advisor</div>
+        </div>
+      </div>
+      <div class="wearable-metrics">
+        <div class="wm-row">
+          <div class="wm-icon" style="background:var(--lime-dim)">💚</div>
+          <div>
+            <div class="wm-title">Dustin sees your recovery before you arrive</div>
+            <div class="wm-sub">Low HRV this morning? He already knows. Your session gets modified before you walk in the door.</div>
+          </div>
+        </div>
+        <div class="wm-row">
+          <div class="wm-icon" style="background:var(--blue-dim)">😴</div>
+          <div>
+            <div class="wm-title">Sleep quality drives training intensity</div>
+            <div class="wm-sub">4.9 hours last night? Dustin flags it. Pushing hard on poor sleep is how people get hurt or burned out.</div>
+          </div>
+        </div>
+        <div class="wm-row">
+          <div class="wm-icon" style="background:var(--amber-dim)">📈</div>
+          <div>
+            <div class="wm-title">HRV trends confirm the protocol is working</div>
+            <div class="wm-sub">30-day HRV trending up = the protocol is producing adaptation. Down = something needs to change.</div>
+          </div>
+        </div>
+        <div class="wm-row">
+          <div class="wm-icon" style="background:var(--teal-dim)">🔗</div>
+          <div>
+            <div class="wm-title">Connect in one tap</div>
+            <div class="wm-sub">Whoop and Oura connect via OAuth from your dashboard. Data syncs automatically every morning.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- RESULTS -->
+<section class="results-section fade-up" id="results">
+  <div class="container">
+    <div style="text-align:center">
+      <div class="eyebrow">Real results</div>
+      <h2 class="section-title">Numbers don't lie.</h2>
+      <p class="section-sub" style="margin:0 auto">Average outcomes across Iso Club members after 12 weeks on a Dustin-prescribed protocol.</p>
+    </div>
+    <div class="results-grid">
+      <div class="result-card">
+        <div class="result-val">+1.8</div>
+        <div class="result-label">Lean mass gained (lbs)</div>
+        <div class="result-sub">Average 12-week result · Fit3D verified</div>
+      </div>
+      <div class="result-card">
+        <div class="result-val">−2.1</div>
+        <div class="result-label">Body fat lost (%)</div>
+        <div class="result-sub">While gaining muscle simultaneously</div>
+      </div>
+      <div class="result-card">
+        <div class="result-val">+18%</div>
+        <div class="result-label">CAROL fitness score</div>
+        <div class="result-sub">VO₂ max proxy improvement over 12 weeks</div>
+      </div>
+      <div class="result-card">
+        <div class="result-val">+12</div>
+        <div class="result-label">HRV improvement (ms)</div>
+        <div class="result-sub">Average Whoop/Oura baseline shift</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonial-section fade-up">
+  <div class="container">
+    <div style="text-align:center">
+      <div class="eyebrow">Member stories</div>
+      <h2 class="section-title">From the members.</h2>
+    </div>
+    <div class="testimonial-grid">
+      <div class="testimonial-card">
+        <div class="t-stars">★★★★★</div>
+        <div class="t-quote">"I've worked with trainers for 20 years. Nothing has moved the needle like having Dustin's protocol in an app I can actually see and track. The ARX data alone changed how I think about training."</div>
+        <div class="t-author">
+          <div class="t-av" style="background:var(--lime-dim);color:var(--lime)">MR</div>
+          <div>
+            <div class="t-name">Mark R.</div>
+            <div class="t-detail">Premier member · 7 months</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="t-stars">★★★★★</div>
+        <div class="t-quote">"My Fit3D scan after 3 months showed I'd gained 2.2 lbs of lean mass while losing 3% body fat. I'm 54 years old. I didn't think that was possible anymore. Dustin's protocol proved me wrong."</div>
+        <div class="t-author">
+          <div class="t-av" style="background:var(--blue-dim);color:var(--blue)">JL</div>
+          <div>
+            <div class="t-name">Jeff L.</div>
+            <div class="t-detail">Concierge member · 4 months</div>
+          </div>
+        </div>
+      </div>
+      <div class="testimonial-card">
+        <div class="t-stars">★★★★★</div>
+        <div class="t-quote">"The Whoop integration is what sold me. Dustin texted me before my session that my recovery was low and adjusted the workout. I've never had a coach pay that much attention to my data."</div>
+        <div class="t-author">
+          <div class="t-av" style="background:var(--teal-dim);color:var(--teal)">KW</div>
+          <div>
+            <div class="t-name">Karen W.</div>
+            <div class="t-detail">Premier member · 5 months</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing-section fade-up" id="pricing">
+  <div class="container">
+    <div style="text-align:center">
+      <div class="eyebrow">Membership</div>
+      <h2 class="section-title">Choose your level.</h2>
+      <p class="section-sub" style="margin:0 auto">Every tier includes the Healthspan OS dashboard and Dustin's protocol. Higher tiers unlock more direct access to Dustin himself.</p>
+    </div>
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <div class="pricing-name">Essential</div>
+        <div class="pricing-price">$249</div>
+        <div class="pricing-period">per month</div>
+        <div class="pricing-features">
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Full Healthspan OS dashboard</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Personal protocol from Dustin</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Session history + machine data</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Wearable integration</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Quarterly Fit3D scan</span></div>
+          <div class="pricing-feature muted"><div class="pricing-feature-dot muted">—</div><span>Direct Dustin messaging</span></div>
+          <div class="pricing-feature muted"><div class="pricing-feature-dot muted">—</div><span>1:1 protocol reviews</span></div>
+        </div>
+        <button class="btn-pricing btn-pricing-ghost">Get started</button>
+      </div>
+
+      <div class="pricing-card featured">
+        <div class="pricing-featured-badge">Most popular</div>
+        <div class="pricing-name">Premier</div>
+        <div class="pricing-price">$449</div>
+        <div class="pricing-period">per month</div>
+        <div class="pricing-features">
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Everything in Essential</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Direct messaging with Dustin</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Monthly Fit3D scan + analysis</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Monthly performance report</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Priority session scheduling</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Quarterly 1:1 protocol review</span></div>
+          <div class="pricing-feature muted"><div class="pricing-feature-dot muted">—</div><span>Monthly 1:1 review</span></div>
+        </div>
+        <button class="btn-pricing btn-pricing-lime">Get started →</button>
+      </div>
+
+      <div class="pricing-card">
+        <div class="pricing-name">Concierge</div>
+        <div class="pricing-price">$699</div>
+        <div class="pricing-period">per month</div>
+        <div class="pricing-features">
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Everything in Premier</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Monthly 1:1 with Dustin</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Nutrition protocol included</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>First-available booking</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Direct Dustin phone access</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Bi-weekly scan analysis</span></div>
+          <div class="pricing-feature"><div class="pricing-feature-dot">✓</div><span>Annual health review</span></div>
+        </div>
+        <button class="btn-pricing btn-pricing-ghost">Get started</button>
+      </div>
+    </div>
+    <div class="pricing-note">All memberships include facility access, technician-staffed sessions, and the Healthspan OS member dashboard. No contracts — cancel anytime.</div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="faq-section fade-up">
+  <div class="container">
+    <div style="text-align:center">
+      <div class="eyebrow">Questions</div>
+      <h2 class="section-title">The honest answers.</h2>
+    </div>
+    <div class="faq-grid">
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">Do I need to be fit to start? <span class="faq-arrow">▼</span></div>
+        <div class="faq-a">No. Dustin designs protocols for where you are right now, not where you think you should be. Many of our members started completely sedentary. The machines adapt to your output — you can never "do it wrong."</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">How long are the sessions? <span class="faq-arrow">▼</span></div>
+        <div class="faq-a">Most training sessions are 20–30 minutes. Recovery sessions run 30–60 minutes. The CAROL REHIT protocol is just 8 minutes. Iso Club is built for people who want maximum results in minimum time.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">What if I don't have a Whoop or Oura? <span class="faq-arrow">▼</span></div>
+        <div class="faq-a">Wearables are optional — not required. You get full value from Iso Club without one. If you have a wearable it enhances what Dustin can see and how precisely he can adjust your protocol, but the in-studio data alone is powerful.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">How often do I need to come in? <span class="faq-arrow">▼</span></div>
+        <div class="faq-a">Dustin designs most protocols around 3 sessions per week. Some members come in more for recovery modalities. Because the machines are so efficient, 3 sessions of 20–30 minutes each produces results most people can't achieve with 5 hours of traditional training.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">What's the difference between the tiers? <span class="faq-arrow">▼</span></div>
+        <div class="faq-a">Every tier gets the same machines, the same Dustin protocol, and the same Healthspan OS dashboard. The tiers differ in how much direct access to Dustin you have — messaging, 1:1 reviews, scan analysis, and reports. If you want the data and the protocol without needing to talk to Dustin often, Essential works perfectly.</div>
+      </div>
+      <div class="faq-item">
+        <div class="faq-q" onclick="toggleFaq(this)">Can I cancel anytime? <span class="faq-arrow">▼</span></div>
+        <div class="faq-a">Yes. No contracts, no cancellation fees. We think the results speak for themselves — if you're not seeing measurable progress in your Healthspan OS scores, we want to know why and fix it, not lock you in.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section fade-up">
+  <div class="container">
+    <div class="eyebrow">Ready?</div>
+    <h2 class="cta-title">Start your<br><em>Healthspan OS</em><br>today.</h2>
+    <p class="cta-sub">Your first Fit3D scan is included. Dustin will have your protocol ready within 48 hours.</p>
+    <div class="cta-actions">
+      <button class="btn-hero btn-hero-lime" style="font-size:15px;padding:16px 32px" onclick="document.getElementById('pricing').scrollIntoView({behavior:'smooth'})">Choose your membership →</button>
+      <button class="btn-hero btn-hero-ghost" style="border:1px solid var(--border2);font-size:14px">Schedule a tour first</button>
+    </div>
+    <div class="cta-note">Iso Club · Tulsa, Oklahoma · Members only facility</div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">Iso<em>.</em> <span style="font-size:12px;color:var(--text3);font-family:var(--sans);font-weight:400;margin-left:8px">Tulsa, Oklahoma</span></div>
+    <div class="footer-links">
+      <span class="footer-link">Privacy</span>
+      <span class="footer-link">Terms</span>
+      <span class="footer-link">Contact</span>
+      <span class="footer-link">Member login</span>
+    </div>
+    <div class="footer-right">© 2026 Iso Club. All rights reserved.</div>
+  </div>
+</footer>
+
+<script>
+// Scroll nav
+window.addEventListener('scroll', () => {
+  document.getElementById('nav').classList.toggle('scrolled', window.scrollY > 40);
+});
+
+// FAQ toggle
+function toggleFaq(el) {
+  el.parentElement.classList.toggle('open');
+}
+
+// Intersection observer for fade-up
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if(entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.fade-up').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

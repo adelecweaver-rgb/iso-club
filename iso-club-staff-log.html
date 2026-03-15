@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Iso Club — Staff Log</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:       #0b0c09;
+  --bg2:      #111209;
+  --bg3:      #181910;
+  --bg4:      #1f2014;
+  --border:   rgba(255,255,255,0.08);
+  --border2:  rgba(255,255,255,0.14);
+  --text:     #edeae0;
+  --text2:    #9b9889;
+  --text3:    #585750;
+  --lime:     #c9f055;
+  --lime2:    #a8d038;
+  --lime-dim: rgba(201,240,85,0.12);
+  --amber:    #f0b955;
+  --amber-dim:rgba(240,185,85,0.12);
+  --blue:     #55b8f0;
+  --blue-dim: rgba(85,184,240,0.12);
+  --coral:    #f07055;
+  --coral-dim:rgba(240,112,85,0.12);
+  --teal:     #55e8c8;
+  --teal-dim: rgba(85,232,200,0.12);
+  --serif:    'Instrument Serif', Georgia, serif;
+  --sans:     'Instrument Sans', sans-serif;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden;touch-action:manipulation}
+
+/* LAYOUT */
+.app{height:100vh;display:flex;flex-direction:column}
+
+/* TOP BAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+.topbar-logo{font-family:var(--serif);font-size:20px}
+.topbar-logo em{color:var(--lime);font-style:normal}
+.topbar-center{text-align:center}
+.topbar-time{font-family:var(--serif);font-size:22px;color:var(--text)}
+.topbar-date{font-size:11px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-top:1px}
+.topbar-staff{display:flex;align-items:center;gap:10px}
+.staff-av{width:34px;height:34px;border-radius:50%;background:var(--lime-dim);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;color:var(--lime)}
+.staff-name{font-size:13px;color:var(--text2)}
+
+/* MAIN */
+.main{flex:1;display:flex;overflow:hidden}
+
+/* LEFT — member selector */
+.member-col{width:280px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2)}
+.col-header{padding:16px 18px;border-bottom:1px solid var(--border)}
+.col-title{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.search{width:100%;background:var(--bg3);border:1.5px solid var(--border2);border-radius:8px;padding:10px 14px;color:var(--text);font-family:var(--sans);font-size:15px;outline:none;transition:border-color .2s}
+.search:focus{border-color:var(--lime)}
+.search::placeholder{color:var(--text3)}
+.member-list{flex:1;overflow-y:auto;padding:8px}
+.member-btn{width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:10px;border:none;background:transparent;cursor:pointer;transition:background .15s;margin-bottom:3px;text-align:left}
+.member-btn:hover{background:var(--bg3)}
+.member-btn.active{background:var(--lime-dim);border:1.5px solid var(--lime)}
+.member-av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:14px;flex-shrink:0;border:1px solid var(--border2)}
+.member-btn.active .member-av{border-color:var(--lime)}
+.member-info{flex:1;min-width:0}
+.member-name{font-size:14px;font-weight:500;color:var(--text);margin-bottom:1px}
+.member-btn.active .member-name{color:var(--lime)}
+.member-detail{font-size:12px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.member-recovery{text-align:right;flex-shrink:0}
+.recovery-score{font-family:var(--serif);font-size:18px}
+.recovery-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em}
+
+/* CENTER — log form */
+.log-col{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* MEMBER HEADER */
+.log-header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;flex-shrink:0;background:var(--bg)}
+.log-header-av{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:18px;border:1.5px solid var(--border2);flex-shrink:0}
+.log-header-name{font-family:var(--serif);font-size:20px;color:var(--text);margin-bottom:2px}
+.log-header-meta{font-size:12px;color:var(--text3)}
+.log-header-wearable{margin-left:auto;text-align:right}
+.wearable-row{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-bottom:3px}
+.wearable-val{font-size:13px;font-weight:500}
+.wearable-lbl{font-size:11px;color:var(--text3)}
+
+/* PROTOCOL BANNER */
+.protocol-banner{padding:12px 24px;background:var(--lime-dim);border-bottom:1px solid rgba(201,240,85,0.15);display:flex;align-items:center;gap:12px;flex-shrink:0}
+.pb-icon{font-size:16px}
+.pb-text{font-size:13px;color:var(--lime);font-weight:500;flex:1}
+.pb-session{font-size:12px;color:var(--lime);opacity:0.8}
+
+/* LOG BODY */
+.log-body{flex:1;overflow-y:auto;padding:20px 24px}
+
+/* EQUIPMENT GRID */
+.equip-section{margin-bottom:22px}
+.section-label{font-size:11px;letter-spacing:0.13em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.equip-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.equip-btn{padding:14px 8px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .15s;text-align:center;-webkit-tap-highlight-color:transparent}
+.equip-btn:hover{border-color:var(--border2)}
+.equip-btn.selected{border-color:var(--lime);background:var(--lime-dim)}
+.equip-btn.selected .equip-name{color:var(--lime)}
+.equip-icon{font-size:22px;margin-bottom:5px;display:block}
+.equip-name{font-size:12px;font-weight:500;color:var(--text2)}
+.equip-btn.selected .equip-icon+.equip-name{color:var(--lime)}
+
+.equip-grid-recovery{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.equip-btn.recovery-btn.selected{border-color:var(--teal);background:var(--teal-dim)}
+.equip-btn.recovery-btn.selected .equip-name{color:var(--teal)}
+
+/* DETAIL FIELDS */
+.detail-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:20px}
+.detail-field{display:flex;flex-direction:column;gap:6px}
+.detail-label{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3)}
+.detail-input,.detail-select{background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;padding:12px 14px;color:var(--text);font-family:var(--sans);font-size:15px;outline:none;transition:border-color .2s;width:100%}
+.detail-input:focus,.detail-select:focus{border-color:var(--lime)}
+.detail-input::placeholder{color:var(--text3)}
+
+/* EFFORT BUTTONS */
+.effort-row{display:flex;gap:6px;margin-bottom:20px}
+.effort-btn{flex:1;padding:12px 4px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;font-family:var(--serif);font-size:18px;color:var(--text3);transition:all .15s;text-align:center;-webkit-tap-highlight-color:transparent}
+.effort-btn:hover{border-color:var(--border2);color:var(--text2)}
+.effort-btn.selected{background:var(--lime-dim);border-color:var(--lime);color:var(--lime)}
+.effort-label{font-size:10px;color:var(--text3);text-align:center;margin-top:4px;letter-spacing:0.06em}
+
+/* NOTES */
+.notes-field{margin-bottom:20px}
+.notes-textarea{width:100%;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;padding:12px 14px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none;resize:none;height:80px;transition:border-color .2s}
+.notes-textarea:focus{border-color:var(--lime)}
+.notes-textarea::placeholder{color:var(--text3)}
+
+/* QUICK NOTES */
+.quick-notes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:20px}
+.quick-note{padding:7px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--bg2);font-size:12px;color:var(--text3);cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.quick-note:hover{border-color:var(--border2);color:var(--text2)}
+.quick-note.selected{background:var(--bg3);border-color:var(--border2);color:var(--text2)}
+
+/* LOG FOOTER */
+.log-footer{padding:16px 24px;border-top:1px solid var(--border);background:var(--bg);display:flex;gap:10px;flex-shrink:0}
+.btn-log{flex:1;padding:16px;border-radius:10px;font-family:var(--sans);font-size:15px;font-weight:500;cursor:pointer;transition:all .2s;border:none;-webkit-tap-highlight-color:transparent}
+.btn-log-lime{background:var(--lime);color:var(--bg)}
+.btn-log-lime:hover{background:var(--lime2)}
+.btn-log-lime:active{transform:scale(0.98)}
+.btn-log-ghost{background:var(--bg2);color:var(--text3);border:1.5px solid var(--border2);flex:0.4}
+.btn-log-ghost:hover{color:var(--text2)}
+
+/* RIGHT — today's sessions */
+.right-col{width:260px;flex-shrink:0;border-left:1px solid var(--border);display:flex;flex-direction:column;background:var(--bg2)}
+.right-header{padding:14px 16px;border-bottom:1px solid var(--border)}
+.right-title{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text3);margin-bottom:2px}
+.right-count{font-family:var(--serif);font-size:22px;color:var(--text)}
+.session-log-list{flex:1;overflow-y:auto;padding:10px}
+.logged-item{padding:12px 14px;border-radius:10px;background:var(--bg3);border:1px solid var(--border);margin-bottom:8px}
+.logged-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.logged-member{font-size:13px;font-weight:500;color:var(--text)}
+.logged-time{font-size:11px;color:var(--text3)}
+.logged-equip{display:inline-flex;align-items:center;font-size:10px;padding:2px 7px;border-radius:20px;margin-bottom:4px}
+.logged-detail{font-size:11px;color:var(--text3)}
+.logged-notes{font-size:11px;color:var(--text2);margin-top:4px;font-style:italic}
+
+/* SUCCESS OVERLAY */
+.success-overlay{position:fixed;inset:0;background:rgba(11,12,9,0.85);display:flex;align-items:center;justify-content:center;z-index:200;opacity:0;pointer-events:none;transition:opacity .3s;backdrop-filter:blur(8px)}
+.success-overlay.show{opacity:1;pointer-events:all}
+.success-card{background:var(--bg2);border:1px solid var(--lime);border-radius:16px;padding:40px 48px;text-align:center;max-width:380px;transform:scale(0.9);transition:transform .3s}
+.success-overlay.show .success-card{transform:scale(1)}
+.success-check{width:64px;height:64px;border-radius:50%;background:var(--lime-dim);border:2px solid var(--lime);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:28px}
+.success-title{font-family:var(--serif);font-size:26px;color:var(--text);margin-bottom:8px}
+.success-sub{font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.6}
+.success-member{font-size:16px;font-weight:500;color:var(--lime);margin-bottom:4px}
+.success-detail{font-size:13px;color:var(--text3)}
+.btn-success{padding:13px 32px;background:var(--lime);color:var(--bg);border:none;border-radius:8px;font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;margin-top:8px;transition:background .2s}
+.btn-success:hover{background:var(--lime2)}
+
+/* ALERT BANNER */
+.alert{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:13px}
+.alert-warn{background:var(--amber-dim);border:1px solid rgba(240,185,85,0.2);color:var(--amber)}
+.alert-low{background:var(--coral-dim);border:1px solid rgba(240,112,85,0.2);color:var(--coral)}
+.alert-ok{background:var(--lime-dim);border:1px solid rgba(201,240,85,0.15);color:var(--lime)}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-logo">Iso<em>.</em></div>
+    <div class="topbar-center">
+      <div class="topbar-time" id="clock">8:42 AM</div>
+      <div class="topbar-date" id="top-date">Saturday, March 14</div>
+    </div>
+    <div class="topbar-staff">
+      <div class="staff-av">TJ</div>
+      <div class="staff-name">Staff: Tyler J.</div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- LEFT: MEMBER SELECTOR -->
+    <div class="member-col">
+      <div class="col-header">
+        <div class="col-title">Select member</div>
+        <input type="text" class="search" placeholder="Search…" oninput="filterMembers(this.value)" id="member-search">
+      </div>
+      <div class="member-list" id="member-list">
+
+        <button class="member-btn active" onclick="selectMember(this,'Mark Reynolds','MR','lime','Premier · ARX Upper next','74','lime')">
+          <div class="member-av" style="background:var(--lime-dim);color:var(--lime)">MR</div>
+          <div class="member-info">
+            <div class="member-name">Mark Reynolds</div>
+            <div class="member-detail">Premier · ARX Upper next</div>
+          </div>
+          <div class="member-recovery">
+            <div class="recovery-score" style="color:var(--lime)">74</div>
+            <div class="recovery-label">Recovery</div>
+          </div>
+        </button>
+
+        <button class="member-btn" onclick="selectMember(this,'Sarah Mitchell','SM','coral','Premier · Low recovery ⚠','31','coral')">
+          <div class="member-av" style="background:var(--coral-dim);color:var(--coral)">SM</div>
+          <div class="member-info">
+            <div class="member-name">Sarah Mitchell</div>
+            <div class="member-detail">Premier · Low recovery ⚠</div>
+          </div>
+          <div class="member-recovery">
+            <div class="recovery-score" style="color:var(--coral)">31</div>
+            <div class="recovery-label">Recovery</div>
+          </div>
+        </button>
+
+        <button class="member-btn" onclick="selectMember(this,'Jeff La Rue','JL','blue','Concierge · Fit3D scan today','82','lime')">
+          <div class="member-av" style="background:var(--blue-dim);color:var(--blue)">JL</div>
+          <div class="member-info">
+            <div class="member-name">Jeff La Rue</div>
+            <div class="member-detail">Concierge · Fit3D scan today</div>
+          </div>
+          <div class="member-recovery">
+            <div class="recovery-score" style="color:var(--lime)">82</div>
+            <div class="recovery-label">Readiness</div>
+          </div>
+        </button>
+
+        <button class="member-btn" onclick="selectMember(this,'Tom Bradley','TB','amber','Essential · Low sleep ⚠','44','amber')">
+          <div class="member-av" style="background:var(--amber-dim);color:var(--amber)">TB</div>
+          <div class="member-info">
+            <div class="member-name">Tom Bradley</div>
+            <div class="member-detail">Essential · Low sleep ⚠</div>
+          </div>
+          <div class="member-recovery">
+            <div class="recovery-score" style="color:var(--amber)">44</div>
+            <div class="recovery-label">Recovery</div>
+          </div>
+        </button>
+
+        <button class="member-btn" onclick="selectMember(this,'Karen Walsh','KW','teal','Premier · Vasper + Katalyst','79','lime')">
+          <div class="member-av" style="background:var(--teal-dim);color:var(--teal)">KW</div>
+          <div class="member-info">
+            <div class="member-name">Karen Walsh</div>
+            <div class="member-detail">Premier · Vasper + Katalyst</div>
+          </div>
+          <div class="member-recovery">
+            <div class="recovery-score" style="color:var(--lime)">79</div>
+            <div class="recovery-label">Readiness</div>
+          </div>
+        </button>
+
+        <button class="member-btn" onclick="selectMember(this,'David Park','DP','text2','Essential · CAROL + Recovery','61','amber')">
+          <div class="member-av" style="background:var(--bg3);color:var(--text2)">DP</div>
+          <div class="member-info">
+            <div class="member-name">David Park</div>
+            <div class="member-detail">Essential · CAROL + Recovery</div>
+          </div>
+          <div class="member-recovery">
+            <div class="recovery-score" style="color:var(--amber)">61</div>
+            <div class="recovery-label">Recovery</div>
+          </div>
+        </button>
+
+      </div>
+    </div>
+
+    <!-- CENTER: LOG FORM -->
+    <div class="log-col">
+
+      <!-- Member header -->
+      <div class="log-header">
+        <div class="log-header-av" id="log-av" style="background:var(--lime-dim);color:var(--lime)">MR</div>
+        <div>
+          <div class="log-header-name" id="log-name">Mark Reynolds</div>
+          <div class="log-header-meta" id="log-meta">Premier · Week 7 of 12 · Strength Foundation</div>
+        </div>
+        <div class="log-header-wearable" id="log-wearable">
+          <div class="wearable-row"><span class="wearable-val" style="color:var(--lime)">74</span><span class="wearable-lbl">Whoop recovery</span></div>
+          <div class="wearable-row"><span class="wearable-val">68ms</span><span class="wearable-lbl">HRV</span></div>
+          <div class="wearable-row"><span class="wearable-val">7.4h</span><span class="wearable-lbl">Sleep</span></div>
+        </div>
+      </div>
+
+      <!-- Protocol banner -->
+      <div class="protocol-banner" id="protocol-banner">
+        <span class="pb-icon">📋</span>
+        <span class="pb-text">Dustin's protocol — Session C</span>
+        <span class="pb-session">ARX Upper Body · 20 min</span>
+      </div>
+
+      <!-- Log body -->
+      <div class="log-body">
+
+        <!-- Alert -->
+        <div id="member-alert" class="alert alert-ok">✓ Recovery 74 — good to train as prescribed</div>
+
+        <!-- Equipment -->
+        <div class="equip-section">
+          <div class="section-label">Equipment used</div>
+          <div class="equip-grid" id="equip-grid">
+            <button class="equip-btn selected" onclick="selectEquip(this,'ARX','training')">
+              <span class="equip-icon">🏋️</span>
+              <div class="equip-name">ARX</div>
+            </button>
+            <button class="equip-btn" onclick="selectEquip(this,'CAROL','training')">
+              <span class="equip-icon">🚲</span>
+              <div class="equip-name">CAROL</div>
+            </button>
+            <button class="equip-btn" onclick="selectEquip(this,'Vasper','training')">
+              <span class="equip-icon">❄️</span>
+              <div class="equip-name">Vasper</div>
+            </button>
+            <button class="equip-btn" onclick="selectEquip(this,'Katalyst','training')">
+              <span class="equip-icon">⚡</span>
+              <div class="equip-name">Katalyst</div>
+            </button>
+            <button class="equip-btn" onclick="selectEquip(this,'Proteus','training')">
+              <span class="equip-icon">🔄</span>
+              <div class="equip-name">Proteus</div>
+            </button>
+            <button class="equip-btn" onclick="selectEquip(this,'Quickboard','training')">
+              <span class="equip-icon">⬜</span>
+              <div class="equip-name">Quickboard</div>
+            </button>
+            <button class="equip-btn" onclick="selectEquip(this,'Fit3D','scan')">
+              <span class="equip-icon">🔍</span>
+              <div class="equip-name">Fit3D</div>
+            </button>
+            <button class="equip-btn" onclick="selectEquip(this,'NxPro','recovery')">
+              <span class="equip-icon">🧠</span>
+              <div class="equip-name">NxPro</div>
+            </button>
+            <button class="equip-btn" onclick="selectEquip(this,'Other','training')">
+              <span class="equip-icon">➕</span>
+              <div class="equip-name">Other</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Recovery modalities -->
+        <div class="equip-section">
+          <div class="section-label">Recovery modalities (select all that apply)</div>
+          <div class="equip-grid-recovery">
+            <button class="equip-btn recovery-btn" onclick="toggleRecovery(this,'infrared_sauna')">
+              <span class="equip-icon">🌡️</span>
+              <div class="equip-name">IR Sauna</div>
+            </button>
+            <button class="equip-btn recovery-btn" onclick="toggleRecovery(this,'cold_plunge')">
+              <span class="equip-icon">🧊</span>
+              <div class="equip-name">Cold plunge</div>
+            </button>
+            <button class="equip-btn recovery-btn" onclick="toggleRecovery(this,'compression')">
+              <span class="equip-icon">🦵</span>
+              <div class="equip-name">Compression</div>
+            </button>
+            <button class="equip-btn recovery-btn" onclick="toggleRecovery(this,'nxpro')">
+              <span class="equip-icon">🧠</span>
+              <div class="equip-name">NxPro</div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Detail fields -->
+        <div class="detail-grid">
+          <div class="detail-field">
+            <div class="detail-label">Duration (min)</div>
+            <input type="number" class="detail-input" id="duration" value="20" min="1" max="120">
+          </div>
+          <div class="detail-field">
+            <div class="detail-label">Completed?</div>
+            <select class="detail-select" id="completed">
+              <option value="true">✓ Yes — completed</option>
+              <option value="partial">~ Partial</option>
+              <option value="false">✗ No — cancelled</option>
+            </select>
+          </div>
+          <div class="detail-field">
+            <div class="detail-label">Session type</div>
+            <select class="detail-select" id="session-type">
+              <option>Training — per protocol</option>
+              <option>Recovery only</option>
+              <option>Assessment / scan</option>
+              <option>Free session</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Perceived effort -->
+        <div class="equip-section">
+          <div class="section-label">Perceived effort (member's rating)</div>
+          <div class="effort-row" id="effort-row">
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,1)">1</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,2)">2</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,3)">3</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,4)">4</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,5)">5</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,6)">6</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn selected" onclick="selectEffort(this,7)">7</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,8)">8</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,9)">9</button>
+            </div>
+            <div style="flex:1">
+              <button class="effort-btn" onclick="selectEffort(this,10)">10</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick notes -->
+        <div class="equip-section">
+          <div class="section-label">Quick observations (tap to add)</div>
+          <div class="quick-notes">
+            <span class="quick-note" onclick="toggleQuickNote(this)">Good form</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Strong session</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">PR today</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Seemed tired</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Low energy</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Modified load</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Complained of soreness</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Great attitude</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Needed coaching cues</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Faster than last time</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Skipped eccentric</span>
+            <span class="quick-note" onclick="toggleQuickNote(this)">Left early</span>
+          </div>
+        </div>
+
+        <!-- Staff notes -->
+        <div class="notes-field">
+          <div class="section-label" style="margin-bottom:8px">Additional staff notes</div>
+          <textarea class="notes-textarea" id="staff-notes" placeholder="Anything else Dustin should know about this session…"></textarea>
+        </div>
+
+      </div>
+
+      <!-- LOG FOOTER -->
+      <div class="log-footer">
+        <button class="btn-log btn-log-ghost" onclick="clearForm()">Clear</button>
+        <button class="btn-log btn-log-lime" id="log-btn" onclick="logSession()">
+          Log session for Mark →
+        </button>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: TODAY'S LOG -->
+    <div class="right-col">
+      <div class="right-header">
+        <div class="right-title">Logged today</div>
+        <div class="right-count" id="logged-count">3</div>
+      </div>
+      <div class="session-log-list" id="session-log-list">
+
+        <div class="logged-item">
+          <div class="logged-top">
+            <div class="logged-member">Mark Reynolds</div>
+            <div class="logged-time">7:58 AM</div>
+          </div>
+          <span class="logged-equip" style="background:var(--amber-dim);color:var(--amber)">ARX Lower</span>
+          <div class="logged-detail">20 min · Completed · Effort 8</div>
+          <div class="logged-notes">Strong leg press — new output record</div>
+        </div>
+
+        <div class="logged-item">
+          <div class="logged-top">
+            <div class="logged-member">Karen Walsh</div>
+            <div class="logged-time">8:15 AM</div>
+          </div>
+          <span class="logged-equip" style="background:var(--blue-dim);color:var(--blue)">CAROL REHIT</span>
+          <div class="logged-detail">12 min · Completed · Effort 9</div>
+          <div class="logged-notes">Best fitness score yet — 38.2</div>
+        </div>
+
+        <div class="logged-item">
+          <div class="logged-top">
+            <div class="logged-member">Tom Bradley</div>
+            <div class="logged-time">8:34 AM</div>
+          </div>
+          <span class="logged-equip" style="background:var(--teal-dim);color:var(--teal)">Recovery</span>
+          <div class="logged-detail">IR Sauna · Cold Plunge · 45 min</div>
+          <div class="logged-notes">Low sleep — modified to recovery only</div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- SUCCESS OVERLAY -->
+<div class="success-overlay" id="success-overlay">
+  <div class="success-card">
+    <div class="success-check">✓</div>
+    <div class="success-title">Session logged</div>
+    <div class="success-member" id="success-member">Mark Reynolds</div>
+    <div class="success-detail" id="success-detail">ARX · 20 min · Effort 7</div>
+    <div style="font-size:12px;color:var(--text3);margin-top:4px;margin-bottom:20px">Dustin will see this in his dashboard</div>
+    <button class="btn-success" onclick="closeSuccess()">Log next session →</button>
+  </div>
+</div>
+
+<script>
+// CLOCK
+function updateClock() {
+  const now = new Date();
+  let h = now.getHours();
+  const m = now.getMinutes().toString().padStart(2,'0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  document.getElementById('clock').textContent = `${h}:${m} ${ampm}`;
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// DATE
+const d = new Date(2026,2,14);
+document.getElementById('top-date').textContent = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+
+// MEMBER DATA
+const members = {
+  'Mark Reynolds': {
+    av:'MR', color:'lime',
+    meta:'Premier · Week 7 of 12 · Strength Foundation',
+    protocol:'Dustin\'s protocol — Session C',
+    protocolSession:'ARX Upper Body · 20 min',
+    alert:{type:'ok', msg:'✓ Recovery 74 — good to train as prescribed'},
+    wearable:{recovery:'74',recoveryColor:'lime',hrv:'68ms',sleep:'7.4h'},
+    defaultEquip:'ARX', defaultDuration:20
+  },
+  'Sarah Mitchell': {
+    av:'SM', color:'coral',
+    meta:'Premier · Week 4 · Cardio Focus',
+    protocol:'Dustin\'s protocol — Session B',
+    protocolSession:'CAROL REHIT · 12 min',
+    alert:{type:'low', msg:'⚠ Recovery 31 — consider modifying session intensity'},
+    wearable:{recovery:'31',recoveryColor:'coral',hrv:'28ms ⚠',sleep:'5.1h'},
+    defaultEquip:'CAROL', defaultDuration:12
+  },
+  'Jeff La Rue': {
+    av:'JL', color:'blue',
+    meta:'Concierge · Week 6 · Metabolic Reset',
+    protocol:'Scheduled today',
+    protocolSession:'Fit3D Body Scan · 5 min',
+    alert:{type:'ok', msg:'✓ Readiness 82 — optimal. Fit3D scan scheduled today'},
+    wearable:{recovery:'82',recoveryColor:'lime',hrv:'71ms',sleep:'8.1h'},
+    defaultEquip:'Fit3D', defaultDuration:5
+  },
+  'Tom Bradley': {
+    av:'TB', color:'amber',
+    meta:'Essential · Week 3 · Strength Foundation',
+    protocol:'Dustin\'s protocol — Session A',
+    protocolSession:'ARX Lower Body · 20 min',
+    alert:{type:'warn', msg:'⚠ Sleep 4.9hrs · Recovery 44 — heads up, monitor closely'},
+    wearable:{recovery:'44',recoveryColor:'amber',hrv:'42ms',sleep:'4.9h ⚠'},
+    defaultEquip:'ARX', defaultDuration:20
+  },
+  'Karen Walsh': {
+    av:'KW', color:'teal',
+    meta:'Premier · Week 2 · Longevity Protocol',
+    protocol:'Dustin\'s protocol — Session D',
+    protocolSession:'Vasper + Katalyst · 30 min',
+    alert:{type:'ok', msg:'✓ Readiness 79 — good to train'},
+    wearable:{recovery:'79',recoveryColor:'lime',hrv:'72ms',sleep:'8.1h'},
+    defaultEquip:'Vasper', defaultDuration:30
+  },
+  'David Park': {
+    av:'DP', color:'text2',
+    meta:'Essential · Week 1 · Strength Foundation',
+    protocol:'Dustin\'s protocol — Session B',
+    protocolSession:'CAROL REHIT · 12 min',
+    alert:{type:'warn', msg:'↓ Recovery 61 — moderate. Proceed at normal intensity'},
+    wearable:{recovery:'61',recoveryColor:'amber',hrv:'55ms',sleep:'6.8h'},
+    defaultEquip:'CAROL', defaultDuration:12
+  }
+};
+
+let currentMember = 'Mark Reynolds';
+let selectedEquip = 'ARX';
+let selectedEffort = 7;
+let recoveryItems = [];
+let quickNotes = [];
+let loggedCount = 3;
+
+function selectMember(el, name, av, color, detail, score, scoreColor) {
+  document.querySelectorAll('.member-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  currentMember = name;
+
+  const data = members[name];
+  if(!data) return;
+
+  // Update header
+  document.getElementById('log-av').textContent = av;
+  document.getElementById('log-av').style.background = `var(--${color}-dim)`;
+  document.getElementById('log-av').style.color = `var(--${color})`;
+  document.getElementById('log-name').textContent = name;
+  document.getElementById('log-meta').textContent = data.meta;
+
+  // Wearable
+  document.getElementById('log-wearable').innerHTML = `
+    <div class="wearable-row"><span class="wearable-val" style="color:var(--${data.wearable.recoveryColor})">${data.wearable.recovery}</span><span class="wearable-lbl">Recovery</span></div>
+    <div class="wearable-row"><span class="wearable-val">${data.wearable.hrv}</span><span class="wearable-lbl">HRV</span></div>
+    <div class="wearable-row"><span class="wearable-val">${data.wearable.sleep}</span><span class="wearable-lbl">Sleep</span></div>
+  `;
+
+  // Protocol banner
+  document.getElementById('protocol-banner').innerHTML = `
+    <span class="pb-icon">📋</span>
+    <span class="pb-text">${data.protocol}</span>
+    <span class="pb-session">${data.protocolSession}</span>
+  `;
+
+  // Alert
+  const alertEl = document.getElementById('member-alert');
+  alertEl.className = `alert alert-${data.alert.type}`;
+  alertEl.textContent = data.alert.msg;
+
+  // Default equipment
+  document.querySelectorAll('.equip-btn:not(.recovery-btn)').forEach(b => b.classList.remove('selected'));
+  const equipBtns = document.querySelectorAll('.equip-btn:not(.recovery-btn)');
+  equipBtns.forEach(b => {
+    if(b.querySelector('.equip-name').textContent === data.defaultEquip) {
+      b.classList.add('selected');
+      selectedEquip = data.defaultEquip;
+    }
+  });
+
+  // Duration
+  document.getElementById('duration').value = data.defaultDuration;
+
+  // Log button
+  document.getElementById('log-btn').textContent = `Log session for ${name.split(' ')[0]} →`;
+
+  // Clear recovery and quick notes
+  document.querySelectorAll('.recovery-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.quick-note').forEach(n => n.classList.remove('selected'));
+  recoveryItems = [];
+  quickNotes = [];
+  document.getElementById('staff-notes').value = '';
+}
+
+function selectEquip(el, name, type) {
+  document.querySelectorAll('.equip-btn:not(.recovery-btn)').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedEquip = name;
+}
+
+function toggleRecovery(el, name) {
+  el.classList.toggle('selected');
+  if(el.classList.contains('selected')) {
+    recoveryItems.push(name);
+  } else {
+    recoveryItems = recoveryItems.filter(r => r !== name);
+  }
+}
+
+function selectEffort(el, val) {
+  document.querySelectorAll('.effort-btn').forEach(b => b.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedEffort = val;
+}
+
+function toggleQuickNote(el) {
+  el.classList.toggle('selected');
+  const text = el.textContent;
+  if(el.classList.contains('selected')) {
+    quickNotes.push(text);
+  } else {
+    quickNotes = quickNotes.filter(n => n !== text);
+  }
+}
+
+function logSession() {
+  const duration = document.getElementById('duration').value;
+  const notes = document.getElementById('staff-notes').value;
+  const allNotes = [...quickNotes, ...(notes ? [notes] : [])].join(' · ');
+
+  // Show success
+  document.getElementById('success-member').textContent = currentMember;
+  document.getElementById('success-detail').textContent =
+    `${selectedEquip} · ${duration} min · Effort ${selectedEffort}${recoveryItems.length ? ' · + Recovery' : ''}`;
+  document.getElementById('success-overlay').classList.add('show');
+
+  // Add to log list
+  loggedCount++;
+  document.getElementById('logged-count').textContent = loggedCount;
+  const now = new Date();
+  let h = now.getHours() % 12 || 12;
+  const m = now.getMinutes().toString().padStart(2,'0');
+  const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+  const timeStr = `${h}:${m} ${ampm}`;
+  const memberData = members[currentMember];
+  const color = memberData ? memberData.color : 'text2';
+
+  const item = document.createElement('div');
+  item.className = 'logged-item';
+  item.innerHTML = `
+    <div class="logged-top">
+      <div class="logged-member">${currentMember}</div>
+      <div class="logged-time">${timeStr}</div>
+    </div>
+    <span class="logged-equip" style="background:var(--${color}-dim);color:var(--${color})">${selectedEquip}</span>
+    <div class="logged-detail">${duration} min · Effort ${selectedEffort}</div>
+    ${allNotes ? `<div class="logged-notes">${allNotes}</div>` : ''}
+  `;
+  const list = document.getElementById('session-log-list');
+  list.insertBefore(item, list.firstChild);
+}
+
+function closeSuccess() {
+  document.getElementById('success-overlay').classList.remove('show');
+  clearForm();
+}
+
+function clearForm() {
+  document.getElementById('staff-notes').value = '';
+  document.querySelectorAll('.recovery-btn').forEach(b => b.classList.remove('selected'));
+  document.querySelectorAll('.quick-note').forEach(n => n.classList.remove('selected'));
+  document.querySelectorAll('.effort-btn').forEach(b => b.classList.remove('selected'));
+  selectedEffort = null;
+  recoveryItems = [];
+  quickNotes = [];
+}
+
+function filterMembers(val) {
+  document.querySelectorAll('.member-btn').forEach(btn => {
+    const name = btn.querySelector('.member-name').textContent.toLowerCase();
+    btn.style.display = name.includes(val.toLowerCase()) ? '' : 'none';
+  });
+}
+</script>
+</body>
+</html>

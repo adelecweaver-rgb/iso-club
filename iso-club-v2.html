@@ -1,0 +1,1124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iso Club — Healthspan OS</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:       #0b0c09;
+  --bg2:      #111209;
+  --bg3:      #181910;
+  --bg4:      #1f2014;
+  --bg5:      #252618;
+  --border:   rgba(255,255,255,0.06);
+  --border2:  rgba(255,255,255,0.11);
+  --border3:  rgba(255,255,255,0.18);
+  --text:     #edeae0;
+  --text2:    #9b9889;
+  --text3:    #585750;
+  --lime:     #c9f055;
+  --lime2:    #a8d038;
+  --lime-dim: rgba(201,240,85,0.1);
+  --lime-dim2:rgba(201,240,85,0.05);
+  --amber:    #f0b955;
+  --amber-dim:rgba(240,185,85,0.1);
+  --blue:     #55b8f0;
+  --blue-dim: rgba(85,184,240,0.1);
+  --coral:    #f07055;
+  --coral-dim:rgba(240,112,85,0.1);
+  --teal:     #55e8c8;
+  --teal-dim: rgba(85,232,200,0.1);
+  --purple:   #a855f0;
+  --purple-dim:rgba(168,85,240,0.1);
+  --serif:    'Instrument Serif', Georgia, serif;
+  --sans:     'Instrument Sans', sans-serif;
+  --r:        12px;
+  --r-sm:     7px;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg5);border-radius:2px}
+
+/* LAYOUT */
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* SIDEBAR */
+.sidebar{width:220px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+
+.logo{padding:24px 20px 20px;border-bottom:1px solid var(--border)}
+.logo-word{font-family:var(--serif);font-size:24px;letter-spacing:0.02em;color:var(--text)}
+.logo-word em{color:var(--lime);font-style:normal}
+.logo-sub{font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--text3);margin-top:1px}
+
+.view-toggle{display:flex;margin:14px 14px 0;background:var(--bg3);border-radius:var(--r-sm);padding:3px;border:1px solid var(--border)}
+.vt-btn{flex:1;padding:5px 8px;border-radius:5px;border:none;background:none;font-family:var(--sans);font-size:11px;color:var(--text3);cursor:pointer;transition:all .15s;text-align:center}
+.vt-btn.active{background:var(--bg5);color:var(--text);border:1px solid var(--border2)}
+
+.nav{padding:14px 10px;flex:1}
+.nav-group{margin-bottom:20px}
+.nav-group-label{font-size:9.5px;letter-spacing:0.16em;text-transform:uppercase;color:var(--text3);padding:0 10px;margin-bottom:5px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:var(--r-sm);cursor:pointer;color:var(--text3);font-size:13px;font-weight:400;transition:all .15s;border:none;background:none;width:100%;text-align:left;position:relative}
+.nav-item:hover{background:var(--bg3);color:var(--text2)}
+.nav-item.active{background:var(--lime-dim);color:var(--lime)}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;opacity:.7}
+.nav-item.active svg{opacity:1}
+.nav-badge{margin-left:auto;background:var(--lime);color:var(--bg);font-size:9.5px;font-weight:500;padding:1px 5px;border-radius:8px;min-width:16px;text-align:center}
+.nav-badge.amber{background:var(--amber);color:var(--bg)}
+
+.sidebar-user{padding:16px 16px;border-top:1px solid var(--border)}
+.user-row{display:flex;align-items:center;gap:10px}
+.user-av{width:32px;height:32px;border-radius:50%;background:var(--lime-dim);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;color:var(--lime);flex-shrink:0}
+.user-name{font-size:13px;font-weight:500;color:var(--text)}
+.user-tier{font-size:10px;color:var(--amber);letter-spacing:0.06em;text-transform:uppercase}
+
+/* WEARABLE DOTS */
+.wearable-dots{display:flex;gap:5px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+.w-dot{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--text3)}
+.w-dot-circle{width:6px;height:6px;border-radius:50%}
+.w-dot.connected .w-dot-circle{background:var(--lime)}
+.w-dot.connected{color:var(--text2)}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:18px 32px;border-bottom:1px solid var(--border);background:var(--bg);position:sticky;top:0;z-index:10;backdrop-filter:blur(10px)}
+.topbar-left{}
+.topbar-date{font-size:10.5px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:2px}
+.topbar-title{font-family:var(--serif);font-size:19px;color:var(--text)}
+.topbar-right{display:flex;align-items:center;gap:8px}
+
+/* BUTTONS */
+.btn{padding:7px 14px;border-radius:var(--r-sm);border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-family:var(--sans);font-size:12px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:var(--bg4);color:var(--text);border-color:var(--border3)}
+.btn-lime{background:var(--lime);color:var(--bg);border-color:var(--lime);font-weight:500}
+.btn-lime:hover{background:var(--lime2);border-color:var(--lime2);color:var(--bg)}
+.btn-sm{padding:5px 10px;font-size:11px}
+
+/* CONTENT */
+.content{padding:28px 32px;flex:1}
+
+/* TAGS */
+.tag{display:inline-flex;align-items:center;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap}
+.tag-lime{background:var(--lime-dim);color:var(--lime)}
+.tag-amber{background:var(--amber-dim);color:var(--amber)}
+.tag-blue{background:var(--blue-dim);color:var(--blue)}
+.tag-coral{background:var(--coral-dim);color:var(--coral)}
+.tag-teal{background:var(--teal-dim);color:var(--teal)}
+.tag-muted{background:var(--bg3);color:var(--text3);border:1px solid var(--border)}
+
+/* CARDS */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .2s}
+.card:hover{border-color:var(--border2)}
+.card-header{padding:16px 18px 13px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
+.card-title{font-size:13px;font-weight:500;color:var(--text)}
+.card-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.card-body{padding:14px 18px}
+
+/* GRID LAYOUTS */
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:22px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px}
+.grid-3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:16px;margin-bottom:22px}
+.grid-21{display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:22px}
+
+/* STAT CARDS */
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;position:relative;overflow:hidden;transition:border-color .2s;cursor:default}
+.stat-card:hover{border-color:var(--border2)}
+.stat-card::after{content:'';position:absolute;top:0;left:0;right:0;height:1.5px;background:var(--lime);opacity:0;transition:opacity .2s}
+.stat-card:hover::after{opacity:1}
+.stat-card.amber::after{background:var(--amber)}
+.stat-card.blue::after{background:var(--blue)}
+.stat-card.coral::after{background:var(--coral)}
+.stat-card.teal::after{background:var(--teal)}
+.stat-label{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:7px}
+.stat-val{font-family:var(--serif);font-size:30px;color:var(--text);line-height:1;margin-bottom:4px}
+.stat-sub{font-size:11px;color:var(--text3)}
+.stat-trend{font-size:11px;margin-top:4px;display:flex;align-items:center;gap:3px}
+.trend-up{color:var(--lime)}
+.trend-dn{color:var(--coral)}
+
+/* SECTION HEADER */
+.sec-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px}
+.sec-title{font-family:var(--serif);font-size:17px;color:var(--text)}
+.sec-link{font-size:11px;color:var(--text3);cursor:pointer;transition:color .15s}
+.sec-link:hover{color:var(--lime)}
+
+/* PROTOCOL TRACK */
+.track-hero{display:flex;gap:14px;align-items:flex-start;padding:18px;border-bottom:1px solid var(--border)}
+.track-icon{width:42px;height:42px;border-radius:10px;background:var(--lime-dim);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.track-icon svg{width:20px;height:20px;color:var(--lime)}
+.track-name{font-family:var(--serif);font-size:16px;color:var(--text);margin-bottom:3px}
+.track-meta{font-size:11px;color:var(--text3)}
+.track-meta b{color:var(--text2);font-weight:500}
+
+.prog-wrap{padding:14px 18px;border-bottom:1px solid var(--border)}
+.prog-row{display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-bottom:5px}
+.prog-bar-bg{height:5px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.prog-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--lime),var(--lime2))}
+
+/* SESSION LIST */
+.session-item{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.session-item:last-child{border-bottom:none}
+.session-item:hover{background:var(--bg3)}
+.session-item.current{background:var(--lime-dim2)}
+.s-num{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;border:1.5px solid var(--border2);color:var(--text3)}
+.s-num.done{background:var(--lime-dim);border-color:var(--lime);color:var(--lime)}
+.s-num.now{background:var(--lime);border-color:var(--lime);color:var(--bg);font-weight:700}
+.s-info{flex:1}
+.s-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:1px}
+.s-detail{font-size:11px;color:var(--text3)}
+.s-dur{font-size:11px;color:var(--text3);white-space:nowrap}
+
+/* MACHINE DATA CARDS */
+.metric-row{display:flex;align-items:center;justify-content:space-between;padding:11px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.metric-row:last-child{border-bottom:none}
+.metric-row:hover{background:var(--bg3)}
+.metric-label{font-size:12px;color:var(--text2)}
+.metric-val{font-family:var(--serif);font-size:15px;color:var(--text)}
+.metric-unit{font-size:11px;color:var(--text3);margin-left:3px}
+.metric-change{font-size:11px;margin-left:5px}
+.chg-up{color:var(--lime)}
+.chg-dn{color:var(--coral)}
+
+/* CHART BARS */
+.chart-bars{display:flex;align-items:flex-end;gap:6px;height:80px;padding:8px 0}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar{width:100%;border-radius:3px 3px 0 0;background:var(--bg4);transition:background .2s}
+.bar.active{background:var(--lime)}
+.bar-label{font-size:9.5px;color:var(--text3)}
+.bar.active+.bar-label{color:var(--lime)}
+
+/* HEALTHSPAN OS GRID */
+.os-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:14px 18px}
+.os-item{padding:10px 12px;border-radius:var(--r-sm);background:var(--bg3);border:1px solid var(--border);cursor:pointer;transition:all .15s}
+.os-item:hover{border-color:var(--border2)}
+.os-item-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.os-item-label{font-size:11px;font-weight:500;color:var(--text2)}
+.os-item-score{font-family:var(--serif);font-size:17px}
+.os-bar-bg{height:3px;background:var(--bg5);border-radius:2px;overflow:hidden}
+.os-bar-fill{height:100%;border-radius:2px}
+
+/* MESSAGES */
+.msg-thread{display:flex;gap:10px;padding:12px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;position:relative}
+.msg-thread:hover{background:var(--bg3)}
+.msg-thread.unread::before{content:'';position:absolute;left:7px;top:50%;transform:translateY(-50%);width:3px;height:3px;border-radius:50%;background:var(--lime)}
+.msg-av{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-family:var(--serif);flex-shrink:0}
+.msg-from{font-size:12.5px;font-weight:500;color:var(--text);margin-bottom:1px}
+.msg-preview{font-size:11.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px}
+.msg-time{font-size:10.5px;color:var(--text3);margin-left:auto;white-space:nowrap}
+
+/* RECOVERY TRACKER */
+.recovery-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;padding:14px 18px}
+.rec-item{padding:12px;border-radius:var(--r-sm);background:var(--bg3);border:1px solid var(--border);text-align:center;cursor:pointer;transition:all .15s}
+.rec-item:hover{border-color:var(--border2)}
+.rec-count{font-family:var(--serif);font-size:22px;color:var(--text);line-height:1;margin-bottom:3px}
+.rec-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em}
+.rec-goal{font-size:10px;margin-top:4px}
+
+/* WEARABLE CARD */
+.wearable-connect{display:flex;flex-direction:column;gap:8px;padding:14px 18px}
+.w-device{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg3);cursor:pointer;transition:all .15s}
+.w-device:hover{border-color:var(--border2)}
+.w-device-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.w-device-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:1px}
+.w-device-status{font-size:11px}
+.w-device-btn{margin-left:auto}
+
+/* WEARABLE METRICS */
+.wearable-metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:14px 18px}
+.wm-item{padding:12px;border-radius:var(--r-sm);background:var(--bg3);border:1px solid var(--border)}
+.wm-label{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:5px}
+.wm-val{font-family:var(--serif);font-size:20px;color:var(--text);line-height:1;margin-bottom:2px}
+.wm-sub{font-size:10.5px;color:var(--text3)}
+
+/* SCHEDULE */
+.sched-item{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.sched-item:hover{background:var(--bg3)}
+.sched-item:last-child{border-bottom:none}
+.sched-date{text-align:center;min-width:34px}
+.sched-day{font-family:var(--serif);font-size:17px;color:var(--text);line-height:1}
+.sched-month{font-size:9.5px;text-transform:uppercase;letter-spacing:0.1em;color:var(--text3)}
+.sched-div{width:1px;height:28px;background:var(--border2);flex-shrink:0}
+.sched-info{flex:1}
+.sched-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:1px}
+.sched-time{font-size:11px;color:var(--text3)}
+
+/* ===================== */
+/* COACH VIEW            */
+/* ===================== */
+.coach-morning{background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border:1px solid var(--border2);border-radius:var(--r);padding:20px;margin-bottom:22px;position:relative;overflow:hidden}
+.coach-morning::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--lime),var(--amber),var(--blue))}
+.cm-title{font-family:var(--serif);font-size:20px;margin-bottom:4px}
+.cm-sub{font-size:12px;color:var(--text3);margin-bottom:16px}
+.cm-stats{display:flex;gap:20px}
+.cm-stat{text-align:center}
+.cm-stat-val{font-family:var(--serif);font-size:24px;color:var(--text);line-height:1}
+.cm-stat-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.1em;margin-top:2px}
+
+/* MEMBER ROSTER */
+.member-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;transition:border-color .2s;cursor:pointer}
+.member-card:hover{border-color:var(--border2)}
+.mc-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.mc-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:14px;flex-shrink:0;border:1.5px solid var(--border2)}
+.mc-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:1px}
+.mc-tier{font-size:10px;color:var(--text3)}
+.mc-readiness{margin-left:auto;text-align:right}
+.mc-score{font-family:var(--serif);font-size:20px;line-height:1}
+.mc-score-label{font-size:9.5px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em}
+
+/* READINESS COLORS */
+.score-high{color:var(--lime)}
+.score-med{color:var(--amber)}
+.score-low{color:var(--coral)}
+
+.mc-body{padding:12px 16px;display:flex;flex-direction:column;gap:6px}
+.mc-row{display:flex;justify-content:space-between;align-items:center}
+.mc-row-label{font-size:11px;color:var(--text3)}
+.mc-row-val{font-size:11.5px;color:var(--text2);font-weight:500}
+
+/* ALERT BANNER */
+.alert{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:var(--r-sm);margin-bottom:8px;font-size:12px}
+.alert-warn{background:var(--amber-dim);border:1px solid rgba(240,185,85,0.2);color:var(--amber)}
+.alert-low{background:var(--coral-dim);border:1px solid rgba(240,112,85,0.2);color:var(--coral)}
+.alert-ok{background:var(--lime-dim);border:1px solid rgba(201,240,85,0.15);color:var(--lime)}
+
+/* SESSION LOG FORM */
+.log-form{display:flex;flex-direction:column;gap:10px;padding:14px 18px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.form-field{display:flex;flex-direction:column;gap:4px}
+.form-label{font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3)}
+.form-input,.form-select{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r-sm);padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:12.5px;outline:none;transition:border-color .15s;width:100%}
+.form-input:focus,.form-select:focus{border-color:var(--lime)}
+.form-input::placeholder{color:var(--text3)}
+.form-textarea{resize:vertical;min-height:70px}
+
+/* MEMBER DETAIL PANEL */
+.member-detail-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px}
+
+/* TABS */
+.tabs{display:flex;gap:3px;padding:3px;background:var(--bg3);border-radius:var(--r-sm);width:fit-content;margin-bottom:18px;border:1px solid var(--border)}
+.tab{padding:5px 13px;border-radius:5px;font-size:12px;cursor:pointer;color:var(--text3);transition:all .15s;border:none;background:none;font-family:var(--sans)}
+.tab:hover{color:var(--text2)}
+.tab.active{background:var(--bg2);color:var(--text);border:1px solid var(--border2)}
+
+/* DIVIDER */
+.divider{border:none;border-top:1px solid var(--border);margin:20px 0}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.anim{animation:fadeUp .35s ease both}
+.d1{animation-delay:.04s}.d2{animation-delay:.08s}.d3{animation-delay:.12s}.d4{animation-delay:.16s}
+
+/* REPORT ITEM */
+.report-item{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.report-item:hover{background:var(--bg3)}
+.report-item:last-child{border-bottom:none}
+.report-icon{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.report-name{font-size:12.5px;font-weight:500;color:var(--text);margin-bottom:1px}
+.report-date{font-size:11px;color:var(--text3)}
+.report-new{font-size:10px;background:var(--lime-dim);color:var(--lime);padding:2px 6px;border-radius:8px;font-weight:500;margin-left:auto}
+
+/* NOTIF DOT */
+.notif-wrap{position:relative}
+.notif-dot{width:7px;height:7px;border-radius:50%;background:var(--lime);position:absolute;top:-2px;right:-2px}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="logo">
+    <div class="logo-word">Iso<em>.</em></div>
+    <div class="logo-sub">Healthspan OS</div>
+  </div>
+
+  <!-- VIEW TOGGLE: Member / Coach -->
+  <div class="view-toggle">
+    <button class="vt-btn active" onclick="setMode('member')">Member</button>
+    <button class="vt-btn" onclick="setMode('coach')">Coach</button>
+  </div>
+
+  <!-- MEMBER NAV -->
+  <div class="nav" id="member-nav">
+    <div class="nav-group">
+      <div class="nav-group-label">Overview</div>
+      <button class="nav-item active" onclick="showView('dashboard')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1.5"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1.5"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1.5"/><rect x="9" y="9" width="5.5" height="5.5" rx="1.5"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" onclick="showView('protocol')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10M3 6h7M3 9h10M3 12h5"/></svg>
+        My Protocol
+      </button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">Machine Data</div>
+      <button class="nav-item" onclick="showView('carol')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4v4l3 2"/></svg>
+        CAROL
+      </button>
+      <button class="nav-item" onclick="showView('arx')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l4-8 4 6 2-3 2 5"/></svg>
+        ARX Strength
+      </button>
+      <button class="nav-item" onclick="showView('scans')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="8" rx="6.5" ry="4"/><line x1="8" y1="1.5" x2="8" y2="14.5"/></svg>
+        Body Scans
+      </button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">Recovery</div>
+      <button class="nav-item" onclick="showView('recovery')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.5C8 1.5 3 5 3 9a5 5 0 0010 0c0-4-5-7.5-5-7.5z"/></svg>
+        Recovery
+      </button>
+      <button class="nav-item" onclick="showView('wearables')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="1" width="6" height="14" rx="2"/><line x1="5" y1="5" x2="11" y2="5"/><line x1="5" y1="11" x2="11" y2="11"/></svg>
+        Wearables
+        <span class="nav-badge nav-badge amber">!</span>
+      </button>
+    </div>
+    <div class="nav-group">
+      <div class="nav-group-label">Connect</div>
+      <button class="nav-item notif-wrap" onclick="showView('messages')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H2a.5.5 0 00-.5.5v8a.5.5 0 00.5.5h3l2 2.5 2-2.5h5a.5.5 0 00.5-.5v-8A.5.5 0 0014 2z"/></svg>
+        Messages
+        <span class="nav-badge">3</span>
+      </button>
+      <button class="nav-item" onclick="showView('reports')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8" x2="11" y2="8"/><line x1="5" y1="10.5" x2="8.5" y2="10.5"/></svg>
+        Reports
+        <span class="nav-badge">2</span>
+      </button>
+      <button class="nav-item" onclick="showView('schedule')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><line x1="1.5" y1="6.5" x2="14.5" y2="6.5"/><line x1="5" y1="1" x2="5" y2="4"/><line x1="11" y1="1" x2="11" y2="4"/></svg>
+        Schedule
+      </button>
+    </div>
+  </div>
+
+  <!-- COACH NAV -->
+  <div class="nav" id="coach-nav" style="display:none">
+    <div class="nav-group">
+      <div class="nav-group-label">Coach</div>
+      <button class="nav-item active" onclick="showCoachView('morning')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="4"/><line x1="8" y1="1" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="15"/><line x1="1" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="15" y2="8"/></svg>
+        Morning Brief
+        <span class="nav-badge amber">2</span>
+      </button>
+      <button class="nav-item" onclick="showCoachView('members')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2.5"/><path d="M1.5 13.5C1.5 11 3.5 9 6 9s4.5 2 4.5 4.5"/><circle cx="11.5" cy="5" r="2"/><path d="M14.5 13c0-2-1.5-3.5-3-3.5"/></svg>
+        All Members
+      </button>
+      <button class="nav-item" onclick="showCoachView('log')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><line x1="8" y1="5" x2="8" y2="8"/><line x1="8" y1="8" x2="10.5" y2="10.5"/></svg>
+        Log Session
+      </button>
+      <button class="nav-item" onclick="showCoachView('protocols')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h10M3 6h7M3 9h10M3 12h5"/></svg>
+        Protocols
+      </button>
+    </div>
+  </div>
+
+  <div class="sidebar-user">
+    <div class="user-row">
+      <div class="user-av" id="user-av">MR</div>
+      <div>
+        <div class="user-name" id="user-name">Mark Reynolds</div>
+        <div class="user-tier" id="user-tier">Premier</div>
+      </div>
+    </div>
+    <div class="wearable-dots">
+      <div class="w-dot connected"><div class="w-dot-circle"></div>Whoop</div>
+      <div class="w-dot connected"><div class="w-dot-circle"></div>Oura</div>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-date" id="top-date">Saturday, March 14, 2026</div>
+    <div class="topbar-title" id="top-title">Good morning, Mark.</div>
+  </div>
+  <div class="topbar-right">
+    <button class="btn notif-wrap btn-sm" onclick="showView('messages')">
+      Messages
+      <span class="notif-dot"></span>
+    </button>
+    <button class="btn btn-lime btn-sm" onclick="showView('schedule')">Book Session</button>
+  </div>
+</div>
+
+<!-- =============================== -->
+<!-- MEMBER VIEWS                    -->
+<!-- =============================== -->
+
+<!-- DASHBOARD -->
+<div id="view-dashboard" class="content">
+  <div class="grid-4">
+    <div class="stat-card anim d1">
+      <div class="stat-label">CAROL fitness score</div>
+      <div class="stat-val">36.5</div>
+      <div class="stat-sub">Base 36.4 · REHIT ride #130</div>
+      <div class="stat-trend trend-up">↑ +0.1 last session</div>
+    </div>
+    <div class="stat-card amber anim d2">
+      <div class="stat-label">ARX leg press output</div>
+      <div class="stat-val">699</div>
+      <div class="stat-sub">Concentric max · Jan 7</div>
+      <div class="stat-trend trend-up">↑ +118% since Oct</div>
+    </div>
+    <div class="stat-card blue anim d3">
+      <div class="stat-label">Lean mass</div>
+      <div class="stat-val">159.6</div>
+      <div class="stat-sub">lbs · Fit3D Jan 10</div>
+      <div class="stat-trend trend-up">↑ tracking goal</div>
+    </div>
+    <div class="stat-card teal anim d4">
+      <div class="stat-label">Whoop recovery</div>
+      <div class="stat-val">74</div>
+      <div class="stat-sub">HRV 68ms · RHR 52</div>
+      <div class="stat-trend trend-up">↑ Good to train</div>
+    </div>
+  </div>
+
+  <div class="grid-21">
+    <!-- Protocol -->
+    <div class="card anim d2">
+      <div class="track-hero">
+        <div class="track-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M4 8h4M16 8h4M4 16h4M16 16h4"/></svg>
+        </div>
+        <div style="flex:1">
+          <div class="track-name">Strength Foundation Track</div>
+          <div class="track-meta">Prescribed by <b>Dustin</b> · Week 7 of 12 · <b>20 min sessions</b></div>
+        </div>
+        <span class="tag tag-lime">Active</span>
+      </div>
+      <div class="prog-wrap">
+        <div class="prog-row"><span>Protocol progress</span><span>58%</span></div>
+        <div class="prog-bar-bg"><div class="prog-bar-fill" style="width:58%"></div></div>
+      </div>
+      <div class="session-item done"><div class="s-num done">✓</div><div class="s-info"><div class="s-name">ARX Lower Body</div><div class="s-detail">Leg press · Romanian DL · Calf raise · 3s eccentric</div></div><div class="s-dur">20 min</div><span class="tag tag-lime">Done</span></div>
+      <div class="session-item done"><div class="s-num done">✓</div><div class="s-info"><div class="s-name">CAROL REHIT</div><div class="s-detail">8-min sprint protocol · fitness score 36.5</div></div><div class="s-dur">12 min</div><span class="tag tag-lime">Done</span></div>
+      <div class="session-item current"><div class="s-num now">→</div><div class="s-info"><div class="s-name">ARX Upper Body</div><div class="s-detail">Chest press · Row · Overhead press · Incline</div></div><div class="s-dur">20 min</div><span class="tag tag-amber">Up next</span></div>
+      <div class="session-item"><div class="s-num">4</div><div class="s-info"><div class="s-name">Vasper + Proteus</div><div class="s-detail">Low-load cardio compression · Rotational power</div></div><div class="s-dur">30 min</div><span class="tag tag-muted">Upcoming</span></div>
+      <div class="session-item"><div class="s-num">5</div><div class="s-info"><div class="s-name">Recovery session</div><div class="s-detail">Infrared sauna · Cold plunge · Compression</div></div><div class="s-dur">45 min</div><span class="tag tag-muted">Upcoming</span></div>
+    </div>
+
+    <!-- Right column -->
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <!-- Healthspan OS -->
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">Healthspan OS</div><div class="card-sub">5 systems · Updated Mar 8</div></div>
+          <span class="tag tag-lime">Improving</span>
+        </div>
+        <div class="os-grid">
+          <div class="os-item"><div class="os-item-top"><span class="os-item-label">Muscle</span><span class="os-item-score score-high">78</span></div><div class="os-bar-bg"><div class="os-bar-fill" style="width:78%;background:var(--lime)"></div></div></div>
+          <div class="os-item"><div class="os-item-top"><span class="os-item-label">Cardio</span><span class="os-item-score score-med">65</span></div><div class="os-bar-bg"><div class="os-bar-fill" style="width:65%;background:var(--blue)"></div></div></div>
+          <div class="os-item"><div class="os-item-top"><span class="os-item-label">Metabolic</span><span class="os-item-score score-high">71</span></div><div class="os-bar-bg"><div class="os-bar-fill" style="width:71%;background:var(--amber)"></div></div></div>
+          <div class="os-item"><div class="os-item-top"><span class="os-item-label">Structural</span><span class="os-item-score score-low">58</span></div><div class="os-bar-bg"><div class="os-bar-fill" style="width:58%;background:var(--coral)"></div></div></div>
+          <div class="os-item" style="grid-column:1/-1"><div class="os-item-top"><span class="os-item-label">Recovery</span><span class="os-item-score score-high">82</span></div><div class="os-bar-bg"><div class="os-bar-fill" style="width:82%;background:var(--teal)"></div></div></div>
+        </div>
+      </div>
+
+      <!-- Note from Dustin -->
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">From Dustin</div><div class="card-sub">Coach note · Mar 12</div></div>
+          <span class="tag tag-lime">New</span>
+        </div>
+        <div class="card-body">
+          <p style="font-size:12.5px;color:var(--text2);line-height:1.7;margin-bottom:10px;">Leg press jumped 12% this week — solid adaptation. Adding 3-sec eccentric next session, same load.</p>
+          <p style="font-size:12.5px;color:var(--text2);line-height:1.7;">HRV trending up. Cold plunge is working — keep it consistent.</p>
+          <button class="btn btn-sm" style="margin-top:10px" onclick="showView('messages')">Reply →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CAROL + Wearable snapshot -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header">
+        <div><div class="card-title">CAROL — last 6 REHIT rides</div><div class="card-sub">Fitness score trend · base 36.4</div></div>
+        <span class="tag tag-blue">REHIT</span>
+      </div>
+      <div class="card-body">
+        <div class="chart-bars">
+          <div class="bar-wrap"><div class="bar" style="height:52px"></div><div class="bar-label">Nov</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:58px"></div><div class="bar-label">Dec</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:55px"></div><div class="bar-label">Dec</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:62px"></div><div class="bar-label">Dec</div></div>
+          <div class="bar-wrap"><div class="bar" style="height:59px"></div><div class="bar-label">Dec</div></div>
+          <div class="bar-wrap"><div class="bar active" style="height:68px"></div><div class="bar-label active">Dec 30</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <div><div class="stat-label" style="margin-bottom:3px">Peak power</div><div style="font-family:var(--serif);font-size:16px;color:var(--text)">1,024<span style="font-size:11px;color:var(--text3)"> W</span></div></div>
+          <div><div class="stat-label" style="margin-bottom:3px">Calories</div><div style="font-family:var(--serif);font-size:16px;color:var(--text)">162</div></div>
+          <div><div class="stat-label" style="margin-bottom:3px">Max HR</div><div style="font-family:var(--serif);font-size:16px;color:var(--text)">138 <span style="font-size:11px;color:var(--lime)">↑ Up</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div><div class="card-title">Wearable snapshot</div><div class="card-sub">Whoop + Oura · this morning</div></div>
+        <span class="tag tag-lime">Connected</span>
+      </div>
+      <div class="wearable-metrics">
+        <div class="wm-item"><div class="wm-label">Recovery</div><div class="wm-val" style="color:var(--lime)">74</div><div class="wm-sub">Whoop</div></div>
+        <div class="wm-item"><div class="wm-label">HRV</div><div class="wm-val">68<span style="font-size:11px;color:var(--text3)">ms</span></div><div class="wm-sub">baseline</div></div>
+        <div class="wm-item"><div class="wm-label">Resting HR</div><div class="wm-val">52</div><div class="wm-sub">bpm</div></div>
+        <div class="wm-item"><div class="wm-label">Readiness</div><div class="wm-val" style="color:var(--lime)">81</div><div class="wm-sub">Oura</div></div>
+        <div class="wm-item"><div class="wm-label">Sleep</div><div class="wm-val">7.4<span style="font-size:11px;color:var(--text3)">h</span></div><div class="wm-sub">82% efficiency</div></div>
+        <div class="wm-item"><div class="wm-label">Deep sleep</div><div class="wm-val">1.8<span style="font-size:11px;color:var(--text3)">h</span></div><div class="wm-sub">good</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAROL VIEW -->
+<div id="view-carol" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">CAROL Rides</div><span class="tag tag-blue">130 total sessions</span></div>
+  <div class="tabs">
+    <button class="tab active">REHIT</button>
+    <button class="tab">Fat Burn</button>
+    <button class="tab">Free & Custom</button>
+    <button class="tab">Fitness Tests</button>
+  </div>
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="stat-card"><div class="stat-label">Fitness score</div><div class="stat-val">36.5</div><div class="stat-sub">Base 36.4</div><div class="stat-trend trend-up">↑ Above baseline</div></div>
+    <div class="stat-card amber"><div class="stat-label">Peak power</div><div class="stat-val">1,024</div><div class="stat-sub">watts · Dec 30</div><div class="stat-trend trend-up">↑ Personal best</div></div>
+    <div class="stat-card blue"><div class="stat-label">Total rides</div><div class="stat-val">130</div><div class="stat-sub">Since Oct 2023</div></div>
+    <div class="stat-card"><div class="stat-label">Last max HR</div><div class="stat-val">138</div><div class="stat-sub">bpm · Dec 30</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">REHIT ride history</div><div class="card-sub">Most recent first</div></div>
+    <div class="metric-row" style="background:var(--lime-dim2)"><div><div class="metric-label">Dec 30, 2025 · Ride #130</div></div><div style="display:flex;gap:20px;align-items:center"><span style="font-size:11px;color:var(--text3)">Score <b style="color:var(--lime)">36.5</b></span><span style="font-size:11px;color:var(--text3)">Peak <b style="color:var(--text)">1,024W</b></span><span style="font-size:11px;color:var(--text3)">Cal <b style="color:var(--text)">162</b></span><span style="font-size:11px;color:var(--text3)">Max HR <b style="color:var(--text)">138</b></span><span class="tag tag-lime">Up</span></div></div>
+    <div class="metric-row"><div><div class="metric-label">Dec 27, 2025 · Ride #129</div></div><div style="display:flex;gap:20px;align-items:center"><span style="font-size:11px;color:var(--text3)">Score <b style="color:var(--text)">35.1</b></span><span style="font-size:11px;color:var(--text3)">Peak <b style="color:var(--text)">999W</b></span><span style="font-size:11px;color:var(--text3)">Cal <b style="color:var(--text)">164</b></span><span style="font-size:11px;color:var(--text3)">Max HR <b style="color:var(--text)">161</b></span><span class="tag tag-lime">Up</span></div></div>
+    <div class="metric-row"><div><div class="metric-label">Dec 22, 2025 · Ride #128</div></div><div style="display:flex;gap:20px;align-items:center"><span style="font-size:11px;color:var(--text3)">Score <b style="color:var(--text)">36.8</b></span><span style="font-size:11px;color:var(--text3)">Peak <b style="color:var(--text)">982W</b></span><span style="font-size:11px;color:var(--text3)">Cal <b style="color:var(--text)">167</b></span><span style="font-size:11px;color:var(--text3)">Max HR <b style="color:var(--text)">143</b></span><span class="tag tag-lime">Up</span></div></div>
+    <div class="metric-row"><div><div class="metric-label">Dec 19, 2025 · Ride #127</div></div><div style="display:flex;gap:20px;align-items:center"><span style="font-size:11px;color:var(--text3)">Score <b style="color:var(--text)">43.9</b></span><span style="font-size:11px;color:var(--text3)">Peak <b style="color:var(--text)">891W</b></span><span style="font-size:11px;color:var(--text3)">Cal <b style="color:var(--text)">30</b></span><span style="font-size:11px;color:var(--text3)">Max HR <b style="color:var(--text)">123</b></span><span class="tag tag-muted">—</span></div></div>
+    <div class="metric-row"><div><div class="metric-label">Dec 13, 2025 · Ride #126</div></div><div style="display:flex;gap:20px;align-items:center"><span style="font-size:11px;color:var(--text3)">Score <b style="color:var(--text)">42.5</b></span><span style="font-size:11px;color:var(--text3)">Peak <b style="color:var(--text)">942W</b></span><span style="font-size:11px;color:var(--text3)">Cal <b style="color:var(--text)">165</b></span><span style="font-size:11px;color:var(--text3)">Max HR <b style="color:var(--text)">130</b></span><span class="tag tag-muted">No change</span></div></div>
+  </div>
+</div>
+
+<!-- ARX VIEW -->
+<div id="view-arx" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">ARX Strength</div><span class="tag tag-amber">Iso Club · Tulsa</span></div>
+  <div class="grid-4" style="margin-bottom:16px">
+    <div class="stat-card amber"><div class="stat-label">Leg press output</div><div class="stat-val">699</div><div class="stat-sub">Concentric max · Jan 7</div><div class="stat-trend trend-up">↑ +118% since Oct</div></div>
+    <div class="stat-card"><div class="stat-label">Pull down max</div><div class="stat-val">345</div><div class="stat-sub">Eccentric max · Jan 7</div><div class="stat-trend trend-up">↑ +44%</div></div>
+    <div class="stat-card"><div class="stat-label">Incline press max</div><div class="stat-val">363</div><div class="stat-sub">Eccentric max · Jan 7</div><div class="stat-trend trend-up">↑ Improving</div></div>
+    <div class="stat-card blue"><div class="stat-label">Sessions logged</div><div class="stat-val">24</div><div class="stat-sub">Since Oct 2025</div></div>
+  </div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">Exercise history</div><div class="card-sub">All exercises · most recent first</div></div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="padding:10px 18px;text-align:left;font-weight:500;color:var(--text3);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase">Date</th>
+          <th style="padding:10px 8px;text-align:left;font-weight:500;color:var(--text3);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase">Exercise</th>
+          <th style="padding:10px 8px;text-align:left;font-weight:500;color:var(--text3);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase">Protocol</th>
+          <th style="padding:10px 8px;text-align:right;font-weight:500;color:var(--text3);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase">Output</th>
+          <th style="padding:10px 8px;text-align:right;font-weight:500;color:var(--text3);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase">Concentric</th>
+          <th style="padding:10px 18px;text-align:right;font-weight:500;color:var(--text3);font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase">Eccentric</th>
+        </tr></thead>
+        <tbody>
+          <tr style="border-bottom:1px solid var(--border);background:var(--lime-dim2)"><td style="padding:10px 18px;color:var(--text2)">01/07/26</td><td style="padding:10px 8px;font-weight:500;color:var(--text)">Leg Press</td><td style="padding:10px 8px;color:var(--text3)">Time Trial (5000)</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">5000</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--lime)">699</td><td style="padding:10px 18px;text-align:right;font-family:var(--serif);color:var(--text3)">0</td></tr>
+          <tr style="border-bottom:1px solid var(--border);background:var(--lime-dim2)"><td style="padding:10px 18px;color:var(--text2)">01/07/26</td><td style="padding:10px 8px;font-weight:500;color:var(--text)">Pull Down</td><td style="padding:10px 8px;color:var(--text3)">Reps (6) · 7.5s/7.5s</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">1267</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">239</td><td style="padding:10px 18px;text-align:right;font-family:var(--serif);color:var(--amber)">345</td></tr>
+          <tr style="border-bottom:1px solid var(--border);background:var(--lime-dim2)"><td style="padding:10px 18px;color:var(--text2)">01/07/26</td><td style="padding:10px 8px;font-weight:500;color:var(--text)">Incline Press</td><td style="padding:10px 8px;color:var(--text3)">Reps (6) · 7.5s/7.5s</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">1078</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">178</td><td style="padding:10px 18px;text-align:right;font-family:var(--serif);color:var(--amber)">363</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 18px;color:var(--text2)">12/31/25</td><td style="padding:10px 8px;font-weight:500;color:var(--text)">Leg Press</td><td style="padding:10px 8px;color:var(--text3)">Time Trial (5000)</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">5000</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">685</td><td style="padding:10px 18px;text-align:right;font-family:var(--serif);color:var(--text3)">0</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 18px;color:var(--text2)">12/31/25</td><td style="padding:10px 8px;font-weight:500;color:var(--text)">Pull Down</td><td style="padding:10px 8px;color:var(--text3)">Reps (6) · 7.5s/7.5s</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">1132</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">218</td><td style="padding:10px 18px;text-align:right;font-family:var(--serif);color:var(--text)">342</td></tr>
+          <tr style="border-bottom:1px solid var(--border)"><td style="padding:10px 18px;color:var(--text2)">12/27/25</td><td style="padding:10px 8px;font-weight:500;color:var(--text)">Leg Press</td><td style="padding:10px 8px;color:var(--text3)">Time Trial (5000)</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">5000</td><td style="padding:10px 8px;text-align:right;font-family:var(--serif);color:var(--text)">653</td><td style="padding:10px 18px;text-align:right;font-family:var(--serif);color:var(--text3)">0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- BODY SCANS VIEW -->
+<div id="view-scans" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">Body Scans</div><span class="tag tag-teal">Fit3D · Jan 10, 2026</span></div>
+  <div class="grid-2">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Body composition</div></div>
+        <div class="metric-row"><div class="metric-label">Body fat %</div><div><span class="metric-val">29.17</span><span class="metric-unit">%</span><span class="metric-change chg-up">↓ trending down</span></div></div>
+        <div class="metric-row"><div class="metric-label">Weight</div><div><span class="metric-val">225.3</span><span class="metric-unit">lbs</span></div></div>
+        <div class="metric-row"><div class="metric-label">Fat mass</div><div><span class="metric-val">65.7</span><span class="metric-unit">lbs</span></div></div>
+        <div class="metric-row"><div class="metric-label">Lean mass</div><div><span class="metric-val">159.6</span><span class="metric-unit">lbs</span><span class="metric-change chg-up">↑ goal</span></div></div>
+        <div class="metric-row"><div class="metric-label">BMR</div><div><span class="metric-val">1,902</span><span class="metric-unit">kcal</span></div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Body shape</div></div>
+        <div class="metric-row"><div class="metric-label">Body Shape Rating</div><div><span class="metric-val">38</span><span class="metric-unit">/ 100</span><span class="metric-change" style="color:var(--amber)"> improving</span></div></div>
+        <div class="metric-row"><div class="metric-label">Waist circumference</div><div><span class="metric-val">42.5</span><span class="metric-unit">in</span></div></div>
+        <div class="metric-row"><div class="metric-label">Waist to hip ratio</div><div><span class="metric-val">1.0</span></div></div>
+        <div class="metric-row"><div class="metric-label">Trunk to leg ratio</div><div><span class="metric-val">1.5</span></div></div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Posture analysis</div></div>
+        <div style="padding:10px 18px;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border)">Front / Back</div>
+        <div class="metric-row"><div class="metric-label">Head</div><div style="font-size:12px;color:var(--text2)">2.6" right · 4% left tilt</div></div>
+        <div class="metric-row"><div class="metric-label">Shoulder</div><div style="font-size:12px;color:var(--text2)">1.6" right · 1.8% right tilt</div></div>
+        <div class="metric-row"><div class="metric-label">Hip</div><div style="font-size:12px;color:var(--text2)">0.9" right · 0.6% left tilt</div></div>
+        <div style="padding:10px 18px;font-size:10.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);border-top:1px solid var(--border);border-bottom:1px solid var(--border)">Side</div>
+        <div class="metric-row"><div class="metric-label">Head forward</div><div style="font-size:12px;color:var(--coral)">5.0" forward ⚠</div></div>
+        <div class="metric-row"><div class="metric-label">Shoulder forward</div><div style="font-size:12px;color:var(--amber)">3.5" forward</div></div>
+        <div class="metric-row"><div class="metric-label">Hip forward</div><div style="font-size:12px;color:var(--text2)">1.7" forward</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Measurements</div></div>
+        <div class="metric-row"><div class="metric-label">Neck</div><div><span class="metric-val">17.4</span><span class="metric-unit">in</span></div></div>
+        <div class="metric-row"><div class="metric-label">Chest</div><div><span class="metric-val">47.1</span><span class="metric-unit">in</span></div></div>
+        <div class="metric-row"><div class="metric-label">Waist</div><div><span class="metric-val">42.5</span><span class="metric-unit">in</span></div></div>
+        <div class="metric-row"><div class="metric-label">Left / Right thigh</div><div><span class="metric-val">25.1</span><span class="metric-unit"> / </span><span class="metric-val">25.8</span><span class="metric-unit">in</span></div></div>
+        <div class="metric-row"><div class="metric-label">Balance</div><div style="font-size:12px;color:var(--text2)">FL 25.7 · FR 22.1 · BL 25.9 · BR 26.3</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RECOVERY VIEW -->
+<div id="view-recovery" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">Recovery</div><span class="tag tag-teal">This month</span></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Recovery sessions — March</div><div class="card-sub">Goal: 2x per week each</div></div>
+      <div class="recovery-grid">
+        <div class="rec-item"><div class="rec-count" style="color:var(--amber)">8</div><div class="rec-label">Infrared sauna</div><div class="rec-goal" style="color:var(--lime)">Goal: 8 ✓</div></div>
+        <div class="rec-item"><div class="rec-count" style="color:var(--blue)">6</div><div class="rec-label">Cold plunge</div><div class="rec-goal" style="color:var(--amber)">Goal: 8 · close</div></div>
+        <div class="rec-item"><div class="rec-count" style="color:var(--teal)">4</div><div class="rec-label">NxPro</div><div class="rec-goal" style="color:var(--coral)">Goal: 6 · behind</div></div>
+        <div class="rec-item"><div class="rec-count" style="color:var(--purple)">5</div><div class="rec-label">Compression</div><div class="rec-goal" style="color:var(--amber)">Goal: 6 · close</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Other sessions — March</div><div class="card-sub">Vasper · Katalyst · Proteus · Quickboard</div></div>
+      <div class="recovery-grid">
+        <div class="rec-item"><div class="rec-count" style="color:var(--lime)">4</div><div class="rec-label">Vasper</div></div>
+        <div class="rec-item"><div class="rec-count" style="color:var(--coral)">2</div><div class="rec-label">Katalyst</div></div>
+        <div class="rec-item"><div class="rec-count" style="color:var(--amber)">3</div><div class="rec-label">Proteus</div></div>
+        <div class="rec-item"><div class="rec-count" style="color:var(--blue)">5</div><div class="rec-label">Quickboard</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- WEARABLES VIEW -->
+<div id="view-wearables" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">Wearables</div></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Connected devices</div></div>
+      <div class="wearable-connect">
+        <div class="w-device">
+          <div class="w-device-icon" style="background:var(--coral-dim);font-size:18px;">⌚</div>
+          <div><div class="w-device-name">Whoop 4.0</div><div class="w-device-status" style="color:var(--lime)">Connected · syncing daily</div></div>
+          <button class="btn btn-sm w-device-btn">Manage</button>
+        </div>
+        <div class="w-device">
+          <div class="w-device-icon" style="background:var(--blue-dim);font-size:18px;">💍</div>
+          <div><div class="w-device-name">Oura Ring Gen 3</div><div class="w-device-status" style="color:var(--lime)">Connected · syncing daily</div></div>
+          <button class="btn btn-sm w-device-btn">Manage</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Today's data</div><div class="card-sub">March 14, 2026</div></div>
+      <div class="wearable-metrics">
+        <div class="wm-item"><div class="wm-label">Whoop recovery</div><div class="wm-val" style="color:var(--lime)">74</div><div class="wm-sub">Good</div></div>
+        <div class="wm-item"><div class="wm-label">Oura readiness</div><div class="wm-val" style="color:var(--lime)">81</div><div class="wm-sub">Optimal</div></div>
+        <div class="wm-item"><div class="wm-label">HRV</div><div class="wm-val">68<span style="font-size:11px;color:var(--text3)">ms</span></div><div class="wm-sub">At baseline</div></div>
+        <div class="wm-item"><div class="wm-label">Resting HR</div><div class="wm-val">52</div><div class="wm-sub">bpm overnight</div></div>
+        <div class="wm-item"><div class="wm-label">Sleep</div><div class="wm-val">7.4<span style="font-size:11px;color:var(--text3)">h</span></div><div class="wm-sub">82% efficiency</div></div>
+        <div class="wm-item"><div class="wm-label">Strain</div><div class="wm-val">14.2</div><div class="wm-sub">Moderate</div></div>
+        <div class="wm-item"><div class="wm-label">Deep sleep</div><div class="wm-val">1.8<span style="font-size:11px;color:var(--text3)">h</span></div><div class="wm-sub">Good</div></div>
+        <div class="wm-item"><div class="wm-label">REM</div><div class="wm-val">1.6<span style="font-size:11px;color:var(--text3)">h</span></div><div class="wm-sub">Normal</div></div>
+        <div class="wm-item"><div class="wm-label">SpO2</div><div class="wm-val">96<span style="font-size:11px;color:var(--text3)">%</span></div><div class="wm-sub">Normal</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MESSAGES VIEW -->
+<div id="view-messages" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">Messages</div><span class="tag tag-lime">Premier · Direct access</span></div>
+  <div class="card" style="display:grid;grid-template-columns:260px 1fr;min-height:460px">
+    <div style="border-right:1px solid var(--border)">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text3)">Inbox</div>
+      <div class="msg-thread unread"><div class="msg-av" style="background:var(--amber-dim);color:var(--amber)">D</div><div style="flex:1;min-width:0"><div class="msg-from">Dustin · Coach</div><div class="msg-preview">Your leg press jumped 12%…</div></div><div class="msg-time">Today</div></div>
+      <div class="msg-thread unread"><div class="msg-av" style="background:var(--lime-dim);color:var(--lime)">I</div><div style="flex:1;min-width:0"><div class="msg-from">Iso Club</div><div class="msg-preview">Q1 report is ready to view</div></div><div class="msg-time">Mar 10</div></div>
+      <div class="msg-thread unread"><div class="msg-av" style="background:var(--amber-dim);color:var(--amber)">D</div><div style="flex:1;min-width:0"><div class="msg-from">Dustin · Coach</div><div class="msg-preview">Scan results are in…</div></div><div class="msg-time">Mar 8</div></div>
+      <div class="msg-thread"><div class="msg-av" style="background:var(--amber-dim);color:var(--amber)">D</div><div style="flex:1;min-width:0"><div class="msg-from">Dustin · Coach</div><div class="msg-preview">Updated your protocol week 7</div></div><div class="msg-time">Mar 4</div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;padding:20px 24px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+        <div class="msg-av" style="width:36px;height:36px;font-size:13px;background:var(--amber-dim);color:var(--amber)">D</div>
+        <div><div style="font-size:13.5px;font-weight:500;color:var(--text)">Dustin Farley</div><div style="font-size:11px;color:var(--text3)">Head Coach · Iso Club</div></div>
+      </div>
+      <div style="flex:1">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Today, 9:14 AM</div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;max-width:440px;margin-bottom:10px"><p style="font-size:12.5px;color:var(--text2);line-height:1.7">Hey Mark — your leg press output on the ARX jumped 12% this week. Really solid adaptation happening.</p></div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;max-width:440px;margin-bottom:10px"><p style="font-size:12.5px;color:var(--text2);line-height:1.7">Adding a 3-second eccentric next session. Same load — just slow the return. More stimulus, no extra time.</p></div>
+        <div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:12px 14px;max-width:440px"><p style="font-size:12.5px;color:var(--text2);line-height:1.7">HRV is trending up. The cold plunge protocol is working. Keep it going.</p></div>
+      </div>
+      <div style="margin-top:16px;display:flex;gap:8px;padding-top:14px;border-top:1px solid var(--border)">
+        <input type="text" placeholder="Reply to Dustin…" class="form-input" style="flex:1">
+        <button class="btn btn-lime">Send</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- REPORTS VIEW -->
+<div id="view-reports" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">Reports from Dustin</div></div>
+  <div class="card" style="max-width:580px">
+    <div class="report-item"><div class="report-icon" style="background:var(--lime-dim)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--lime)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/><line x1="5" y1="5.5" x2="11" y2="5.5"/><line x1="5" y1="8" x2="11" y2="8"/></svg></div><div><div class="report-name">Q1 2026 Progress Report</div><div class="report-date">March 10, 2026 · Quarterly review</div></div><span class="report-new">New</span><button class="btn btn-sm" style="margin-left:8px">View</button></div>
+    <div class="report-item"><div class="report-icon" style="background:var(--teal-dim)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--teal)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="8" cy="8" rx="6.5" ry="4"/><line x1="8" y1="1.5" x2="8" y2="14.5"/></svg></div><div><div class="report-name">Fit3D Scan Analysis — Jan 10</div><div class="report-date">January 14, 2026 · Body composition review</div></div><span class="report-new">New</span><button class="btn btn-sm" style="margin-left:8px">View</button></div>
+    <div class="report-item"><div class="report-icon" style="background:var(--amber-dim)"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--amber)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5,11.5 5.5,7 9,9.5 14.5,3.5"/></svg></div><div><div class="report-name">February Performance Summary</div><div class="report-date">February 28, 2026 · Monthly</div></div><button class="btn btn-sm" style="margin-left:auto">View</button></div>
+  </div>
+</div>
+
+<!-- SCHEDULE VIEW -->
+<div id="view-schedule" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">Schedule</div><button class="btn btn-lime btn-sm">+ Book session</button></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Upcoming</div></div>
+      <div class="sched-item"><div class="sched-date"><div class="sched-day">15</div><div class="sched-month">Mar</div></div><div class="sched-div"></div><div class="sched-info"><div class="sched-name">ARX Upper Body (Session C)</div><div class="sched-time">8:00 AM · 20 min · Studio 1</div></div><span class="tag tag-lime">Confirmed</span></div>
+      <div class="sched-item"><div class="sched-date"><div class="sched-day">18</div><div class="sched-month">Mar</div></div><div class="sched-div"></div><div class="sched-info"><div class="sched-name">Vasper + Proteus (Session D)</div><div class="sched-time">7:30 AM · 30 min · Studio 2</div></div><span class="tag tag-lime">Confirmed</span></div>
+      <div class="sched-item"><div class="sched-date"><div class="sched-day">22</div><div class="sched-month">Mar</div></div><div class="sched-div"></div><div class="sched-info"><div class="sched-name">Protocol Review · 1:1 with Dustin</div><div class="sched-time">12:00 PM · 30 min</div></div><span class="tag tag-amber">1:1 Review</span></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Book a session</div></div>
+      <div class="log-form">
+        <div class="form-field"><div class="form-label">Session type</div>
+          <select class="form-select"><option>Training session — per protocol</option><option>Recovery only</option><option>1:1 with Dustin (Premier)</option><option>Scan + review</option></select>
+        </div>
+        <div class="form-field"><div class="form-label">Preferred time</div>
+          <select class="form-select"><option>Early morning (6–8 AM)</option><option>Morning (8–10 AM)</option><option>Midday (10 AM–1 PM)</option><option>Afternoon (1–5 PM)</option></select>
+        </div>
+        <button class="btn btn-lime">Request booking</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PROTOCOL VIEW -->
+<div id="view-protocol" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">My Protocol</div><div style="font-size:11px;color:var(--text3)">Prescribed by Dustin · Updated Mar 4</div></div>
+  <div class="grid-21">
+    <div class="card">
+      <div class="track-hero">
+        <div class="track-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M18 4v16M4 8h4M16 8h4M4 16h4M16 16h4"/></svg></div>
+        <div style="flex:1"><div class="track-name">Strength Foundation · Week 7 of 12</div><div class="track-meta">Goal: <b>muscle development + bone density</b></div></div>
+        <span class="tag tag-lime">Active</span>
+      </div>
+      <div class="prog-wrap"><div class="prog-row"><span>Week progress</span><span>58%</span></div><div class="prog-bar-bg"><div class="prog-bar-fill" style="width:58%"></div></div></div>
+      <div class="session-item done"><div class="s-num done">✓</div><div class="s-info"><div class="s-name">Session A — ARX Lower</div><div class="s-detail">Leg press · Romanian DL · Calf raise · 3-sec eccentric</div></div><div class="s-dur">20 min</div></div>
+      <div class="session-item done"><div class="s-num done">✓</div><div class="s-info"><div class="s-name">Session B — CAROL REHIT</div><div class="s-detail">8-min sprint protocol</div></div><div class="s-dur">12 min</div></div>
+      <div class="session-item current"><div class="s-num now">→</div><div class="s-info"><div class="s-name">Session C — ARX Upper</div><div class="s-detail">Chest press · Row · Overhead press · Incline</div></div><div class="s-dur">20 min</div></div>
+      <div class="session-item"><div class="s-num">4</div><div class="s-info"><div class="s-name">Session D — Vasper + Proteus</div><div class="s-detail">Low-load cardio compression · Rotational power</div></div><div class="s-dur">30 min</div></div>
+      <div class="session-item"><div class="s-num">5</div><div class="s-info"><div class="s-name">Recovery</div><div class="s-detail">Infrared sauna · Cold plunge · Compression boots</div></div><div class="s-dur">45 min</div></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="card">
+        <div class="card-header"><div class="card-title">Dustin's prescription</div></div>
+        <div class="card-body" style="font-size:12.5px;color:var(--text2);line-height:1.7">
+          <p style="margin-bottom:10px"><b style="color:var(--text);font-weight:500">Goal:</b> Build lean mass and improve bone density over 12 weeks. Secondary: metabolic health via CAROL.</p>
+          <p style="margin-bottom:10px"><b style="color:var(--text);font-weight:500">Week 7 note:</b> Adding eccentric tempo to lower body ARX. Same load, more stimulus.</p>
+          <p><b style="color:var(--text);font-weight:500">Your role:</b> Show up, trust the technicians, follow the protocol. Results come from consistency.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- =============================== -->
+<!-- COACH VIEWS                     -->
+<!-- =============================== -->
+
+<!-- COACH: MORNING BRIEF -->
+<div id="coach-morning" class="content" style="display:none">
+  <div class="coach-morning">
+    <div class="cm-title">Good morning, Dustin.</div>
+    <div class="cm-sub">Saturday, March 14 · Here's who's coming in today and how they're doing.</div>
+    <div class="cm-stats">
+      <div class="cm-stat"><div class="cm-stat-val">6</div><div class="cm-stat-label">In today</div></div>
+      <div class="cm-stat"><div class="cm-stat-val" style="color:var(--coral)">2</div><div class="cm-stat-label">Low recovery</div></div>
+      <div class="cm-stat"><div class="cm-stat-val" style="color:var(--lime)">4</div><div class="cm-stat-label">Ready to train</div></div>
+      <div class="cm-stat"><div class="cm-stat-val">1</div><div class="cm-stat-label">Scan due</div></div>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div style="margin-bottom:20px">
+    <div class="sec-header"><div class="sec-title">Flags to review</div></div>
+    <div class="alert alert-low">⚠ Sarah Mitchell — Whoop recovery 31, HRV 28ms (baseline 58ms). Scheduled ARX upper. Consider modifying to recovery session.</div>
+    <div class="alert alert-warn">↓ Tom Bradley — sleep 4.9hrs last night. Oura readiness 44. Arriving 8:30 AM for CAROL REHIT. Heads up.</div>
+    <div class="alert alert-ok">✓ Mark Reynolds — Whoop 74, Oura 81. Good to train. ARX upper body scheduled 9 AM.</div>
+  </div>
+
+  <!-- Member cards grid -->
+  <div class="sec-header"><div class="sec-title">Today's members</div><button class="btn btn-sm" onclick="showCoachView('members')">All members →</button></div>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+
+    <div class="member-card">
+      <div class="mc-header">
+        <div class="mc-av" style="background:var(--coral-dim);color:var(--coral)">SM</div>
+        <div><div class="mc-name">Sarah Mitchell</div><div class="mc-tier">Premier · 8:00 AM</div></div>
+        <div class="mc-readiness"><div class="mc-score score-low">31</div><div class="mc-score-label">Recovery</div></div>
+      </div>
+      <div class="mc-body">
+        <div class="mc-row"><div class="mc-row-label">Scheduled</div><div class="mc-row-val">ARX Upper</div></div>
+        <div class="mc-row"><div class="mc-row-label">HRV</div><div class="mc-row-val" style="color:var(--coral)">28ms ↓</div></div>
+        <div class="mc-row"><div class="mc-row-label">Sleep</div><div class="mc-row-val">5.1 hrs</div></div>
+        <button class="btn btn-sm" style="width:100%;margin-top:6px;color:var(--coral);border-color:rgba(240,112,85,0.3)">Modify session</button>
+      </div>
+    </div>
+
+    <div class="member-card">
+      <div class="mc-header">
+        <div class="mc-av" style="background:var(--amber-dim);color:var(--amber)">TB</div>
+        <div><div class="mc-name">Tom Bradley</div><div class="mc-tier">Essential · 8:30 AM</div></div>
+        <div class="mc-readiness"><div class="mc-score score-med">44</div><div class="mc-score-label">Readiness</div></div>
+      </div>
+      <div class="mc-body">
+        <div class="mc-row"><div class="mc-row-label">Scheduled</div><div class="mc-row-val">CAROL REHIT</div></div>
+        <div class="mc-row"><div class="mc-row-label">HRV</div><div class="mc-row-val" style="color:var(--amber)">42ms</div></div>
+        <div class="mc-row"><div class="mc-row-label">Sleep</div><div class="mc-row-val" style="color:var(--coral)">4.9 hrs ⚠</div></div>
+        <button class="btn btn-sm" style="width:100%;margin-top:6px">Send heads up</button>
+      </div>
+    </div>
+
+    <div class="member-card">
+      <div class="mc-header">
+        <div class="mc-av" style="background:var(--lime-dim);color:var(--lime)">MR</div>
+        <div><div class="mc-name">Mark Reynolds</div><div class="mc-tier">Premier · 9:00 AM</div></div>
+        <div class="mc-readiness"><div class="mc-score score-high">74</div><div class="mc-score-label">Recovery</div></div>
+      </div>
+      <div class="mc-body">
+        <div class="mc-row"><div class="mc-row-label">Scheduled</div><div class="mc-row-val">ARX Upper</div></div>
+        <div class="mc-row"><div class="mc-row-label">HRV</div><div class="mc-row-val" style="color:var(--lime)">68ms ↑</div></div>
+        <div class="mc-row"><div class="mc-row-label">Sleep</div><div class="mc-row-val">7.4 hrs</div></div>
+        <button class="btn btn-sm btn-lime" style="width:100%;margin-top:6px">Proceed as planned</button>
+      </div>
+    </div>
+
+    <div class="member-card">
+      <div class="mc-header">
+        <div class="mc-av" style="background:var(--blue-dim);color:var(--blue)">JL</div>
+        <div><div class="mc-name">Jeff La Rue</div><div class="mc-tier">Concierge · 10:00 AM</div></div>
+        <div class="mc-readiness"><div class="mc-score score-high">82</div><div class="mc-score-label">Recovery</div></div>
+      </div>
+      <div class="mc-body">
+        <div class="mc-row"><div class="mc-row-label">Scheduled</div><div class="mc-row-val">Fit3D Scan</div></div>
+        <div class="mc-row"><div class="mc-row-label">Last scan</div><div class="mc-row-val">Jan 10 · 29.17% BF</div></div>
+        <div class="mc-row"><div class="mc-row-label">Goal</div><div class="mc-row-val">Reduce to 24%</div></div>
+        <button class="btn btn-sm" style="width:100%;margin-top:6px">View scan history</button>
+      </div>
+    </div>
+
+    <div class="member-card">
+      <div class="mc-header">
+        <div class="mc-av" style="background:var(--teal-dim);color:var(--teal)">KW</div>
+        <div><div class="mc-name">Karen Walsh</div><div class="mc-tier">Premier · 11:00 AM</div></div>
+        <div class="mc-readiness"><div class="mc-score score-high">79</div><div class="mc-score-label">Readiness</div></div>
+      </div>
+      <div class="mc-body">
+        <div class="mc-row"><div class="mc-row-label">Scheduled</div><div class="mc-row-val">Vasper + Katalyst</div></div>
+        <div class="mc-row"><div class="mc-row-label">HRV</div><div class="mc-row-val" style="color:var(--lime)">72ms</div></div>
+        <div class="mc-row"><div class="mc-row-label">Sleep</div><div class="mc-row-val">8.1 hrs</div></div>
+        <button class="btn btn-sm btn-lime" style="width:100%;margin-top:6px">Proceed as planned</button>
+      </div>
+    </div>
+
+    <div class="member-card">
+      <div class="mc-header">
+        <div class="mc-av" style="background:var(--purple-dim);color:var(--purple)">DP</div>
+        <div><div class="mc-name">David Park</div><div class="mc-tier">Essential · 12:00 PM</div></div>
+        <div class="mc-readiness"><div class="mc-score score-med">61</div><div class="mc-score-label">Recovery</div></div>
+      </div>
+      <div class="mc-body">
+        <div class="mc-row"><div class="mc-row-label">Scheduled</div><div class="mc-row-val">CAROL + Recovery</div></div>
+        <div class="mc-row"><div class="mc-row-label">HRV</div><div class="mc-row-val">55ms</div></div>
+        <div class="mc-row"><div class="mc-row-label">Sleep</div><div class="mc-row-val">6.8 hrs</div></div>
+        <button class="btn btn-sm" style="width:100%;margin-top:6px">View protocol</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- COACH: LOG SESSION -->
+<div id="coach-log" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">Log a session</div></div>
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-header"><div class="card-title">Session details</div></div>
+      <div class="log-form">
+        <div class="form-field"><div class="form-label">Member</div>
+          <select class="form-select"><option>Mark Reynolds</option><option>Sarah Mitchell</option><option>Tom Bradley</option><option>Jeff La Rue</option><option>Karen Walsh</option></select>
+        </div>
+        <div class="form-row">
+          <div class="form-field"><div class="form-label">Equipment</div>
+            <select class="form-select"><option>ARX</option><option>CAROL</option><option>Vasper</option><option>Katalyst</option><option>Proteus</option><option>Quickboard</option><option>Infrared sauna</option><option>Cold plunge</option><option>NxPro</option><option>Compression</option></select>
+          </div>
+          <div class="form-field"><div class="form-label">Duration (min)</div>
+            <input type="number" class="form-input" placeholder="20" value="20">
+          </div>
+        </div>
+        <div class="form-field"><div class="form-label">Protocol / exercise</div>
+          <input type="text" class="form-input" placeholder="e.g. ARX upper body · Reps 6">
+        </div>
+        <div class="form-field"><div class="form-label">Staff notes</div>
+          <textarea class="form-input form-textarea" placeholder="How did the session go? Any observations…"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-field"><div class="form-label">Perceived effort (1–10)</div>
+            <input type="number" class="form-input" placeholder="7" min="1" max="10">
+          </div>
+          <div class="form-field"><div class="form-label">Completed?</div>
+            <select class="form-select"><option>Yes — completed</option><option>Partial</option><option>No — cancelled</option></select>
+          </div>
+        </div>
+        <button class="btn btn-lime">Log session</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header"><div class="card-title">Update Healthspan OS scores</div><div class="card-sub">After scan or review</div></div>
+      <div class="log-form">
+        <div class="form-field"><div class="form-label">Member</div>
+          <select class="form-select"><option>Mark Reynolds</option><option>Sarah Mitchell</option><option>Jeff La Rue</option></select>
+        </div>
+        <div class="form-row">
+          <div class="form-field"><div class="form-label">Muscle (0–100)</div><input type="number" class="form-input" placeholder="78"></div>
+          <div class="form-field"><div class="form-label">Cardio (0–100)</div><input type="number" class="form-input" placeholder="65"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-field"><div class="form-label">Metabolic (0–100)</div><input type="number" class="form-input" placeholder="71"></div>
+          <div class="form-field"><div class="form-label">Structural (0–100)</div><input type="number" class="form-input" placeholder="58"></div>
+        </div>
+        <div class="form-field"><div class="form-label">Recovery (0–100)</div><input type="number" class="form-input" placeholder="82"></div>
+        <div class="form-field"><div class="form-label">Dustin's notes</div>
+          <textarea class="form-input form-textarea" placeholder="Context for this score update…"></textarea>
+        </div>
+        <button class="btn btn-lime">Update scores</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COACH: ALL MEMBERS -->
+<div id="coach-members" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">All members</div><span class="tag tag-lime">18 active</span></div>
+  <div class="card">
+    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 120px;padding:10px 18px;border-bottom:1px solid var(--border)">
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)">Member</div>
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)">Tier</div>
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)">Recovery</div>
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)">Muscle</div>
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)">Last session</div>
+      <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)">Protocol</div>
+      <div></div>
+    </div>
+    <div class="metric-row"><div style="display:flex;align-items:center;gap:10px"><div class="mc-av" style="width:28px;height:28px;font-size:11px;background:var(--lime-dim);color:var(--lime)">MR</div><div><div style="font-size:13px;font-weight:500">Mark Reynolds</div></div></div><div><span class="tag tag-amber">Premier</span></div><div style="font-family:var(--serif);font-size:15px;color:var(--lime)">74</div><div style="font-family:var(--serif);font-size:15px">78</div><div style="font-size:12px;color:var(--text3)">Today</div><div style="font-size:12px;color:var(--text2)">Strength Fdn W7</div><button class="btn btn-sm">View</button></div>
+    <div class="metric-row"><div style="display:flex;align-items:center;gap:10px"><div class="mc-av" style="width:28px;height:28px;font-size:11px;background:var(--coral-dim);color:var(--coral)">SM</div><div><div style="font-size:13px;font-weight:500">Sarah Mitchell</div></div></div><div><span class="tag tag-amber">Premier</span></div><div style="font-family:var(--serif);font-size:15px;color:var(--coral)">31</div><div style="font-family:var(--serif);font-size:15px">71</div><div style="font-size:12px;color:var(--text3)">Today</div><div style="font-size:12px;color:var(--text2)">Cardio Focus W4</div><button class="btn btn-sm" style="color:var(--coral)">Review</button></div>
+    <div class="metric-row"><div style="display:flex;align-items:center;gap:10px"><div class="mc-av" style="width:28px;height:28px;font-size:11px;background:var(--blue-dim);color:var(--blue)">JL</div><div><div style="font-size:13px;font-weight:500">Jeff La Rue</div></div></div><div><span class="tag tag-teal">Concierge</span></div><div style="font-family:var(--serif);font-size:15px;color:var(--lime)">82</div><div style="font-family:var(--serif);font-size:15px">69</div><div style="font-size:12px;color:var(--text3)">Jan 7</div><div style="font-size:12px;color:var(--text2)">Metabolic Reset W6</div><button class="btn btn-sm">View</button></div>
+    <div class="metric-row"><div style="display:flex;align-items:center;gap:10px"><div class="mc-av" style="width:28px;height:28px;font-size:11px;background:var(--amber-dim);color:var(--amber)">TB</div><div><div style="font-size:13px;font-weight:500">Tom Bradley</div></div></div><div><span class="tag tag-muted">Essential</span></div><div style="font-family:var(--serif);font-size:15px;color:var(--amber)">44</div><div style="font-family:var(--serif);font-size:15px">62</div><div style="font-size:12px;color:var(--text3)">Today</div><div style="font-size:12px;color:var(--text2)">Strength Fdn W3</div><button class="btn btn-sm">View</button></div>
+  </div>
+</div>
+
+<!-- COACH: PROTOCOLS -->
+<div id="coach-protocols" class="content" style="display:none">
+  <div class="sec-header"><div class="sec-title">Protocols</div><button class="btn btn-lime btn-sm">+ New protocol</button></div>
+  <div class="card">
+    <div class="card-header"><div class="card-title">Active protocols</div><div class="card-sub">Dustin's prescriptions · all members</div></div>
+    <div class="session-item"><div style="flex:1"><div class="s-name">Strength Foundation · 12 weeks</div><div class="s-detail">ARX lower/upper · CAROL REHIT · Vasper · Recovery</div></div><div style="font-size:12px;color:var(--text3);margin-right:12px">6 members</div><span class="tag tag-lime">Active</span><button class="btn btn-sm" style="margin-left:8px">Edit</button></div>
+    <div class="session-item"><div style="flex:1"><div class="s-name">Metabolic Reset · 8 weeks</div><div class="s-detail">CAROL Fat Burn · Katalyst · Cold plunge · Nutrition</div></div><div style="font-size:12px;color:var(--text3);margin-right:12px">4 members</div><span class="tag tag-lime">Active</span><button class="btn btn-sm" style="margin-left:8px">Edit</button></div>
+    <div class="session-item"><div style="flex:1"><div class="s-name">Cardio Focus · 6 weeks</div><div class="s-detail">CAROL REHIT + Fat Burn · Quickboard · Recovery</div></div><div style="font-size:12px;color:var(--text3);margin-right:12px">3 members</div><span class="tag tag-lime">Active</span><button class="btn btn-sm" style="margin-left:8px">Edit</button></div>
+    <div class="session-item"><div style="flex:1"><div class="s-name">Longevity Maintenance · Ongoing</div><div class="s-detail">Mixed modalities · 3x week · recovery focused</div></div><div style="font-size:12px;color:var(--text3);margin-right:12px">5 members</div><span class="tag tag-blue">Ongoing</span><button class="btn btn-sm" style="margin-left:8px">Edit</button></div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+let currentMode = 'member';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.vt-btn').forEach((b,i) => {
+    b.classList.toggle('active', (i===0 && mode==='member') || (i===1 && mode==='coach'));
+  });
+  document.getElementById('member-nav').style.display = mode==='member' ? 'block' : 'none';
+  document.getElementById('coach-nav').style.display = mode==='coach' ? 'block' : 'none';
+
+  // Hide all views
+  document.querySelectorAll('[id^="view-"],[id^="coach-"]').forEach(el => el.style.display='none');
+
+  if(mode==='member'){
+    document.getElementById('view-dashboard').style.display='block';
+    document.getElementById('top-title').textContent='Good morning, Mark.';
+    document.getElementById('user-av').textContent='MR';
+    document.getElementById('user-name').textContent='Mark Reynolds';
+    document.getElementById('user-tier').textContent='Premier';
+    document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+    document.querySelector('#member-nav .nav-item').classList.add('active');
+  } else {
+    document.getElementById('coach-morning').style.display='block';
+    document.getElementById('top-title').textContent='Good morning, Dustin.';
+    document.getElementById('user-av').textContent='DW';
+    document.getElementById('user-name').textContent='Dustin Weaver';
+    document.getElementById('user-tier').textContent='Head Coach';
+    document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+    document.querySelector('#coach-nav .nav-item').classList.add('active');
+  }
+}
+
+function showView(name) {
+  document.querySelectorAll('[id^="view-"],[id^="coach-"]').forEach(el=>el.style.display='none');
+  const el = document.getElementById('view-'+name);
+  if(el) el.style.display='block';
+  document.querySelectorAll('#member-nav .nav-item').forEach(el=>el.classList.remove('active'));
+  const navMap = {dashboard:0,protocol:1,carol:2,arx:3,scans:4,recovery:5,wearables:6,messages:7,reports:8,schedule:9};
+  const items = document.querySelectorAll('#member-nav .nav-item');
+  if(navMap[name]!==undefined && items[navMap[name]]) items[navMap[name]].classList.add('active');
+}
+
+function showCoachView(name) {
+  document.querySelectorAll('[id^="view-"],[id^="coach-"]').forEach(el=>el.style.display='none');
+  const el = document.getElementById('coach-'+name);
+  if(el) el.style.display='block';
+  document.querySelectorAll('#coach-nav .nav-item').forEach(el=>el.classList.remove('active'));
+  const navMap = {morning:0,members:1,log:2,protocols:3};
+  const items = document.querySelectorAll('#coach-nav .nav-item');
+  if(navMap[name]!==undefined && items[navMap[name]]) items[navMap[name]].classList.add('active');
+}
+
+// Set date
+const d = new Date(2026,2,14);
+document.getElementById('top-date').textContent = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+</script>
+</body>
+</html>
