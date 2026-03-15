@@ -1,18 +1,11 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import Script from "next/script";
 import { redirect } from "next/navigation";
-import { promises as fs } from "fs";
-import path from "path";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { DashboardBootstrapClient } from "@/components/dashboard-bootstrap-client";
-
-type PrototypeParts = {
-  styles: string;
-  body: string;
-  script: string;
-};
+import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
+import { getCurrentAuthState, routeForRole, type AppRole } from "@/lib/server/roles";
+import { loadPrototypeFromFiles, type PrototypeParts } from "@/lib/server/prototype";
 
 type DashboardPayload = {
   role: "member" | "coach";
@@ -21,7 +14,7 @@ type DashboardPayload = {
   displayName: string;
   initials: string;
   tier: string;
-  memberOptions: Array<{ id: string; name: string }>;
+  memberOptions: Array<{ id: string; name: string; phone: string }>;
   metrics: {
     carolFitness: string;
     arxOutput: string;
@@ -36,6 +29,15 @@ type DashboardPayload = {
     recovery: string;
   };
   carolHistory: Array<{ label: string; value: string }>;
+  carolSessions: Array<{
+    sessionDate: string;
+    rideNumber: string;
+    rideType: string;
+    fitnessScore: string;
+    peakPowerWatts: string;
+    calories: string;
+    maxHr: string;
+  }>;
   arxHistory: Array<{ label: string; value: string }>;
   scan: {
     bodyFatPct: string;
@@ -67,9 +69,6 @@ type DashboardPayload = {
     weekTotal: string;
     sessions: Array<{ name: string; detail: string; duration: string; status: string }>;
   };
-  emptyStates: {
-    protocol: boolean;
-  };
   bookings: Array<{ label: string; status: string }>;
   reports: Array<{ title: string }>;
   coach: {
@@ -82,6 +81,7 @@ type DashboardPayload = {
       name: string;
       initials: string;
       tier: string;
+      phoneMissing: boolean;
       recovery: string;
       muscle: string;
       session: string;
@@ -101,56 +101,10 @@ type MemberSection =
   | "reports"
   | "schedule";
 
-function normalizeMemberSection(input: string | undefined): MemberSection {
-  const value = (input ?? "").trim().toLowerCase();
-  if (
-    value === "dashboard" ||
-    value === "protocol" ||
-    value === "carol" ||
-    value === "arx" ||
-    value === "scans" ||
-    value === "recovery" ||
-    value === "wearables" ||
-    value === "messages" ||
-    value === "reports" ||
-    value === "schedule"
-  ) {
-    return value;
-  }
-  return "dashboard";
-}
-
-type DashboardRouteType = "member" | "coach";
+type CoachSection = "morning" | "members" | "log" | "protocols";
 
 async function loadPrototypeParts(): Promise<PrototypeParts> {
-  try {
-    const html = await fs.readFile(path.join(process.cwd(), "iso-club-v2.html"), "utf8");
-
-    const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
-    const bodyMatch = html.match(/<body>([\s\S]*?)<script>/i);
-    const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/i);
-
-    if (!styleMatch || !bodyMatch || !scriptMatch) {
-      throw new Error("Could not parse prototype index.html.");
-    }
-
-    return {
-      styles: styleMatch[1],
-      body: bodyMatch[1],
-      script: scriptMatch[1],
-    };
-  } catch {
-    return {
-      styles: "",
-      body: `
-        <main style="min-height:100vh;padding:24px;background:#1e2b1b;color:#f2e8dd;font-family:Arial,Helvetica,sans-serif;">
-          <h2 style="margin:0 0 8px 0;">Dashboard template missing</h2>
-          <p style="margin:0;">Could not load <code>/iso-club-v2.html</code>.</p>
-        </main>
-      `,
-      script: "",
-    };
-  }
+  return loadPrototypeFromFiles(["iso-club-v2.html"], "Iso Club Dashboard");
 }
 
 function initialsFromName(name: string): string {
@@ -203,6 +157,39 @@ function formatDateForLabel(value: unknown): string {
   });
 }
 
+function normalizeMemberSection(input: string | undefined): MemberSection {
+  const value = (input ?? "").trim().toLowerCase();
+  if (value === "recovery-overview" || value === "recovery-view") {
+    return "recovery";
+  }
+  if (value === "body-scans") {
+    return "scans";
+  }
+  if (
+    value === "dashboard" ||
+    value === "protocol" ||
+    value === "carol" ||
+    value === "arx" ||
+    value === "scans" ||
+    value === "recovery" ||
+    value === "wearables" ||
+    value === "messages" ||
+    value === "reports" ||
+    value === "schedule"
+  ) {
+    return value;
+  }
+  return "dashboard";
+}
+
+function normalizeCoachSection(input: string | undefined): CoachSection {
+  const value = (input ?? "").trim().toLowerCase();
+  if (value === "morning" || value === "members" || value === "log" || value === "protocols") {
+    return value;
+  }
+  return "morning";
+}
+
 function makeDefaultPayload(clerkName: string): DashboardPayload {
   return {
     role: "member",
@@ -226,6 +213,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       recovery: "--",
     },
     carolHistory: [],
+    carolSessions: [],
     arxHistory: [],
     scan: {
       bodyFatPct: "--",
@@ -257,9 +245,6 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       weekTotal: "--",
       sessions: [],
     },
-    emptyStates: {
-      protocol: true,
-    },
     bookings: [],
     reports: [],
     coach: {
@@ -272,8 +257,8 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
   };
 }
 
-async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> {
-  const user = await currentUser();
+async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise<DashboardPayload> {
+  const user = await safeCurrentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? "";
   const clerkName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
@@ -281,7 +266,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     "Member";
 
   const payload = makeDefaultPayload(clerkName);
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient());
   if (!supabase) return payload;
 
   let userRow: Record<string, unknown> | null = null;
@@ -310,10 +295,15 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     "",
   );
   const userRole = stringOr(userRow?.role, "").toLowerCase();
+  const authRoleValue = (authRole ?? "unknown").toLowerCase();
   const isCoach =
     userRole === "coach" ||
     userRole === "admin" ||
     userRole === "staff" ||
+    userRole.includes("coach") ||
+    authRoleValue === "coach" ||
+    authRoleValue === "admin" ||
+    authRoleValue === "staff" ||
     metadataRole.toLowerCase().includes("coach") ||
     email.toLowerCase().includes("dustin");
   payload.role = isCoach ? "coach" : "member";
@@ -353,10 +343,10 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   ] = await Promise.all([
     supabase
       .from("carol_sessions")
-      .select("session_date,ride_number,fitness_score,peak_power_watts,calories,max_hr")
+      .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr")
       .eq("member_id", memberId)
       .order("session_date", { ascending: false })
-      .limit(6),
+      .limit(60),
     supabase
       .from("arx_sessions")
       .select("session_date,exercise,output,concentric_max,eccentric_max")
@@ -514,6 +504,17 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     label: `${fmtDate(row.session_date)} · Ride #${stringOr(row.ride_number, "—")}`,
     value: numberOr(row.fitness_score, 0).toFixed(1),
   }));
+  payload.carolSessions = carolRows.map((row) => ({
+    sessionDate: stringOr(row.session_date, ""),
+    rideNumber: stringOr(row.ride_number, "—"),
+    rideType: stringOr(row.ride_type, "REHIT"),
+    fitnessScore: hasValue(row.fitness_score) ? numberOr(row.fitness_score, 0).toFixed(1) : "--",
+    peakPowerWatts: hasValue(row.peak_power_watts)
+      ? Math.round(numberOr(row.peak_power_watts, 0)).toString()
+      : "--",
+    calories: hasValue(row.calories) ? Math.round(numberOr(row.calories, 0)).toString() : "--",
+    maxHr: hasValue(row.max_hr) ? Math.round(numberOr(row.max_hr, 0)).toString() : "--",
+  }));
 
   payload.arxHistory = arxRows.slice(0, 3).map((row) => ({
     label: `${fmtDate(row.session_date)} · ${stringOr(row.exercise, "ARX exercise")}`,
@@ -612,7 +613,6 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   }));
 
   if (protocolRow) {
-    payload.emptyStates.protocol = false;
     payload.protocol.name = stringOr(protocolRow.name, payload.protocol.name);
     payload.protocol.weekCurrent = Math.round(
       numberOr(protocolRow.week_current, 1),
@@ -671,7 +671,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
       memberIds.length
         ? supabase
             .from("users")
-            .select("id,full_name,membership_tier")
+            .select("id,full_name,membership_tier,phone")
             .in("id", memberIds)
         : Promise.resolve({ data: [], error: null }),
       memberIds.length
@@ -690,7 +690,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
         : Promise.resolve({ data: [], error: null }),
       supabase
         .from("users")
-        .select("id,full_name")
+        .select("id,full_name,phone")
         .eq("is_active", true)
         .eq("role", "member")
         .order("full_name", { ascending: true })
@@ -713,6 +713,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     payload.memberOptions = memberOptionsRows.map((member) => ({
       id: stringOr(member.id, ""),
       name: stringOr(member.full_name, "Member"),
+      phone: stringOr(member.phone, ""),
     })).filter((member) => member.id && member.name);
 
     const latestWearableByMember = new Map<string, Record<string, unknown>>();
@@ -749,6 +750,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
         name,
         initials: initialsFromName(name),
         tier: stringOr(member.membership_tier, "Member"),
+        phoneMissing: stringOr(member.phone, "").length === 0,
         recovery: Math.round(
           numberOr(wearable?.recovery_score, numberOr(wearable?.readiness_score, 60)),
         ).toString(),
@@ -778,34 +780,76 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
 }
 
 export async function DashboardPageView({
+  route,
   initialSection,
-  routeType = "member",
 }: {
+  route: "dashboard" | "coach";
   initialSection?: string;
-  routeType?: DashboardRouteType;
-} = {}) {
-  const { userId } = await auth();
+}) {
+  const clerkConfigured = isClerkConfigured();
   const prototype = await loadPrototypeParts();
-  const initialMemberView = normalizeMemberSection(initialSection);
+  const initialMemberView = normalizeMemberSection(
+    route === "dashboard" ? initialSection : undefined,
+  );
+  const initialCoachView = normalizeCoachSection(
+    route === "coach" ? initialSection : undefined,
+  );
 
-  if (!userId) {
-    return null;
+  if (!clerkConfigured) {
+    return (
+      <main className="shell">
+        <div className="card">
+          <h1 className="title">Authentication not configured</h1>
+          <p className="muted">
+            Set
+            {" "}
+            <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code>
+            {" "}
+            and
+            {" "}
+            <code>CLERK_SECRET_KEY</code>
+            {" "}
+            in Vercel, then redeploy.
+          </p>
+          <Link className="btn" href="/">
+            Back to home
+          </Link>
+        </div>
+      </main>
+    );
   }
 
-  const livePayload = await loadDashboardLiveData(userId);
-  if (routeType === "member" && livePayload.role === "coach") {
-    redirect("/coach");
+  const authState = await getCurrentAuthState();
+  if (!authState.isAuthenticated || !authState.userId) {
+    redirect("/sign-in");
   }
-  if (routeType === "coach" && livePayload.role !== "coach") {
-    redirect("/dashboard");
+
+  if (route === "dashboard") {
+    if (authState.role !== "member") {
+      redirect(routeForRole(authState.role));
+    }
+    if (!authState.onboardingComplete) {
+      redirect("/onboarding");
+    }
+  } else if (route === "coach") {
+    if (authState.role === "member" || authState.role === "unknown") {
+      redirect(routeForRole(authState.role));
+    }
+    if (authState.role === "staff" && initialCoachView === "morning") {
+      redirect("/coach/log");
+    }
   }
+
+  const livePayload = await loadDashboardLiveData(authState.userId, authState.role);
+  const uiRole = authState.role === "member" ? "member" : "coach";
   const payload = JSON.stringify(livePayload).replace(/</g, "\\u003c");
   const bootstrapScript = `
     (() => {
       const payload = ${payload};
-      const role = payload.role === "coach" ? "coach" : "member";
+      const role = ${JSON.stringify(uiRole)};
       const data = payload || {};
       const initialMemberView = ${JSON.stringify(initialMemberView)};
+      const initialCoachView = ${JSON.stringify(initialCoachView)};
 
       const firstName = (name) => {
         if (!name || typeof name !== "string") return "Member";
@@ -899,6 +943,202 @@ export async function DashboardPageView({
           throw new Error(payload.error || "Request failed.");
         }
         return payload;
+      };
+
+      const getJson = async (url) => {
+        const res = await fetch(url, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || payload.success === false) {
+          throw new Error(payload.error || "Request failed.");
+        }
+        return payload;
+      };
+
+      const toNumber = (value, fallback = 0) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      };
+
+      const normalizeCarolTabKey = (rideType) => {
+        const value = String(rideType || "").trim().toLowerCase();
+        if (value.includes("fat")) return "fat_burn";
+        if (value.includes("free") || value.includes("custom")) return "free_custom";
+        if (value.includes("test")) return "fitness_tests";
+        return "rehit";
+      };
+
+      const wireCarolTabs = () => {
+        const carolView = document.getElementById("view-carol");
+        if (!carolView) return;
+
+        const tabButtons = Array.from(carolView.querySelectorAll(".tabs .tab"));
+        if (!tabButtons.length) return;
+        const tabOrder = ["rehit", "fat_burn", "free_custom", "fitness_tests"];
+        const tabLabels = {
+          rehit: "REHIT",
+          fat_burn: "Fat Burn",
+          free_custom: "Free & Custom",
+          fitness_tests: "Fitness Tests",
+        };
+
+        const sessions = Array.isArray(data.carolSessions) ? data.carolSessions : [];
+        const historyCard = carolView.querySelector(".card");
+        const historyTitle = historyCard ? historyCard.querySelector(".card-title") : null;
+        const historySubtitle = historyCard ? historyCard.querySelector(".card-sub") : null;
+
+        const cardByLabel = (labelFragment) => {
+          const cards = Array.from(carolView.querySelectorAll(".stat-card"));
+          return cards.find((item) => {
+            const label = item.querySelector(".stat-label");
+            const text = label && label.textContent ? label.textContent.toLowerCase() : "";
+            return text.includes(labelFragment.toLowerCase());
+          });
+        };
+
+        const setCarolStat = (labelFragment, value, subText = "", trendText = "") => {
+          const card = cardByLabel(labelFragment);
+          if (!card) return;
+          const valueEl = card.querySelector(".stat-val");
+          if (valueEl) valueEl.textContent = String(value);
+          const subEl = card.querySelector(".stat-sub");
+          if (subEl) subEl.textContent = subText || "";
+          const trendEl = card.querySelector(".stat-trend");
+          if (trendEl) trendEl.textContent = trendText || "";
+        };
+
+        const renderRows = (rows) => {
+          if (!historyCard) return;
+          Array.from(historyCard.querySelectorAll(".metric-row,[data-carol-empty='true']")).forEach((node) =>
+            node.remove(),
+          );
+          if (!rows.length) {
+            const empty = document.createElement("div");
+            empty.setAttribute("data-carol-empty", "true");
+            empty.style.padding = "14px 18px";
+            empty.style.fontSize = "12px";
+            empty.style.color = "var(--text3)";
+            empty.textContent = "No rides logged for this tab yet.";
+            historyCard.appendChild(empty);
+            return;
+          }
+
+          rows.slice(0, 24).forEach((row, index) => {
+            const next = rows[index + 1];
+            const currentFitness = toNumber(row.fitnessScore, 0);
+            const nextFitness = next ? toNumber(next.fitnessScore, currentFitness) : currentFitness;
+            const delta = currentFitness - nextFitness;
+            const trendText = delta > 0.01 ? "Up" : delta < -0.01 ? "Down" : "No change";
+            const trendClass = delta > 0.01 ? "tag-lime" : delta < -0.01 ? "tag-amber" : "tag-muted";
+            const metricLabel = row.sessionDate
+              ? new Date(row.sessionDate).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "Recent";
+
+            const metricRow = document.createElement("div");
+            metricRow.className = "metric-row";
+            metricRow.innerHTML = [
+              "<div><div class='metric-label'>" +
+                metricLabel +
+                " · Ride #" +
+                String(row.rideNumber || "—") +
+                "</div></div>",
+              '<div style="display:flex;gap:20px;align-items:center">',
+              '<span style="font-size:11px;color:var(--text3)">Score <b style="color:var(--text)">' +
+                String(row.fitnessScore || "--") +
+                "</b></span>",
+              '<span style="font-size:11px;color:var(--text3)">Peak <b style="color:var(--text)">' +
+                String(row.peakPowerWatts || "--") +
+                "W</b></span>",
+              '<span style="font-size:11px;color:var(--text3)">Cal <b style="color:var(--text)">' +
+                String(row.calories || "--") +
+                "</b></span>",
+              '<span style="font-size:11px;color:var(--text3)">Max HR <b style="color:var(--text)">' +
+                String(row.maxHr || "--") +
+                "</b></span>",
+              '<span class="tag ' + trendClass + '">' + trendText + "</span>",
+              "</div>",
+            ].join("");
+            historyCard.appendChild(metricRow);
+          });
+        };
+
+        const renderCarolTab = (tabKey) => {
+          const filtered = sessions.filter(
+            (row) => normalizeCarolTabKey(row.rideType) === tabKey,
+          );
+          const rowsForStats = filtered.length ? filtered : sessions;
+          const latest = rowsForStats[0] || null;
+          const peakPower = rowsForStats.length
+            ? Math.max(...rowsForStats.map((row) => toNumber(row.peakPowerWatts, 0)))
+            : 0;
+          const baseScore = rowsForStats.length
+            ? toNumber(rowsForStats[rowsForStats.length - 1].fitnessScore, 0).toFixed(1)
+            : "--";
+
+          setCarolStat(
+            "fitness score",
+            latest ? String(latest.fitnessScore || "--") : "--",
+            baseScore === "--" ? "Base --" : "Base " + baseScore,
+            rowsForStats.length > 1 ? "Updated from last ride" : "Log rides to see trend",
+          );
+          setCarolStat(
+            "peak power",
+            peakPower > 0 ? String(Math.round(peakPower)) : "--",
+            latest && latest.sessionDate
+              ? "watts · " +
+                  new Date(latest.sessionDate).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })
+              : "watts",
+            peakPower > 0 ? "Best in selected tab" : "No rides yet",
+          );
+          setCarolStat("total rides", String(filtered.length), "Filtered by tab", "");
+          setCarolStat(
+            "last max hr",
+            latest ? String(latest.maxHr || "--") : "--",
+            latest && latest.sessionDate
+              ? "bpm · " +
+                  new Date(latest.sessionDate).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  })
+              : "bpm",
+            "",
+          );
+
+          if (historyTitle) {
+            historyTitle.textContent = String(tabLabels[tabKey] || "CAROL") + " ride history";
+          }
+          if (historySubtitle) {
+            historySubtitle.textContent = filtered.length
+              ? "Most recent first · filtered"
+              : "No rides logged in this tab yet";
+          }
+          renderRows(filtered);
+
+          tabButtons.forEach((btn, index) => {
+            btn.classList.toggle("active", tabOrder[index] === tabKey);
+          });
+        };
+
+        tabButtons.forEach((btn, index) => {
+          const key = tabOrder[index] || "rehit";
+          btn.removeAttribute("onclick");
+          btn.addEventListener("click", () => renderCarolTab(key));
+        });
+
+        const firstPopulatedTab =
+          tabOrder.find((key) =>
+            sessions.some((row) => normalizeCarolTabKey(row.rideType) === key),
+          ) || "rehit";
+        renderCarolTab(firstPopulatedTab);
       };
 
       const memberOptions = Array.isArray(data.memberOptions) && data.memberOptions.length
@@ -1115,26 +1355,379 @@ export async function DashboardPageView({
         });
       };
 
+      const memberMessagesState = {
+        coachId: "",
+        coachName: "Dustin · Coach",
+        supportsReadTracking: false,
+        unreadCount: 0,
+        messages: [],
+        initialized: false,
+      };
+
+      const setMemberUnreadBadge = (count) => {
+        const navBadge = document.querySelector("#member-nav .notif-wrap .nav-badge");
+        if (navBadge) {
+          if (count > 0) {
+            navBadge.textContent = String(count);
+            navBadge.style.display = "inline-flex";
+          } else {
+            navBadge.textContent = "0";
+            navBadge.style.display = "none";
+          }
+        }
+        const topbarDot = document.querySelector(".topbar-right .notif-dot");
+        if (topbarDot) {
+          topbarDot.style.display = count > 0 ? "inline-block" : "none";
+        }
+      };
+
+      const formatMessageTime = (isoValue) => {
+        if (!isoValue) return "";
+        const parsed = new Date(isoValue);
+        if (Number.isNaN(parsed.getTime())) return "";
+        return parsed.toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      };
+
+      const ensureMemberMessagesDom = () => {
+        const view = document.getElementById("view-messages");
+        if (!view) return null;
+        const card = view.querySelector(".card");
+        if (!card || card.children.length < 2) return null;
+        const inboxCol = card.children[0];
+        const convoCol = card.children[1];
+        if (!inboxCol || !convoCol) return null;
+        if (!document.getElementById("member-messages-inbox-list")) {
+          inboxCol.innerHTML = [
+            '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text3)">Inbox</div>',
+            '<div id="member-messages-inbox-list"></div>',
+          ].join("");
+        }
+        if (!document.getElementById("member-messages-thread")) {
+          convoCol.innerHTML = [
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)">',
+            '  <div class="msg-av" id="member-messages-coach-av" style="width:36px;height:36px;font-size:13px;background:var(--amber-dim);color:var(--amber)">D</div>',
+            '  <div><div id="member-messages-coach-name" style="font-size:13.5px;font-weight:500;color:var(--text)">Dustin</div><div style="font-size:11px;color:var(--text3)">Head Coach · Iso Club</div></div>',
+            "</div>",
+            '<div id="member-messages-thread" style="flex:1;overflow:auto;max-height:360px"></div>',
+            '<div style="margin-top:16px;display:flex;gap:8px;padding-top:14px;border-top:1px solid var(--border)">',
+            '  <input id="member-message-input" type="text" placeholder="Reply to Dustin…" class="form-input" style="flex:1">',
+            '  <button id="member-message-send" class="btn btn-lime">Send</button>',
+            "</div>",
+            '<div id="member-message-status" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>',
+          ].join("");
+        }
+        return {
+          inboxList: document.getElementById("member-messages-inbox-list"),
+          thread: document.getElementById("member-messages-thread"),
+          input: document.getElementById("member-message-input"),
+          send: document.getElementById("member-message-send"),
+          status: document.getElementById("member-message-status"),
+          coachName: document.getElementById("member-messages-coach-name"),
+          coachAv: document.getElementById("member-messages-coach-av"),
+        };
+      };
+
+      const renderMemberMessages = () => {
+        const refs = ensureMemberMessagesDom();
+        if (!refs) return;
+        if (refs.coachName) {
+          refs.coachName.textContent = memberMessagesState.coachName || "Dustin";
+        }
+        if (refs.coachAv) {
+          const initials = (memberMessagesState.coachName || "D")
+            .split(" ")
+            .map((part) => part.trim().charAt(0))
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
+          refs.coachAv.textContent = initials || "D";
+        }
+
+        if (refs.inboxList) {
+          const latest = memberMessagesState.messages[memberMessagesState.messages.length - 1];
+          const preview = latest && latest.body ? latest.body : "No messages yet";
+          const unread = Number(memberMessagesState.unreadCount || 0);
+          refs.inboxList.innerHTML = [
+            '<div class="msg-thread ' + (unread > 0 ? "unread" : "") + '" style="cursor:default">',
+            '  <div class="msg-av" style="background:var(--amber-dim);color:var(--amber)">D</div>',
+            '  <div style="flex:1;min-width:0">',
+            '    <div class="msg-from">' + (memberMessagesState.coachName || "Dustin · Coach") + "</div>",
+            '    <div class="msg-preview">' + String(preview).slice(0, 56) + "</div>",
+            "  </div>",
+            '  <div class="msg-time">' + (latest ? formatMessageTime(latest.created_at) : "") + "</div>",
+            "</div>",
+          ].join("");
+        }
+
+        if (refs.thread) {
+          refs.thread.innerHTML = "";
+          if (!memberMessagesState.messages.length) {
+            const empty = document.createElement("div");
+            empty.style.fontSize = "12px";
+            empty.style.color = "var(--text3)";
+            empty.textContent = "No messages yet. Send Dustin a note to start the thread.";
+            refs.thread.appendChild(empty);
+          } else {
+            memberMessagesState.messages.forEach((message) => {
+              const outbound = String(message.sender_id || "") === String(data.memberId || "");
+              const row = document.createElement("div");
+              row.style.display = "flex";
+              row.style.justifyContent = outbound ? "flex-end" : "flex-start";
+              row.style.marginBottom = "10px";
+
+              const bubble = document.createElement("div");
+              bubble.style.background = outbound ? "rgba(201,240,85,0.12)" : "var(--bg3)";
+              bubble.style.border = "1px solid " + (outbound ? "rgba(201,240,85,0.35)" : "var(--border)");
+              bubble.style.borderRadius = "var(--r-sm)";
+              bubble.style.padding = "10px 12px";
+              bubble.style.maxWidth = "460px";
+              bubble.innerHTML = [
+                '<p style="font-size:12.5px;color:' + (outbound ? "var(--text)" : "var(--text2)") + ';line-height:1.65;margin:0 0 6px 0">' + String(message.body || "") + "</p>",
+                '<div style="font-size:10px;color:var(--text3);text-align:' + (outbound ? "right" : "left") + '">' + formatMessageTime(message.created_at) + "</div>",
+              ].join("");
+              row.appendChild(bubble);
+              refs.thread.appendChild(row);
+            });
+            refs.thread.scrollTop = refs.thread.scrollHeight;
+          }
+        }
+
+        setMemberUnreadBadge(Number(memberMessagesState.unreadCount || 0));
+      };
+
+      const loadMemberMessages = async (markRead) => {
+        try {
+          const payload = await getJson("/api/messages/inbox" + (markRead ? "?mark_read=1" : ""));
+          memberMessagesState.coachId = String(payload.coach?.id || "");
+          memberMessagesState.coachName = String(payload.coach?.full_name || "Dustin");
+          memberMessagesState.unreadCount = Number(payload.unread_count || 0);
+          memberMessagesState.supportsReadTracking = Boolean(payload.supports_read_tracking);
+          memberMessagesState.messages = Array.isArray(payload.messages) ? payload.messages : [];
+          memberMessagesState.initialized = true;
+          renderMemberMessages();
+          if (markRead) {
+            memberMessagesState.unreadCount = 0;
+            setMemberUnreadBadge(0);
+          }
+        } catch (error) {
+          const refs = ensureMemberMessagesDom();
+          if (refs?.status) {
+            refs.status.textContent = error instanceof Error ? error.message : "Unable to load messages.";
+            refs.status.style.color = "var(--coral)";
+          }
+        }
+      };
+
       const wireMemberMessageReply = () => {
-        const submit = document.getElementById("member-message-send");
-        if (!submit) return;
-        submit.addEventListener("click", async () => {
+        const refs = ensureMemberMessagesDom();
+        if (!refs || !refs.send || !refs.input) return;
+        if (refs.send.getAttribute("data-wired") === "true") return;
+        refs.send.setAttribute("data-wired", "true");
+
+        refs.send.addEventListener("click", async () => {
           try {
-            setStatus("member-message-status", "info", "Sending…");
-            submit.setAttribute("disabled", "true");
-            const input = document.getElementById("member-message-input");
-            const bodyText = input && "value" in input ? input.value : "";
-            if (!bodyText.trim()) {
+            const bodyText = "value" in refs.input ? String(refs.input.value || "").trim() : "";
+            if (!bodyText) {
               throw new Error("Message cannot be empty.");
             }
-            await postJson("/api/messages/send", { body: bodyText });
-            setStatus("member-message-status", "success", "Message sent.");
-            if (input && "value" in input) input.value = "";
+            if (refs.status) {
+              refs.status.textContent = "Sending…";
+              refs.status.style.color = "var(--text3)";
+            }
+            refs.send.setAttribute("disabled", "true");
+
+            const latestThreadId =
+              memberMessagesState.messages
+                .map((msg) => String(msg.thread_id || ""))
+                .filter((value) => value.length > 0)
+                .slice(-1)[0] || "";
+
+            const sendPayload = {
+              body: bodyText,
+              recipient_id: memberMessagesState.coachId || undefined,
+              thread_id: latestThreadId || undefined,
+            };
+            const response = await postJson("/api/messages/send", sendPayload);
+            const sentMessage = response && response.message ? response.message : null;
+            if (sentMessage) {
+              memberMessagesState.messages.push(sentMessage);
+            }
+            memberMessagesState.unreadCount = 0;
+            renderMemberMessages();
+            if ("value" in refs.input) refs.input.value = "";
+            if (refs.status) {
+              refs.status.textContent = "Message sent.";
+              refs.status.style.color = "var(--lime)";
+            }
           } catch (error) {
-            const message = error instanceof Error ? error.message : "Could not send message.";
-            setStatus("member-message-status", "error", message);
+            if (refs.status) {
+              refs.status.textContent =
+                error instanceof Error ? error.message : "Could not send message.";
+              refs.status.style.color = "var(--coral)";
+            }
           } finally {
-            submit.removeAttribute("disabled");
+            refs.send.removeAttribute("disabled");
+          }
+        });
+      };
+
+      const injectMemberRecoveryLogLink = () => {
+        const header = document.querySelector("#view-recovery .sec-header");
+        if (!header) return;
+        if (document.getElementById("member-recovery-log-link")) return;
+
+        const link = document.createElement("a");
+        link.id = "member-recovery-log-link";
+        link.href = "/dashboard/recovery";
+        link.textContent = "Log Recovery";
+        link.className = "btn btn-lime btn-sm";
+        link.style.textDecoration = "none";
+        link.style.display = "inline-flex";
+        link.style.alignItems = "center";
+        header.appendChild(link);
+      };
+
+      const injectMemberUploadDataButton = () => {
+        const topbarRight = document.querySelector(".topbar-right");
+        if (!topbarRight) return;
+        if (document.getElementById("member-upload-data-link")) return;
+
+        const link = document.createElement("a");
+        link.id = "member-upload-data-link";
+        link.href = "/dashboard/upload";
+        link.textContent = "Upload Data";
+        link.className = "btn btn-sm";
+        link.style.textDecoration = "none";
+        link.style.display = "inline-flex";
+        link.style.alignItems = "center";
+        topbarRight.insertBefore(link, topbarRight.firstChild);
+      };
+
+      const injectMemberSettingsButton = () => {
+        const topbarRight = document.querySelector(".topbar-right");
+        if (!topbarRight) return;
+        if (document.getElementById("member-settings-link")) return;
+
+        const link = document.createElement("a");
+        link.id = "member-settings-link";
+        link.href = "/dashboard/settings";
+        link.textContent = "Settings";
+        link.className = "btn btn-sm";
+        link.style.textDecoration = "none";
+        link.style.display = "inline-flex";
+        link.style.alignItems = "center";
+        topbarRight.insertBefore(link, topbarRight.firstChild);
+      };
+
+      const injectMemberSettingsSidebarLink = () => {
+        const memberNav = document.getElementById("member-nav");
+        if (!memberNav) return;
+        if (document.getElementById("member-settings-sidebar-link")) return;
+
+        const link = document.createElement("a");
+        link.id = "member-settings-sidebar-link";
+        link.href = "/dashboard/settings";
+        link.className = "nav-item";
+        link.style.textDecoration = "none";
+        link.innerHTML = [
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">',
+          '  <circle cx="12" cy="12" r="3.2"></circle>',
+          '  <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .15 1.7 1.7 0 0 0-1 1.56V21.2a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1-.15 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.15-1 1.7 1.7 0 0 0-1.56-1H2.8a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0 .15-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.15 1.7 1.7 0 0 0 1-1.56V2.8a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1 .15 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c0 .35.05.69.15 1a1.7 1.7 0 0 0 1.56 1h.09a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1c-.1.31-.15.65-.15 1z"></path>',
+          "</svg>",
+          '<span class="nav-label">Settings</span>',
+        ].join("");
+        memberNav.appendChild(link);
+      };
+
+      const injectCoachPhoneEditor = () => {
+        const root = document.getElementById("coach-members");
+        if (!root) return;
+        if (document.getElementById("coach-phone-editor")) return;
+
+        const card = document.createElement("div");
+        card.id = "coach-phone-editor";
+        card.className = "card";
+        card.style.marginTop = "16px";
+        card.innerHTML = [
+          '<div class="sec-header">',
+          '  <div class="sec-title">Member contact editor</div>',
+          '  <span class="tag tag-lime">SMS required</span>',
+          "</div>",
+          '<div class="form-grid">',
+          '  <div class="form-field"><div class="form-label">Member</div><select id="coach-phone-member-select" class="form-select"></select></div>',
+          '  <div class="form-field"><div class="form-label">Full name</div><input id="coach-phone-name-input" class="form-input" placeholder="Member name"></div>',
+          "</div>",
+          '<div class="form-field"><div class="form-label">Phone number</div><input id="coach-phone-input" class="form-input" placeholder="(555) 555-1234"></div>',
+          '<div style="display:flex;align-items:center;gap:10px;margin-top:10px">',
+          '  <button id="coach-phone-save" class="btn btn-lime">Save contact</button>',
+          '  <span id="coach-phone-status" style="font-size:12px;color:var(--text3)"></span>',
+          "</div>",
+        ].join("");
+        root.appendChild(card);
+
+        const select = document.getElementById("coach-phone-member-select");
+        const nameInput = document.getElementById("coach-phone-name-input");
+        const phoneInput = document.getElementById("coach-phone-input");
+        const status = document.getElementById("coach-phone-status");
+        const saveButton = document.getElementById("coach-phone-save");
+        if (!select || !nameInput || !phoneInput || !saveButton) return;
+
+        const members = Array.isArray(memberOptions) ? memberOptions : [];
+        select.innerHTML = "";
+        members.forEach((member) => {
+          const option = document.createElement("option");
+          option.value = String(member.id || "");
+          option.textContent = String(member.name || "Member");
+          select.appendChild(option);
+        });
+
+        const setStatus = (message, kind) => {
+          if (!status) return;
+          status.textContent = message || "";
+          if (kind === "error") status.style.color = "var(--coral)";
+          else if (kind === "success") status.style.color = "var(--lime)";
+          else status.style.color = "var(--text3)";
+        };
+
+        const syncInputs = () => {
+          const selected = members.find((member) => String(member.id) === String(select.value));
+          if (!selected) return;
+          if ("value" in nameInput) nameInput.value = String(selected.name || "");
+          if ("value" in phoneInput) phoneInput.value = String(selected.phone || "");
+        };
+        select.addEventListener("change", syncInputs);
+        syncInputs();
+
+        saveButton.addEventListener("click", async () => {
+          try {
+            setStatus("Saving…", "info");
+            saveButton.setAttribute("disabled", "true");
+            const memberId = "value" in select ? String(select.value || "") : "";
+            const fullName = "value" in nameInput ? String(nameInput.value || "").trim() : "";
+            const phone = "value" in phoneInput ? String(phoneInput.value || "").trim() : "";
+            if (!memberId || !phone) {
+              throw new Error("Member and phone are required.");
+            }
+            await postJson("/api/coach/members/contact", {
+              member_id: memberId,
+              full_name: fullName,
+              phone,
+            });
+            const selected = members.find((member) => String(member.id) === memberId);
+            if (selected) {
+              selected.name = fullName || selected.name;
+              selected.phone = phone;
+            }
+            setStatus("Contact updated.", "success");
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : "Unable to save.", "error");
+          } finally {
+            saveButton.removeAttribute("disabled");
           }
         });
       };
@@ -1145,54 +1738,201 @@ export async function DashboardPageView({
         carol: "/dashboard/carol",
         arx: "/dashboard/arx",
         scans: "/dashboard/scans",
-        recovery: "/dashboard/recovery",
+        recovery: "/dashboard/recovery-overview",
         wearables: "/dashboard/wearables",
         messages: "/dashboard/messages",
         reports: "/dashboard/reports",
         schedule: "/dashboard/schedule",
       };
-
+      const coachPathByView = {
+        morning: "/coach",
+        members: "/coach/members",
+        log: "/coach/log",
+        protocols: "/coach/protocols",
+      };
       const originalShowView = typeof window.showView === "function"
         ? window.showView.bind(window)
         : null;
-      if (originalShowView) {
-        window.showView = (name) => {
-          originalShowView(name);
-          const targetPath = memberPathByView[name] || "/dashboard";
-          if (window.location.pathname !== targetPath) {
-            window.history.pushState({}, "", targetPath);
-          }
-        };
-      }
+      const originalShowCoachView = typeof window.showCoachView === "function"
+        ? window.showCoachView.bind(window)
+        : null;
+      const originalSetMode = typeof window.setMode === "function"
+        ? window.setMode.bind(window)
+        : null;
 
-      if (typeof setMode === "function") {
-        setMode(role);
+      const memberViews = [
+        "dashboard",
+        "protocol",
+        "carol",
+        "arx",
+        "scans",
+        "recovery",
+        "wearables",
+        "messages",
+        "reports",
+        "schedule",
+      ];
+      const coachViews = ["morning", "members", "log", "protocols"];
+
+      const hideAllViews = () => {
+        document
+          .querySelectorAll('[id^="view-"],[id^="coach-"]')
+          .forEach((el) => ((el).style.display = "none"));
+      };
+
+      const setActiveNavByIndex = (selector, index) => {
+        const items = Array.from(document.querySelectorAll(selector));
+        items.forEach((item, itemIndex) => item.classList.toggle("active", itemIndex === index));
+      };
+
+      const fallbackShowView = (name) => {
+        hideAllViews();
+        const view = document.getElementById("view-" + String(name || "dashboard"));
+        if (view) view.style.display = "block";
+        const viewIndex = memberViews.indexOf(String(name || "dashboard"));
+        setActiveNavByIndex("#member-nav .nav-item", viewIndex >= 0 ? viewIndex : 0);
+      };
+
+      const fallbackShowCoachView = (name) => {
+        hideAllViews();
+        const view = document.getElementById("coach-" + String(name || "morning"));
+        if (view) view.style.display = "block";
+        const viewIndex = coachViews.indexOf(String(name || "morning"));
+        setActiveNavByIndex("#coach-nav .nav-item", viewIndex >= 0 ? viewIndex : 0);
+      };
+
+      const fallbackSetMode = (mode) => {
+        const normalized = mode === "coach" ? "coach" : "member";
+        document.querySelectorAll(".vt-btn").forEach((button, index) => {
+          button.classList.toggle(
+            "active",
+            (index === 0 && normalized === "member") || (index === 1 && normalized === "coach"),
+          );
+        });
+        const memberNav = document.getElementById("member-nav");
+        const coachNav = document.getElementById("coach-nav");
+        if (memberNav) memberNav.style.display = normalized === "member" ? "block" : "none";
+        if (coachNav) coachNav.style.display = normalized === "coach" ? "block" : "none";
+        if (normalized === "coach") {
+          fallbackShowCoachView(initialCoachView);
+        } else {
+          fallbackShowView(initialMemberView);
+        }
+      };
+
+      const baseShowView = originalShowView || fallbackShowView;
+      const baseShowCoachView = originalShowCoachView || fallbackShowCoachView;
+      const baseSetMode = originalSetMode || fallbackSetMode;
+
+      window.showView = (name) => {
+        baseShowView(name);
+        if (role === "member" && name === "messages") {
+          wireMemberMessageReply();
+          loadMemberMessages(true);
+        }
+        const targetPath = memberPathByView[name] || "/dashboard";
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState({}, "", targetPath);
+        }
+      };
+
+      window.showCoachView = (name) => {
+        baseShowCoachView(name);
+        const targetPath = coachPathByView[name] || "/coach";
+        if (window.location.pathname !== targetPath) {
+          window.history.pushState({}, "", targetPath);
+        }
+      };
+
+      window.setMode = (mode) => {
+        baseSetMode(mode);
+      };
+
+      const wireClickTarget = (selector, parser) => {
+        document.querySelectorAll(selector).forEach((node) => {
+          if (node.getAttribute("data-wired-nav") === "true") return;
+          const inline = node.getAttribute("onclick") || "";
+          const target = parser(inline, node);
+          if (!target) return;
+          node.setAttribute("data-wired-nav", "true");
+          node.removeAttribute("onclick");
+          node.addEventListener("click", (event) => {
+            event.preventDefault();
+            const invoke = parser === parseCoachViewFromOnclick ? window.showCoachView : window.showView;
+            if (typeof invoke === "function") invoke(target);
+          });
+        });
+      };
+
+      const parseMemberViewFromOnclick = (inline, node) => {
+        const match = inline.match(/showView\\('([^']+)'\\)/);
+        if (match && match[1]) return match[1];
+        const text = (node.textContent || "").toLowerCase();
+        if (text.includes("dashboard")) return "dashboard";
+        if (text.includes("protocol")) return "protocol";
+        if (text.includes("carol")) return "carol";
+        if (text.includes("arx")) return "arx";
+        if (text.includes("body scan")) return "scans";
+        if (text.includes("recovery")) return "recovery";
+        if (text.includes("wearable")) return "wearables";
+        if (text.includes("message")) return "messages";
+        if (text.includes("report")) return "reports";
+        if (text.includes("schedule")) return "schedule";
+        return "";
+      };
+
+      const parseCoachViewFromOnclick = (inline, node) => {
+        const match = inline.match(/showCoachView\\('([^']+)'\\)/);
+        if (match && match[1]) return match[1];
+        const text = (node.textContent || "").toLowerCase();
+        if (text.includes("morning")) return "morning";
+        if (text.includes("member")) return "members";
+        if (text.includes("log")) return "log";
+        if (text.includes("protocol")) return "protocols";
+        return "";
+      };
+
+      wireClickTarget("#member-nav .nav-item", parseMemberViewFromOnclick);
+      wireClickTarget("#coach-nav .nav-item", parseCoachViewFromOnclick);
+      wireClickTarget(".topbar-right button", parseMemberViewFromOnclick);
+
+      document.querySelectorAll(".view-toggle .vt-btn").forEach((button, index) => {
+        if (button.getAttribute("data-wired-toggle") === "true") return;
+        button.setAttribute("data-wired-toggle", "true");
+        button.removeAttribute("onclick");
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          if (typeof window.setMode === "function") {
+            window.setMode(index === 1 ? "coach" : "member");
+          }
+        });
+      });
+
+      const applyRoleBasedToggleVisibility = () => {
+        const toggle = document.querySelector(".view-toggle");
+        if (!toggle) return;
+        if (role === "member") {
+          toggle.style.display = "none";
+        } else {
+          toggle.style.display = "flex";
+        }
+      };
+      applyRoleBasedToggleVisibility();
+
+      if (typeof window.setMode === "function") {
+        window.setMode(role);
       }
-      if (role === "member" && typeof showView === "function") {
-        showView(initialMemberView);
+      if (role === "member" && typeof window.showView === "function") {
+        window.showView(initialMemberView);
+      }
+      if (role === "coach" && typeof window.showCoachView === "function") {
+        window.showCoachView(initialCoachView);
       }
 
       setText("#user-name", data.displayName);
       setText("#user-av", data.initials);
       setText("#user-tier", data.tier);
       setText("#top-title", "Good morning, " + firstName(data.displayName) + ".");
-
-      if (data.emptyStates && data.emptyStates.protocol) {
-        const applyProtocolEmptyState = (rootSelector) => {
-          const track = document.querySelector(rootSelector + " .track-name");
-          if (track) track.textContent = "Your protocol is being prepared by Dustin";
-          const trackMeta = document.querySelector(rootSelector + " .track-meta");
-          if (trackMeta) {
-            trackMeta.textContent = "You'll see your personalized plan here soon.";
-          }
-          const sessions = Array.from(document.querySelectorAll(rootSelector + " .session-item"));
-          sessions.forEach((session) => {
-            session.style.display = "none";
-          });
-        };
-        applyProtocolEmptyState("#view-dashboard");
-        applyProtocolEmptyState("#view-protocol");
-      }
 
       if (data.metrics) {
         setStatCardValue("CAROL fitness score", data.metrics.carolFitness);
@@ -1330,10 +2070,58 @@ export async function DashboardPageView({
         (data.coach.members || []).forEach((member, index) => {
           const row = allRows[index];
           if (!row) return;
-          const label = row.querySelector(".metric-label");
-          const value = row.querySelector(".metric-val");
-          if (label) label.textContent = member.name + " · " + member.tier;
-          if (value) value.textContent = "Recovery " + member.recovery;
+          const cells = Array.from(row.children);
+          const memberCell = cells[0];
+          const tierCell = cells[1];
+          const recoveryCell = cells[2];
+          const muscleCell = cells[3];
+          const sessionCell = cells[4];
+
+          if (memberCell) {
+            const avatar = memberCell.querySelector(".mc-av");
+            if (avatar) avatar.textContent = member.initials;
+
+            const nameNode =
+              memberCell.querySelector(".mc-name") ||
+              memberCell.querySelector(".metric-label") ||
+              memberCell.querySelector("div div");
+            if (nameNode) nameNode.textContent = member.name;
+
+            const existingBadge = memberCell.querySelector('[data-phone-missing-badge="true"]');
+            if (existingBadge) existingBadge.remove();
+            if (member.phoneMissing) {
+              const badge = document.createElement("span");
+              badge.setAttribute("data-phone-missing-badge", "true");
+              badge.textContent = "Phone missing";
+              badge.style.display = "inline-block";
+              badge.style.marginLeft = "8px";
+              badge.style.padding = "2px 6px";
+              badge.style.borderRadius = "999px";
+              badge.style.border = "1px solid var(--coral)";
+              badge.style.background = "rgba(240,112,85,0.12)";
+              badge.style.color = "var(--coral)";
+              badge.style.fontSize = "10px";
+              badge.style.letterSpacing = "0.04em";
+              badge.style.textTransform = "uppercase";
+              const parent = nameNode?.parentElement ?? memberCell;
+              parent.appendChild(badge);
+            }
+          }
+
+          if (tierCell) {
+            const tag = tierCell.querySelector(".tag");
+            if (tag) tag.textContent = member.tier;
+          }
+          if (recoveryCell) {
+            recoveryCell.textContent = member.recovery;
+            recoveryCell.style.color = Number(member.recovery) < 50 ? "var(--coral)" : "var(--lime)";
+          }
+          if (muscleCell) {
+            muscleCell.textContent = member.muscle;
+          }
+          if (sessionCell) {
+            sessionCell.textContent = member.session;
+          }
         });
       }
 
@@ -1343,12 +2131,19 @@ export async function DashboardPageView({
         wireHealthspanForm();
         wireProtocolForm();
         wireCoachMessageForm();
+        injectCoachPhoneEditor();
       }
-      wireMemberMessageReply();
+      if (role === "member") {
+        wireCarolTabs();
+        injectMemberRecoveryLogLink();
+        injectMemberUploadDataButton();
+        injectMemberSettingsButton();
+        injectMemberSettingsSidebarLink();
+        loadMemberMessages(initialMemberView === "messages");
+        wireMemberMessageReply();
+      }
     })();
   `;
-  const combinedScript = `${prototype.script}\n${bootstrapScript}`;
-  const enableLegacyInlineScript = false;
 
   return (
     <>
@@ -1381,20 +2176,21 @@ export async function DashboardPageView({
           Back
         </Link>
         <div style={{ width: 1, height: 14, background: "rgba(175,189,165,0.25)" }} />
-        <UserButton />
+        {clerkConfigured ? <UserButton /> : null}
       </div>
 
       <div dangerouslySetInnerHTML={{ __html: prototype.body }} />
-      <DashboardBootstrapClient payload={livePayload} initialMemberView={initialMemberView} />
-      {enableLegacyInlineScript ? (
-        <Script id="dashboard-bootstrap-script" strategy="afterInteractive">
-          {combinedScript}
-        </Script>
+      {prototype.script ? (
+        <script
+          // This script powers prototype view switching and date rendering.
+          dangerouslySetInnerHTML={{ __html: prototype.script }}
+        />
       ) : null}
+      <script dangerouslySetInnerHTML={{ __html: bootstrapScript }} />
     </>
   );
 }
 
 export default async function DashboardPage() {
-  return DashboardPageView({ initialSection: "dashboard" });
+  return <DashboardPageView route="dashboard" />;
 }
