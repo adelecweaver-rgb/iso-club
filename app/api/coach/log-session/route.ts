@@ -180,7 +180,7 @@ export async function POST(request: Request) {
     } else if (equipment.kind === "carol") {
       const rideTypeSource =
         extractedString("ride_type") ||
-        body.ride_type ??
+        (typeof body.ride_type === "string" ? body.ride_type : "") ||
         (protocolOrExercise || "REHIT");
       const insertResult = await context.supabase.from("carol_sessions").insert({
         member_id: memberId,
