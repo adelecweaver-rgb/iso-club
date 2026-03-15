@@ -273,8 +273,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     payload.role === "coach" ? "Head Coach" : "Premier",
   );
 
-  const memberId = payload.memberId || "";
-  if (!memberId) return payload;
+  const memberId = payload.memberId || "__missing_member__";
 
   const monthStart = new Date();
   monthStart.setDate(1);
@@ -293,6 +292,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     ouraRes,
     healthspanRes,
     recoveryRes,
+    manualRes,
     bookingRes,
     protocolRes,
     reportRes,
@@ -344,6 +344,12 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
       .gte("session_date", monthStartIso)
       .lt("session_date", monthEndIso),
     supabase
+      .from("manual_workout_sessions")
+      .select("equipment,session_date")
+      .eq("member_id", memberId)
+      .gte("session_date", monthStartIso)
+      .lt("session_date", monthEndIso),
+    supabase
       .from("bookings")
       .select("scheduled_at,session_type,title,status,duration_minutes")
       .eq("member_id", memberId)
@@ -389,6 +395,9 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
       : null;
   const recoveryRows = Array.isArray(recoveryRes.data)
     ? (recoveryRes.data as Array<Record<string, unknown>>)
+    : [];
+  const manualRows = Array.isArray(manualRes.data)
+    ? (manualRes.data as Array<Record<string, unknown>>)
     : [];
   const bookingRows = Array.isArray(bookingRes.data)
     ? (bookingRes.data as Array<Record<string, unknown>>)
@@ -449,17 +458,25 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     if (!modality) continue;
     modalityCounts[modality] = (modalityCounts[modality] ?? 0) + 1;
   }
-  const count = (keys: string[]) =>
+  const equipmentCounts: Record<string, number> = {};
+  for (const row of manualRows) {
+    const equipment = stringOr(row.equipment, "").toLowerCase();
+    if (!equipment) continue;
+    equipmentCounts[equipment] = (equipmentCounts[equipment] ?? 0) + 1;
+  }
+  const countModality = (keys: string[]) =>
     keys.reduce((sum, key) => sum + (modalityCounts[key] ?? 0), 0).toString();
+  const countEquipment = (keys: string[]) =>
+    keys.reduce((sum, key) => sum + (equipmentCounts[key] ?? 0), 0).toString();
   payload.recoveryCounts = {
-    infraredSauna: count(["infrared sauna", "sauna"]),
-    coldPlunge: count(["cold plunge", "cold"]),
-    nxpro: count(["nxpro"]),
-    compression: count(["compression", "compression boots"]),
-    vasper: count(["vasper"]),
-    katalyst: count(["katalyst"]),
-    proteus: count(["proteus"]),
-    quickboard: count(["quickboard"]),
+    infraredSauna: countModality(["infrared_sauna", "infrared sauna"]),
+    coldPlunge: countModality(["cold_plunge", "cold plunge"]),
+    nxpro: countModality(["nxpro"]),
+    compression: countModality(["compression_therapy", "compression"]),
+    vasper: countEquipment(["vasper"]),
+    katalyst: countEquipment(["katalyst"]),
+    proteus: countEquipment(["proteus"]),
+    quickboard: countEquipment(["quickboard"]),
   };
 
   payload.wearables = {
