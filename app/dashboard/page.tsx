@@ -11,9 +11,9 @@ type PrototypeParts = {
   script: string;
 };
 
-type Row = Record<string, unknown>;
-
-type DashboardLiveData = {
+type DashboardPayload = {
+  role: "member" | "coach";
+  memberId: string | null;
   displayName: string;
   initials: string;
   tier: string;
@@ -22,6 +22,61 @@ type DashboardLiveData = {
     arxOutput: string;
     leanMass: string;
     whoopRecovery: string;
+  };
+  healthspan: {
+    muscle: string;
+    cardio: string;
+    metabolic: string;
+    structural: string;
+    recovery: string;
+  };
+  carolHistory: Array<{ label: string; value: string }>;
+  arxHistory: Array<{ label: string; value: string }>;
+  scan: {
+    bodyFatPct: string;
+    weightLbs: string;
+    leanMassLbs: string;
+    headForwardIn: string;
+    shoulderForwardIn: string;
+    hipForwardIn: string;
+  };
+  recoveryCounts: {
+    infraredSauna: string;
+    coldPlunge: string;
+    nxpro: string;
+    compression: string;
+    vasper: string;
+    katalyst: string;
+    proteus: string;
+    quickboard: string;
+  };
+  wearables: {
+    whoopRecovery: string;
+    ouraReadiness: string;
+    hrvMs: string;
+    sleepHours: string;
+  };
+  protocol: {
+    name: string;
+    weekCurrent: string;
+    weekTotal: string;
+    sessions: Array<{ name: string; detail: string; duration: string; status: string }>;
+  };
+  bookings: Array<{ label: string; status: string }>;
+  reports: Array<{ title: string }>;
+  coach: {
+    todayCount: string;
+    lowRecoveryCount: string;
+    readyCount: string;
+    alerts: string[];
+    members: Array<{
+      name: string;
+      initials: string;
+      tier: string;
+      recovery: string;
+      muscle: string;
+      session: string;
+    }>;
   };
 };
 
@@ -56,45 +111,6 @@ async function loadPrototypeParts(): Promise<PrototypeParts> {
   }
 }
 
-function toStringValue(value: unknown): string | null {
-  if (typeof value === "string" && value.trim().length > 0) {
-    return value.trim();
-  }
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return String(value);
-  }
-  return null;
-}
-
-function toNumberValue(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function pickString(row: Row | null, keys: string[]): string | null {
-  if (!row) return null;
-  for (const key of keys) {
-    const value = toStringValue(row[key]);
-    if (value) return value;
-  }
-  return null;
-}
-
-function pickNumber(row: Row | null, keys: string[]): number | null {
-  if (!row) return null;
-  for (const key of keys) {
-    const value = toNumberValue(row[key]);
-    if (value !== null) return value;
-  }
-  return null;
-}
-
 function initialsFromName(name: string): string {
   const parts = name
     .split(" ")
@@ -105,63 +121,107 @@ function initialsFromName(name: string): string {
   return `${parts[0][0] ?? ""}${parts[1][0] ?? ""}`.toUpperCase();
 }
 
-async function queryOneByFilter(
-  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
-  table: string,
-  column: string,
-  value: string,
-): Promise<Row | null> {
-  const { data, error } = await supabase
-    .from(table)
-    .select("*")
-    .eq(column, value)
-    .limit(1);
-
-  if (error || !Array.isArray(data) || data.length === 0) {
-    return null;
-  }
-  return (data[0] as Row) ?? null;
+function stringOr(value: unknown, fallback: string): string {
+  if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
 }
 
-async function queryLatestRow(
-  supabase: NonNullable<Awaited<ReturnType<typeof createSupabaseServerClient>>>,
-  tableNames: string[],
-  filters: Array<{ column: string; value: string }>,
-): Promise<Row | null> {
-  const orderColumns = [
-    "session_date",
-    "performed_at",
-    "scan_date",
-    "recorded_at",
-    "created_at",
-    "updated_at",
-    "date",
-    "id",
-  ];
-
-  for (const table of tableNames) {
-    for (const filter of filters) {
-      for (const orderColumn of orderColumns) {
-        const { data, error } = await supabase
-          .from(table)
-          .select("*")
-          .eq(filter.column, filter.value)
-          .order(orderColumn, { ascending: false })
-          .limit(1);
-
-        if (!error && Array.isArray(data) && data.length > 0) {
-          return (data[0] as Row) ?? null;
-        }
-      }
-    }
+function numberOr(value: unknown, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
   }
-
-  return null;
+  return fallback;
 }
 
-async function loadDashboardLiveData(
-  userId: string,
-): Promise<{ role: "member" | "coach"; data: DashboardLiveData }> {
+function fmtDate(value: unknown): string {
+  if (typeof value !== "string" || !value) return "Recent";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recent";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "2-digit",
+  });
+}
+
+function formatDateForLabel(value: unknown): string {
+  if (typeof value !== "string" || !value) return "Recent";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recent";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function makeDefaultPayload(clerkName: string): DashboardPayload {
+  return {
+    role: "member",
+    memberId: null,
+    displayName: clerkName || "Member",
+    initials: initialsFromName(clerkName || "Member"),
+    tier: "Premier",
+    metrics: {
+      carolFitness: "36.5",
+      arxOutput: "699",
+      leanMass: "159.6",
+      whoopRecovery: "74",
+    },
+    healthspan: {
+      muscle: "78",
+      cardio: "65",
+      metabolic: "71",
+      structural: "58",
+      recovery: "82",
+    },
+    carolHistory: [],
+    arxHistory: [],
+    scan: {
+      bodyFatPct: "29.17",
+      weightLbs: "225.3",
+      leanMassLbs: "159.6",
+      headForwardIn: "5.0",
+      shoulderForwardIn: "3.5",
+      hipForwardIn: "1.7",
+    },
+    recoveryCounts: {
+      infraredSauna: "8",
+      coldPlunge: "6",
+      nxpro: "4",
+      compression: "5",
+      vasper: "4",
+      katalyst: "2",
+      proteus: "3",
+      quickboard: "5",
+    },
+    wearables: {
+      whoopRecovery: "74",
+      ouraReadiness: "81",
+      hrvMs: "68",
+      sleepHours: "7.4",
+    },
+    protocol: {
+      name: "Strength Foundation Track",
+      weekCurrent: "7",
+      weekTotal: "12",
+      sessions: [],
+    },
+    bookings: [],
+    reports: [],
+    coach: {
+      todayCount: "0",
+      lowRecoveryCount: "0",
+      readyCount: "0",
+      alerts: [],
+      members: [],
+    },
+  };
+}
+
+async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> {
   const user = await currentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? "";
   const clerkName =
@@ -169,133 +229,408 @@ async function loadDashboardLiveData(
     user?.username ||
     "Member";
 
+  const payload = makeDefaultPayload(clerkName);
   const supabase = await createSupabaseServerClient();
-  let profileRow: Row | null = null;
+  if (!supabase) return payload;
 
-  if (supabase) {
-    const profileTables = ["members", "profiles", "member_profiles"];
-    const profileFilters = [
-      { column: "clerk_user_id", value: userId },
-      { column: "user_id", value: userId },
-      { column: "auth_user_id", value: userId },
-      ...(email ? [{ column: "email", value: email }] : []),
-    ];
-
-    for (const table of profileTables) {
-      for (const filter of profileFilters) {
-        profileRow = await queryOneByFilter(
-          supabase,
-          table,
-          filter.column,
-          filter.value,
-        );
-        if (profileRow) break;
-      }
-      if (profileRow) break;
+  let userRow: Record<string, unknown> | null = null;
+  const userByClerk = await supabase
+    .from("users")
+    .select("*")
+    .eq("clerk_id", userId)
+    .limit(1);
+  if (!userByClerk.error && userByClerk.data && userByClerk.data.length > 0) {
+    userRow = userByClerk.data[0] as Record<string, unknown>;
+  } else if (email) {
+    const userByEmail = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email)
+      .limit(1);
+    if (!userByEmail.error && userByEmail.data && userByEmail.data.length > 0) {
+      userRow = userByEmail.data[0] as Record<string, unknown>;
     }
   }
 
-  const profileRole = pickString(profileRow, ["role", "account_role", "user_role"]);
-  const metadataRole = toStringValue(
+  const metadataRole = stringOr(
     (user?.publicMetadata as Record<string, unknown> | undefined)?.role ??
-      (user?.unsafeMetadata as Record<string, unknown> | undefined)?.role,
+      (user?.unsafeMetadata as Record<string, unknown> | undefined)?.role ??
+      "",
+    "",
+  );
+  const userRole = stringOr(userRow?.role, "").toLowerCase();
+  const isCoach =
+    userRole.includes("coach") ||
+    metadataRole.toLowerCase().includes("coach") ||
+    email.toLowerCase().includes("dustin");
+  payload.role = isCoach ? "coach" : "member";
+
+  payload.memberId = stringOr(userRow?.id, "");
+  payload.displayName = stringOr(userRow?.full_name, clerkName);
+  payload.initials = initialsFromName(payload.displayName);
+  payload.tier = stringOr(
+    userRow?.membership_tier,
+    payload.role === "coach" ? "Head Coach" : "Premier",
   );
 
-  const isCoach =
-    [profileRole, metadataRole]
-      .filter(Boolean)
-      .some((role) => role?.toLowerCase().includes("coach")) ||
-    email.toLowerCase().includes("dustin");
+  const memberId = payload.memberId || "";
+  if (!memberId) return payload;
 
-  const role: "member" | "coach" = isCoach ? "coach" : "member";
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const monthStartIso = monthStart.toISOString().slice(0, 10);
 
-  const displayName =
-    pickString(profileRow, ["full_name", "name", "member_name"]) ??
-    (role === "coach" ? clerkName || "Dustin Weaver" : clerkName || "Member");
-  const tier =
-    pickString(profileRow, ["tier", "membership_tier"]) ??
-    (role === "coach" ? "Head Coach" : "Premier");
-  const initials = initialsFromName(displayName);
+  const monthEnd = new Date(monthStart);
+  monthEnd.setMonth(monthEnd.getMonth() + 1);
+  const monthEndIso = monthEnd.toISOString().slice(0, 10);
 
-  const profileId = pickString(profileRow, ["id", "member_id", "profile_id"]);
-  const tableFilters = [
-    ...(profileId
-      ? [
-          { column: "member_id", value: profileId },
-          { column: "profile_id", value: profileId },
-        ]
-      : []),
-    { column: "clerk_user_id", value: userId },
-    { column: "user_id", value: userId },
-    ...(email
-      ? [
-          { column: "member_email", value: email },
-          { column: "email", value: email },
-        ]
-      : []),
-  ];
+  const [
+    carolRes,
+    arxRes,
+    scanRes,
+    whoopRes,
+    ouraRes,
+    healthspanRes,
+    recoveryRes,
+    bookingRes,
+    protocolRes,
+    reportRes,
+  ] = await Promise.all([
+    supabase
+      .from("carol_sessions")
+      .select("session_date,ride_number,fitness_score,peak_power_watts,calories,max_hr")
+      .eq("member_id", memberId)
+      .order("session_date", { ascending: false })
+      .limit(6),
+    supabase
+      .from("arx_sessions")
+      .select("session_date,exercise,output,concentric_max,eccentric_max")
+      .eq("member_id", memberId)
+      .order("session_date", { ascending: false })
+      .limit(6),
+    supabase
+      .from("fit3d_scans")
+      .select(
+        "scan_date,body_fat_pct,weight_lbs,lean_mass_lbs,body_shape_rating,posture_head_forward_in,posture_shoulder_forward_in,posture_hip_forward_in",
+      )
+      .eq("member_id", memberId)
+      .order("scan_date", { ascending: false })
+      .limit(1),
+    supabase
+      .from("wearable_data")
+      .select("recorded_date,recovery_score,hrv_ms,resting_hr,sleep_duration_hrs,strain_score")
+      .eq("member_id", memberId)
+      .ilike("device_type", "%whoop%")
+      .order("recorded_date", { ascending: false })
+      .limit(1),
+    supabase
+      .from("wearable_data")
+      .select("recorded_date,readiness_score,sleep_duration_hrs,deep_sleep_hrs,rem_sleep_hrs,spo2_pct")
+      .eq("member_id", memberId)
+      .ilike("device_type", "%oura%")
+      .order("recorded_date", { ascending: false })
+      .limit(1),
+    supabase
+      .from("healthspan_scores")
+      .select("muscle_score,cardio_score,metabolic_score,structural_score,recovery_score,overall_score,recorded_at")
+      .eq("member_id", memberId)
+      .order("recorded_at", { ascending: false })
+      .limit(1),
+    supabase
+      .from("recovery_sessions")
+      .select("modality,session_date")
+      .eq("member_id", memberId)
+      .gte("session_date", monthStartIso)
+      .lt("session_date", monthEndIso),
+    supabase
+      .from("bookings")
+      .select("scheduled_at,session_type,title,status,duration_minutes")
+      .eq("member_id", memberId)
+      .gte("scheduled_at", new Date().toISOString())
+      .order("scheduled_at", { ascending: true })
+      .limit(3),
+    supabase
+      .from("protocols")
+      .select("id,name,week_current,week_total,primary_goal,is_active,updated_at")
+      .eq("member_id", memberId)
+      .eq("is_active", true)
+      .order("updated_at", { ascending: false })
+      .limit(1),
+    supabase
+      .from("reports")
+      .select("title,created_at")
+      .eq("member_id", memberId)
+      .order("created_at", { ascending: false })
+      .limit(3),
+  ]);
 
-  let carolRow: Row | null = null;
-  let arxRow: Row | null = null;
-  let scanRow: Row | null = null;
-  let wearableRow: Row | null = null;
+  const carolRows = Array.isArray(carolRes.data)
+    ? (carolRes.data as Array<Record<string, unknown>>)
+    : [];
+  const arxRows = Array.isArray(arxRes.data)
+    ? (arxRes.data as Array<Record<string, unknown>>)
+    : [];
+  const scanRow =
+    Array.isArray(scanRes.data) && scanRes.data.length > 0
+      ? (scanRes.data[0] as Record<string, unknown>)
+      : null;
+  const whoopRow =
+    Array.isArray(whoopRes.data) && whoopRes.data.length > 0
+      ? (whoopRes.data[0] as Record<string, unknown>)
+      : null;
+  const ouraRow =
+    Array.isArray(ouraRes.data) && ouraRes.data.length > 0
+      ? (ouraRes.data[0] as Record<string, unknown>)
+      : null;
+  const healthRow =
+    Array.isArray(healthspanRes.data) && healthspanRes.data.length > 0
+      ? (healthspanRes.data[0] as Record<string, unknown>)
+      : null;
+  const recoveryRows = Array.isArray(recoveryRes.data)
+    ? (recoveryRes.data as Array<Record<string, unknown>>)
+    : [];
+  const bookingRows = Array.isArray(bookingRes.data)
+    ? (bookingRes.data as Array<Record<string, unknown>>)
+    : [];
+  const protocolRow =
+    Array.isArray(protocolRes.data) && protocolRes.data.length > 0
+      ? (protocolRes.data[0] as Record<string, unknown>)
+      : null;
+  const reportRows = Array.isArray(reportRes.data)
+    ? (reportRes.data as Array<Record<string, unknown>>)
+    : [];
 
-  if (supabase) {
-    carolRow = await queryLatestRow(supabase, ["carol_sessions", "carol_rides"], tableFilters);
-    arxRow = await queryLatestRow(supabase, ["arx_sessions"], tableFilters);
-    scanRow = await queryLatestRow(supabase, ["fit3d_scans", "body_scans"], tableFilters);
-    wearableRow = await queryLatestRow(
-      supabase,
-      ["wearable_data", "wearables_daily", "wearable_metrics"],
-      tableFilters,
-    );
+  const legPress = arxRows.find((row) =>
+    stringOr(row.exercise, "").toLowerCase().includes("leg press"),
+  );
+  const arxLatest = legPress ?? arxRows[0] ?? null;
+  const carolLatest = carolRows[0] ?? null;
+
+  payload.metrics.carolFitness = numberOr(carolLatest?.fitness_score, 36.5).toFixed(1);
+  payload.metrics.arxOutput = Math.round(
+    numberOr(arxLatest?.concentric_max, numberOr(arxLatest?.output, 699)),
+  ).toString();
+  payload.metrics.leanMass = numberOr(scanRow?.lean_mass_lbs, 159.6).toFixed(1);
+  payload.metrics.whoopRecovery = Math.round(
+    numberOr(whoopRow?.recovery_score, 74),
+  ).toString();
+
+  payload.healthspan = {
+    muscle: Math.round(numberOr(healthRow?.muscle_score, 78)).toString(),
+    cardio: Math.round(numberOr(healthRow?.cardio_score, 65)).toString(),
+    metabolic: Math.round(numberOr(healthRow?.metabolic_score, 71)).toString(),
+    structural: Math.round(numberOr(healthRow?.structural_score, 58)).toString(),
+    recovery: Math.round(numberOr(healthRow?.recovery_score, 82)).toString(),
+  };
+
+  payload.carolHistory = carolRows.slice(0, 3).map((row) => ({
+    label: `${fmtDate(row.session_date)} · Ride #${stringOr(row.ride_number, "—")}`,
+    value: numberOr(row.fitness_score, 0).toFixed(1),
+  }));
+
+  payload.arxHistory = arxRows.slice(0, 3).map((row) => ({
+    label: `${fmtDate(row.session_date)} · ${stringOr(row.exercise, "ARX exercise")}`,
+    value: Math.round(numberOr(row.concentric_max, numberOr(row.output, 0))).toString(),
+  }));
+
+  payload.scan = {
+    bodyFatPct: numberOr(scanRow?.body_fat_pct, 29.17).toFixed(2),
+    weightLbs: numberOr(scanRow?.weight_lbs, 225.3).toFixed(1),
+    leanMassLbs: numberOr(scanRow?.lean_mass_lbs, 159.6).toFixed(1),
+    headForwardIn: numberOr(scanRow?.posture_head_forward_in, 5.0).toFixed(1),
+    shoulderForwardIn: numberOr(scanRow?.posture_shoulder_forward_in, 3.5).toFixed(1),
+    hipForwardIn: numberOr(scanRow?.posture_hip_forward_in, 1.7).toFixed(1),
+  };
+
+  const modalityCounts: Record<string, number> = {};
+  for (const row of recoveryRows) {
+    const modality = stringOr(row.modality, "").toLowerCase();
+    if (!modality) continue;
+    modalityCounts[modality] = (modalityCounts[modality] ?? 0) + 1;
+  }
+  const count = (keys: string[]) =>
+    keys.reduce((sum, key) => sum + (modalityCounts[key] ?? 0), 0).toString();
+  payload.recoveryCounts = {
+    infraredSauna: count(["infrared sauna", "sauna"]),
+    coldPlunge: count(["cold plunge", "cold"]),
+    nxpro: count(["nxpro"]),
+    compression: count(["compression", "compression boots"]),
+    vasper: count(["vasper"]),
+    katalyst: count(["katalyst"]),
+    proteus: count(["proteus"]),
+    quickboard: count(["quickboard"]),
+  };
+
+  payload.wearables = {
+    whoopRecovery: Math.round(numberOr(whoopRow?.recovery_score, 74)).toString(),
+    ouraReadiness: Math.round(numberOr(ouraRow?.readiness_score, 81)).toString(),
+    hrvMs: Math.round(numberOr(whoopRow?.hrv_ms, 68)).toString(),
+    sleepHours: numberOr(
+      whoopRow?.sleep_duration_hrs,
+      numberOr(ouraRow?.sleep_duration_hrs, 7.4),
+    ).toFixed(1),
+  };
+
+  payload.bookings = bookingRows.slice(0, 3).map((row) => {
+    const scheduledAt = stringOr(row.scheduled_at, "");
+    const dateLabel = formatDateForLabel(scheduledAt);
+    const title =
+      stringOr(row.title, "") || stringOr(row.session_type, "Session");
+    const status = stringOr(row.status, "scheduled");
+    return {
+      label: `${dateLabel} · ${title}`,
+      status,
+    };
+  });
+
+  payload.reports = reportRows.slice(0, 3).map((row) => ({
+    title: stringOr(row.title, "Report"),
+  }));
+
+  if (protocolRow) {
+    payload.protocol.name = stringOr(protocolRow.name, payload.protocol.name);
+    payload.protocol.weekCurrent = Math.round(
+      numberOr(protocolRow.week_current, Number(payload.protocol.weekCurrent)),
+    ).toString();
+    payload.protocol.weekTotal = Math.round(
+      numberOr(protocolRow.week_total, Number(payload.protocol.weekTotal)),
+    ).toString();
+
+    const protocolId = stringOr(protocolRow.id, "");
+    if (protocolId) {
+      const protocolSessionsRes = await supabase
+        .from("protocol_sessions")
+        .select("name,description,duration_minutes,status,order_index")
+        .eq("protocol_id", protocolId)
+        .order("order_index", { ascending: true })
+        .limit(5);
+      if (!protocolSessionsRes.error && Array.isArray(protocolSessionsRes.data)) {
+        payload.protocol.sessions = (
+          protocolSessionsRes.data as Array<Record<string, unknown>>
+        ).map((row) => ({
+          name: stringOr(row.name, "Session"),
+          detail: stringOr(row.description, ""),
+          duration: Math.round(numberOr(row.duration_minutes, 20)).toString(),
+          status: stringOr(row.status, "upcoming"),
+        }));
+      }
+    }
   }
 
-  const carolFitness = pickNumber(carolRow, [
-    "fitness_score",
-    "carol_fitness_score",
-    "score",
-  ]);
-  const arxOutput = pickNumber(arxRow, [
-    "leg_press_output",
-    "concentric_max",
-    "max_output",
-    "output",
-  ]);
-  const leanMass = pickNumber(scanRow, [
-    "lean_mass_lbs",
-    "lean_mass",
-    "lean_mass_lb",
-    "lean_mass_kg",
-  ]);
-  const recovery = pickNumber(wearableRow, [
-    "whoop_recovery",
-    "recovery_score",
-    "recovery",
-  ]);
+  if (payload.role === "coach") {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(todayStart.getDate() + 1);
 
-  const leanMassDisplay =
-    leanMass !== null
-      ? `${leanMass > 110 ? leanMass.toFixed(1) : (leanMass * 2.20462).toFixed(1)}`
-      : "159.6";
+    const bookingsTodayRes = await supabase
+      .from("bookings")
+      .select("member_id,scheduled_at,session_type,title,status")
+      .gte("scheduled_at", todayStart.toISOString())
+      .lt("scheduled_at", tomorrowStart.toISOString())
+      .order("scheduled_at", { ascending: true })
+      .limit(12);
 
-  return {
-    role,
-    data: {
-      displayName,
-      initials,
-      tier,
-      metrics: {
-        carolFitness:
-          carolFitness !== null ? carolFitness.toFixed(1) : "36.5",
-        arxOutput:
-          arxOutput !== null ? Math.round(arxOutput).toString() : "699",
-        leanMass: leanMassDisplay,
-        whoopRecovery:
-          recovery !== null ? Math.round(recovery).toString() : "74",
-      },
-    },
-  };
+    const bookingsToday = Array.isArray(bookingsTodayRes.data)
+      ? (bookingsTodayRes.data as Array<Record<string, unknown>>)
+      : [];
+    const memberIds = Array.from(
+      new Set(
+        bookingsToday
+          .map((row) => stringOr(row.member_id, ""))
+          .filter((id) => id.length > 0),
+      ),
+    );
+
+    const [usersRes, coachWearableRes, coachHealthRes] = memberIds.length
+      ? await Promise.all([
+          supabase
+            .from("users")
+            .select("id,full_name,membership_tier")
+            .in("id", memberIds),
+          supabase
+            .from("wearable_data")
+            .select("member_id,recovery_score,readiness_score,recorded_date")
+            .in("member_id", memberIds)
+            .order("recorded_date", { ascending: false }),
+          supabase
+            .from("healthspan_scores")
+            .select("member_id,muscle_score,recorded_at")
+            .in("member_id", memberIds)
+            .order("recorded_at", { ascending: false }),
+        ])
+      : [null, null, null];
+
+    const users = usersRes && Array.isArray(usersRes.data)
+      ? (usersRes.data as Array<Record<string, unknown>>)
+      : [];
+    const wearableRows = coachWearableRes && Array.isArray(coachWearableRes.data)
+      ? (coachWearableRes.data as Array<Record<string, unknown>>)
+      : [];
+    const coachHealthRows = coachHealthRes && Array.isArray(coachHealthRes.data)
+      ? (coachHealthRes.data as Array<Record<string, unknown>>)
+      : [];
+
+    const latestWearableByMember = new Map<string, Record<string, unknown>>();
+    for (const row of wearableRows) {
+      const id = stringOr(row.member_id, "");
+      if (!id || latestWearableByMember.has(id)) continue;
+      latestWearableByMember.set(id, row);
+    }
+    const latestHealthByMember = new Map<string, Record<string, unknown>>();
+    for (const row of coachHealthRows) {
+      const id = stringOr(row.member_id, "");
+      if (!id || latestHealthByMember.has(id)) continue;
+      latestHealthByMember.set(id, row);
+    }
+
+    const members = users.map((member) => {
+      const id = stringOr(member.id, "");
+      const wearable = latestWearableByMember.get(id);
+      const health = latestHealthByMember.get(id);
+      const booking = bookingsToday.find((row) => stringOr(row.member_id, "") === id);
+      const name = stringOr(member.full_name, "Member");
+      const sessionName =
+        stringOr(booking?.title, "") ||
+        stringOr(booking?.session_type, "Session");
+      const scheduledAt = stringOr(booking?.scheduled_at, "");
+      const timeLabel = scheduledAt
+        ? new Date(scheduledAt).toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+          })
+        : "Today";
+      return {
+        name,
+        initials: initialsFromName(name),
+        tier: stringOr(member.membership_tier, "Member"),
+        recovery: Math.round(
+          numberOr(wearable?.recovery_score, numberOr(wearable?.readiness_score, 60)),
+        ).toString(),
+        muscle: Math.round(numberOr(health?.muscle_score, 70)).toString(),
+        session: `${timeLabel} · ${sessionName}`,
+      };
+    });
+
+    const lowRecoveryCount = members.filter((m) => Number(m.recovery) < 50).length;
+    const readyCount = members.filter((m) => Number(m.recovery) >= 70).length;
+    payload.coach = {
+      todayCount: members.length.toString(),
+      lowRecoveryCount: lowRecoveryCount.toString(),
+      readyCount: readyCount.toString(),
+      alerts: members
+        .filter((m) => Number(m.recovery) < 50)
+        .slice(0, 3)
+        .map(
+          (m) =>
+            `⚠ ${m.name} — recovery ${m.recovery}. Scheduled ${m.session}. Review before training.`,
+        ),
+      members: members.slice(0, 6),
+    };
+  }
+
+  return payload;
 }
 
 export default async function DashboardPage() {
@@ -306,13 +641,13 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const live = await loadDashboardLiveData(userId);
-  const payload = JSON.stringify(live).replace(/</g, "\\u003c");
+  const livePayload = await loadDashboardLiveData(userId);
+  const payload = JSON.stringify(livePayload).replace(/</g, "\\u003c");
   const bootstrapScript = `
     (() => {
       const payload = ${payload};
       const role = payload.role === "coach" ? "coach" : "member";
-      const data = payload.data || {};
+      const data = payload || {};
 
       const firstName = (name) => {
         if (!name || typeof name !== "string") return "Member";
@@ -338,6 +673,50 @@ export default async function DashboardPage() {
         if (valueEl) valueEl.textContent = String(value);
       };
 
+      const findCard = (titleFragment) => {
+        const cards = Array.from(document.querySelectorAll(".card"));
+        return cards.find((card) => {
+          const title = card.querySelector(".card-title");
+          const text = title && title.textContent ? title.textContent.toLowerCase() : "";
+          return text.includes(titleFragment.toLowerCase());
+        });
+      };
+
+      const setMetricInCard = (cardTitle, labelFragment, value) => {
+        if (!value) return;
+        const card = findCard(cardTitle);
+        if (!card) return;
+        const rows = Array.from(card.querySelectorAll(".metric-row"));
+        const row = rows.find((r) => {
+          const l = r.querySelector(".metric-label");
+          const t = l && l.textContent ? l.textContent.toLowerCase() : "";
+          return t.includes(labelFragment.toLowerCase());
+        });
+        if (!row) return;
+        const val = row.querySelector(".metric-val");
+        if (val) {
+          val.textContent = String(value);
+        } else {
+          const current = row.lastElementChild;
+          if (current) current.textContent = String(value);
+        }
+      };
+
+      const fillRows = (cardTitle, rows) => {
+        if (!rows || !rows.length) return;
+        const card = findCard(cardTitle);
+        if (!card) return;
+        const elements = Array.from(card.querySelectorAll(".metric-row"));
+        rows.forEach((row, index) => {
+          const el = elements[index];
+          if (!el) return;
+          const label = el.querySelector(".metric-label");
+          const value = el.querySelector(".metric-val");
+          if (label) label.textContent = row.label;
+          if (value) value.textContent = row.value;
+        });
+      };
+
       if (typeof setMode === "function") {
         setMode(role);
       }
@@ -352,6 +731,142 @@ export default async function DashboardPage() {
         setStatCardValue("ARX leg press output", data.metrics.arxOutput);
         setStatCardValue("Lean mass", data.metrics.leanMass);
         setStatCardValue("Whoop recovery", data.metrics.whoopRecovery);
+      }
+
+      if (data.healthspan) {
+        setMetricInCard("Healthspan OS", "Muscle", data.healthspan.muscle);
+        setMetricInCard("Healthspan OS", "Cardio", data.healthspan.cardio);
+        setMetricInCard("Healthspan OS", "Metabolic", data.healthspan.metabolic);
+        setMetricInCard("Healthspan OS", "Structural", data.healthspan.structural);
+        setMetricInCard("Healthspan OS", "Recovery", data.healthspan.recovery);
+      }
+
+      fillRows("REHIT ride history", data.carolHistory || []);
+      fillRows("Exercise history", data.arxHistory || []);
+
+      if (data.scan) {
+        setMetricInCard("Body composition", "Body fat", data.scan.bodyFatPct);
+        setMetricInCard("Body composition", "Weight", data.scan.weightLbs);
+        setMetricInCard("Body composition", "Lean mass", data.scan.leanMassLbs);
+        setMetricInCard("Posture analysis", "Head forward", data.scan.headForwardIn + "\"");
+        setMetricInCard("Posture analysis", "Shoulder forward", data.scan.shoulderForwardIn + "\"");
+        setMetricInCard("Posture analysis", "Hip forward", data.scan.hipForwardIn + "\"");
+      }
+
+      if (data.recoveryCounts) {
+        setMetricInCard("Recovery sessions", "Infrared sauna", data.recoveryCounts.infraredSauna);
+        setMetricInCard("Recovery sessions", "Cold plunge", data.recoveryCounts.coldPlunge);
+        setMetricInCard("Recovery sessions", "NxPro", data.recoveryCounts.nxpro);
+        setMetricInCard("Recovery sessions", "Compression", data.recoveryCounts.compression);
+        setMetricInCard("Other sessions", "Vasper", data.recoveryCounts.vasper);
+        setMetricInCard("Other sessions", "Katalyst", data.recoveryCounts.katalyst);
+        setMetricInCard("Other sessions", "Proteus", data.recoveryCounts.proteus);
+        setMetricInCard("Other sessions", "Quickboard", data.recoveryCounts.quickboard);
+      }
+
+      if (data.wearables) {
+        setMetricInCard("Today's data", "Whoop recovery", data.wearables.whoopRecovery);
+        setMetricInCard("Today's data", "Oura readiness", data.wearables.ouraReadiness);
+        setMetricInCard("Today's data", "HRV", data.wearables.hrvMs + "ms");
+        setMetricInCard("Today's data", "Sleep", data.wearables.sleepHours + "h");
+      }
+
+      if (data.protocol) {
+        const track = document.querySelector("#view-dashboard .track-name");
+        if (track) track.textContent = data.protocol.name;
+        const trackMeta = document.querySelector("#view-dashboard .track-meta");
+        if (trackMeta) {
+          trackMeta.textContent =
+            "Prescribed by Dustin · Week " +
+            data.protocol.weekCurrent +
+            " of " +
+            data.protocol.weekTotal +
+            " · 20 min sessions";
+        }
+        const sessions = Array.from(
+          document.querySelectorAll("#view-dashboard .session-item"),
+        );
+        (data.protocol.sessions || []).forEach((session, index) => {
+          const row = sessions[index];
+          if (!row) return;
+          const name = row.querySelector(".s-name");
+          const detail = row.querySelector(".s-detail");
+          const dur = row.querySelector(".s-dur");
+          if (name) name.textContent = session.name;
+          if (detail) detail.textContent = session.detail || "";
+          if (dur) dur.textContent = (session.duration || "20") + " min";
+        });
+      }
+
+      if (Array.isArray(data.bookings) && data.bookings.length) {
+        const card = findCard("Upcoming");
+        if (card) {
+          const rows = Array.from(card.querySelectorAll(".metric-row"));
+          data.bookings.forEach((booking, index) => {
+            const row = rows[index];
+            if (!row) return;
+            const label = row.querySelector(".metric-label");
+            if (label) label.textContent = booking.label;
+            const tag = row.querySelector(".tag");
+            if (tag) tag.textContent = booking.status;
+          });
+        }
+      }
+
+      if (Array.isArray(data.reports) && data.reports.length) {
+        const card = findCard("Reports from Dustin");
+        if (card) {
+          const rows = Array.from(card.querySelectorAll(".metric-row"));
+          data.reports.forEach((report, index) => {
+            const row = rows[index];
+            if (!row) return;
+            const label = row.querySelector(".metric-label");
+            if (label) label.textContent = report.title;
+          });
+        }
+      }
+
+      if (role === "coach" && data.coach) {
+        const cmStats = Array.from(
+          document.querySelectorAll("#coach-morning .cm-stats .stat-val"),
+        );
+        if (cmStats[0]) cmStats[0].textContent = data.coach.todayCount || "0";
+        if (cmStats[1]) cmStats[1].textContent = data.coach.lowRecoveryCount || "0";
+        if (cmStats[2]) cmStats[2].textContent = data.coach.readyCount || "0";
+
+        const alerts = Array.from(document.querySelectorAll("#coach-morning .alert"));
+        (data.coach.alerts || []).forEach((alert, index) => {
+          if (alerts[index]) alerts[index].textContent = alert;
+        });
+
+        const cards = Array.from(
+          document.querySelectorAll("#coach-morning .member-card"),
+        );
+        (data.coach.members || []).forEach((member, index) => {
+          const card = cards[index];
+          if (!card) return;
+          const av = card.querySelector(".mc-av");
+          const name = card.querySelector(".mc-name");
+          const tier = card.querySelector(".card-sub");
+          const score = card.querySelector(".mc-score");
+          const rows = card.querySelectorAll(".mc-row");
+          if (av) av.textContent = member.initials;
+          if (name) name.textContent = member.name;
+          if (tier) tier.textContent = member.tier;
+          if (score) score.textContent = member.recovery;
+          if (rows[0]) rows[0].lastElementChild.textContent = member.session;
+          if (rows[1]) rows[1].lastElementChild.textContent = member.muscle;
+        });
+
+        const allRows = Array.from(document.querySelectorAll("#coach-members .metric-row"));
+        (data.coach.members || []).forEach((member, index) => {
+          const row = allRows[index];
+          if (!row) return;
+          const label = row.querySelector(".metric-label");
+          const value = row.querySelector(".metric-val");
+          if (label) label.textContent = member.name + " · " + member.tier;
+          if (value) value.textContent = "Recovery " + member.recovery;
+        });
       }
     })();
   `;
