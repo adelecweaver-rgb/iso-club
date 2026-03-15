@@ -14,7 +14,7 @@ const withClerk = clerkMiddleware(async (auth, req) => {
   }
 });
 
-const withoutClerk = (_request: NextRequest) => NextResponse.next();
+const withoutClerk = () => NextResponse.next();
 
 export default isClerkConfigured() ? withClerk : withoutClerk;
 
