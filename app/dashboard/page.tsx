@@ -1050,6 +1050,22 @@ export async function DashboardPageView({
         header.appendChild(link);
       };
 
+      const injectMemberUploadDataButton = () => {
+        const topbarRight = document.querySelector(".topbar-right");
+        if (!topbarRight) return;
+        if (document.getElementById("member-upload-data-link")) return;
+
+        const link = document.createElement("a");
+        link.id = "member-upload-data-link";
+        link.href = "/dashboard/upload";
+        link.textContent = "Upload Data";
+        link.className = "btn btn-sm";
+        link.style.textDecoration = "none";
+        link.style.display = "inline-flex";
+        link.style.alignItems = "center";
+        topbarRight.insertBefore(link, topbarRight.firstChild);
+      };
+
       if (typeof setMode === "function") {
         setMode(role);
       }
@@ -1211,6 +1227,7 @@ export async function DashboardPageView({
       }
       if (role === "member") {
         injectMemberRecoveryLogLink();
+        injectMemberUploadDataButton();
       }
       wireMemberMessageReply();
     })();

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getActorContext, isCoachRole } from "@/lib/server/actor";
+import { getActorContext } from "@/lib/server/actor";
 
 type SupportedMachine =
   | "arx"
@@ -7,6 +7,7 @@ type SupportedMachine =
   | "fit3d"
   | "whoop"
   | "oura"
+  | "other_wearable"
   | "vasper"
   | "katalyst"
   | "proteus"
@@ -24,6 +25,9 @@ function normalizeMachine(value: string): SupportedMachine | null {
   if (normalized === "fit3d" || normalized === "fit 3d") return "fit3d";
   if (normalized === "whoop") return "whoop";
   if (normalized === "oura") return "oura";
+  if (normalized === "other_wearable" || normalized === "wearable" || normalized === "other wearable") {
+    return "other_wearable";
+  }
   if (normalized === "vasper") return "vasper";
   if (normalized === "katalyst") return "katalyst";
   if (normalized === "proteus") return "proteus";
@@ -145,6 +149,28 @@ function promptForMachine(machine: SupportedMachine): string {
     ].join("\n");
   }
 
+  if (machine === "other_wearable") {
+    return [
+      "This image is from a wearable app screen.",
+      "Extract all visible values and return ONLY valid JSON with this exact shape:",
+      "{",
+      '  "device_name": string|null,',
+      '  "recovery_score": number|null,',
+      '  "readiness_score": number|null,',
+      '  "hrv_ms": number|null,',
+      '  "resting_hr": number|null,',
+      '  "sleep_score": number|null,',
+      '  "sleep_duration_hrs": number|null,',
+      '  "deep_sleep_hrs": number|null,',
+      '  "rem_sleep_hrs": number|null,',
+      '  "strain_score": number|null,',
+      '  "spo2_pct": number|null,',
+      '  "body_temp_deviation": string|null',
+      "}",
+      "If a field is not visible, set it to null. Return JSON only.",
+    ].join("\n");
+  }
+
   if (machine === "infrared_sauna" || machine === "cold_plunge" || machine === "compression") {
     return [
       `This image is from a ${machine.replace("_", " ")} recovery session display.`,
@@ -188,12 +214,6 @@ export async function POST(request: Request) {
     const { context, error } = await getActorContext();
     if (!context) {
       return NextResponse.json({ success: false, error: error ?? "Unauthorized." }, { status: 401 });
-    }
-    if (!isCoachRole(context.role)) {
-      return NextResponse.json(
-        { success: false, error: "Only coach/staff accounts can extract machine photo data." },
-        { status: 403 },
-      );
     }
 
     const anthropicKey = process.env.ANTHROPIC_KEY ?? process.env.ANTHROPIC_API_KEY;
