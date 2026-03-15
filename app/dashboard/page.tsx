@@ -1242,13 +1242,13 @@ export async function DashboardPageView({
           const preview = latest && latest.body ? latest.body : "No messages yet";
           const unread = Number(memberMessagesState.unreadCount || 0);
           refs.inboxList.innerHTML = [
-            `<div class="msg-thread ${unread > 0 ? "unread" : ""}" style="cursor:default">`,
+            '<div class="msg-thread ' + (unread > 0 ? "unread" : "") + '" style="cursor:default">',
             '  <div class="msg-av" style="background:var(--amber-dim);color:var(--amber)">D</div>',
             '  <div style="flex:1;min-width:0">',
-            `    <div class="msg-from">${memberMessagesState.coachName || "Dustin · Coach"}</div>`,
-            `    <div class="msg-preview">${String(preview).slice(0, 56)}</div>`,
+            '    <div class="msg-from">' + (memberMessagesState.coachName || "Dustin · Coach") + "</div>",
+            '    <div class="msg-preview">' + String(preview).slice(0, 56) + "</div>",
             "  </div>",
-            `  <div class="msg-time">${latest ? formatMessageTime(latest.created_at) : ""}</div>`,
+            '  <div class="msg-time">' + (latest ? formatMessageTime(latest.created_at) : "") + "</div>",
             "</div>",
           ].join("");
         }
@@ -1271,13 +1271,13 @@ export async function DashboardPageView({
 
               const bubble = document.createElement("div");
               bubble.style.background = outbound ? "rgba(201,240,85,0.12)" : "var(--bg3)";
-              bubble.style.border = `1px solid ${outbound ? "rgba(201,240,85,0.35)" : "var(--border)"}`;
+              bubble.style.border = "1px solid " + (outbound ? "rgba(201,240,85,0.35)" : "var(--border)");
               bubble.style.borderRadius = "var(--r-sm)";
               bubble.style.padding = "10px 12px";
               bubble.style.maxWidth = "460px";
               bubble.innerHTML = [
-                `<p style="font-size:12.5px;color:${outbound ? "var(--text)" : "var(--text2)"};line-height:1.65;margin:0 0 6px 0">${String(message.body || "")}</p>`,
-                `<div style="font-size:10px;color:var(--text3);text-align:${outbound ? "right" : "left"}">${formatMessageTime(message.created_at)}</div>`,
+                '<p style="font-size:12.5px;color:' + (outbound ? "var(--text)" : "var(--text2)") + ';line-height:1.65;margin:0 0 6px 0">' + String(message.body || "") + "</p>",
+                '<div style="font-size:10px;color:var(--text3);text-align:' + (outbound ? "right" : "left") + '">' + formatMessageTime(message.created_at) + "</div>",
               ].join("");
               row.appendChild(bubble);
               refs.thread.appendChild(row);
@@ -1291,7 +1291,7 @@ export async function DashboardPageView({
 
       const loadMemberMessages = async (markRead) => {
         try {
-          const payload = await getJson(`/api/messages/inbox${markRead ? "?mark_read=1" : ""}`);
+          const payload = await getJson("/api/messages/inbox" + (markRead ? "?mark_read=1" : ""));
           memberMessagesState.coachId = String(payload.coach?.id || "");
           memberMessagesState.coachName = String(payload.coach?.full_name || "Dustin");
           memberMessagesState.unreadCount = Number(payload.unread_count || 0);
