@@ -38,23 +38,51 @@ export function DashboardClerkGreeting() {
     const firstName = firstNameFromUser(user);
     const fullName = fullNameFromUser(user);
 
-    if (firstName) {
-      const greeting = document.getElementById("top-title");
-      if (greeting) {
-        greeting.textContent = `Good morning, ${firstName}.`;
+    const applyGreeting = () => {
+      if (firstName) {
+        const greeting = document.getElementById("top-title");
+        if (greeting) {
+          greeting.textContent = `Good morning, ${firstName}.`;
+        }
       }
-    }
 
-    if (fullName) {
-      const nameEl = document.getElementById("user-name");
-      if (nameEl) {
-        nameEl.textContent = fullName;
+      if (fullName) {
+        const nameEl = document.getElementById("user-name");
+        if (nameEl) {
+          nameEl.textContent = fullName;
+        }
+        const initialsEl = document.getElementById("user-av");
+        if (initialsEl) {
+          initialsEl.textContent = initialsFromName(fullName);
+        }
       }
-      const initialsEl = document.getElementById("user-av");
-      if (initialsEl) {
-        initialsEl.textContent = initialsFromName(fullName);
-      }
-    }
+    };
+
+    applyGreeting();
+
+    // Prototype scripts can reapply placeholder text; keep Clerk values authoritative.
+    const observer = new MutationObserver(() => {
+      applyGreeting();
+    });
+
+    const watchTargets = [
+      document.getElementById("top-title"),
+      document.getElementById("user-name"),
+      document.getElementById("user-av"),
+    ].filter(Boolean) as HTMLElement[];
+
+    watchTargets.forEach((target) => {
+      observer.observe(target, { childList: true, characterData: true, subtree: true });
+    });
+
+    const intervalId = window.setInterval(() => {
+      applyGreeting();
+    }, 1200);
+
+    return () => {
+      observer.disconnect();
+      window.clearInterval(intervalId);
+    };
   }, [user]);
 
   return null;
