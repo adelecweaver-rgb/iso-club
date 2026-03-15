@@ -3,9 +3,7 @@ import "server-only";
 import { auth, currentUser } from "@clerk/nextjs/server";
 
 export function isClerkConfigured(): boolean {
-  const publishableKey =
-    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
-    process.env.CLERK_PUBLISHABLE_KEY;
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
   const secretKey = process.env.CLERK_SECRET_KEY;
   return Boolean(publishableKey && secretKey);
 }
