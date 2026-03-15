@@ -8,7 +8,14 @@ type Body = {
   session_date?: string;
 };
 
-type UploadEquipment = "arx" | "carol" | "whoop" | "oura" | "other_wearable";
+type UploadEquipment =
+  | "arx"
+  | "carol"
+  | "whoop"
+  | "oura"
+  | "garmin"
+  | "apple_health"
+  | "other_wearable";
 
 function normalizeEquipment(input: string): UploadEquipment {
   const value = input.trim().toLowerCase();
@@ -16,6 +23,12 @@ function normalizeEquipment(input: string): UploadEquipment {
   if (value === "carol") return "carol";
   if (value === "whoop") return "whoop";
   if (value === "oura") return "oura";
+  if (value === "garmin" || value === "garmin_connect" || value === "garmin connect") {
+    return "garmin";
+  }
+  if (value === "apple_health" || value === "apple health" || value === "applehealth") {
+    return "apple_health";
+  }
   if (value === "other_wearable" || value === "wearable" || value === "other wearable") {
     return "other_wearable";
   }
@@ -135,7 +148,7 @@ export async function POST(request: Request) {
         equipment === "other_wearable"
           ? extractedString("device_name", "other_wearable").toLowerCase()
           : equipment;
-      const insert = await context.supabase.from("wearable_data").insert({
+      const wearablePayloadBase = {
         member_id: memberId,
         recorded_date: sessionDate,
         device_type: deviceType,
@@ -149,7 +162,19 @@ export async function POST(request: Request) {
         rem_sleep_hrs: extractedNumber("rem_sleep_hrs"),
         strain_score: extractedNumber("strain_score"),
         spo2_pct: extractedNumber("spo2_pct"),
+      };
+      let insert = await context.supabase.from("wearable_data").insert({
+        ...wearablePayloadBase,
+        logged_by: "member",
       });
+      if (
+        insert.error &&
+        /column ["']?logged_by["']? .*wearable_data.* does not exist|Could not find the 'logged_by' column/i.test(
+          insert.error.message,
+        )
+      ) {
+        insert = await context.supabase.from("wearable_data").insert(wearablePayloadBase);
+      }
       if (insert.error) throw new Error(insert.error.message);
     }
 

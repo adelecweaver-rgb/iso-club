@@ -2,7 +2,14 @@
 
 import { useRef, useState } from "react";
 
-type UploadKind = "whoop" | "oura" | "other_wearable" | "carol" | "arx";
+type UploadKind =
+  | "whoop"
+  | "oura"
+  | "garmin"
+  | "apple_health"
+  | "other_wearable"
+  | "carol"
+  | "arx";
 
 const OPTIONS: Array<{
   value: UploadKind;
@@ -11,6 +18,8 @@ const OPTIONS: Array<{
 }> = [
   { value: "whoop", label: "Whoop", subtitle: "Recovery / HRV / sleep data" },
   { value: "oura", label: "Oura", subtitle: "Readiness / sleep / HRV data" },
+  { value: "garmin", label: "Garmin", subtitle: "Body Battery / readiness / sleep metrics" },
+  { value: "apple_health", label: "Apple Health", subtitle: "Sleep / HRV / resting heart rate metrics" },
   { value: "other_wearable", label: "Other Wearable", subtitle: "Generic wearable screenshot" },
   { value: "carol", label: "CAROL", subtitle: "Ride screenshot (fitness/power/HR)" },
   { value: "arx", label: "ARX", subtitle: "Session screenshot (output/max/intensity)" },
@@ -106,7 +115,8 @@ export function MemberUploadDataForm({ memberName }: { memberName: string }) {
       <div style={{ maxWidth: 760, margin: "0 auto" }}>
         <h1 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 34 }}>Upload Data</h1>
         <p style={{ color: "#9b9889", marginTop: 8, marginBottom: 20 }}>
-          Upload wearable, CAROL, or ARX screenshots to auto-extract data with Claude.
+          Upload Whoop, Oura, Garmin, Apple Health, CAROL, or ARX screenshots to auto-extract
+          data with Claude.
         </p>
         <div
           style={{

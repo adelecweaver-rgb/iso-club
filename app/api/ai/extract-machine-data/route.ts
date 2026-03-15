@@ -7,6 +7,8 @@ type SupportedMachine =
   | "fit3d"
   | "whoop"
   | "oura"
+  | "garmin"
+  | "apple_health"
   | "other_wearable"
   | "vasper"
   | "katalyst"
@@ -25,6 +27,12 @@ function normalizeMachine(value: string): SupportedMachine | null {
   if (normalized === "fit3d" || normalized === "fit 3d") return "fit3d";
   if (normalized === "whoop") return "whoop";
   if (normalized === "oura") return "oura";
+  if (normalized === "garmin" || normalized === "garmin_connect" || normalized === "garmin connect") {
+    return "garmin";
+  }
+  if (normalized === "apple_health" || normalized === "apple health" || normalized === "applehealth") {
+    return "apple_health";
+  }
   if (normalized === "other_wearable" || normalized === "wearable" || normalized === "other wearable") {
     return "other_wearable";
   }
@@ -167,6 +175,50 @@ function promptForMachine(machine: SupportedMachine): string {
       '  "spo2_pct": number|null,',
       '  "body_temp_deviation": string|null',
       "}",
+      "If a field is not visible, set it to null. Return JSON only.",
+    ].join("\n");
+  }
+
+  if (machine === "garmin") {
+    return [
+      "This image is from a Garmin app or Garmin wearable screen.",
+      "Extract all visible values and return ONLY valid JSON with this exact shape:",
+      "{",
+      '  "readiness_score": number|null,',
+      '  "recovery_score": number|null,',
+      '  "hrv_ms": number|null,',
+      '  "resting_hr": number|null,',
+      '  "sleep_score": number|null,',
+      '  "sleep_duration_hrs": number|null,',
+      '  "deep_sleep_hrs": number|null,',
+      '  "rem_sleep_hrs": number|null,',
+      '  "strain_score": number|null,',
+      '  "spo2_pct": number|null,',
+      '  "device_name": string|null',
+      "}",
+      "Use Garmin Body Battery or Training Readiness as readiness_score when shown.",
+      "If a field is not visible, set it to null. Return JSON only.",
+    ].join("\n");
+  }
+
+  if (machine === "apple_health") {
+    return [
+      "This image is from Apple Health or an Apple Watch summary screen.",
+      "Extract all visible values and return ONLY valid JSON with this exact shape:",
+      "{",
+      '  "readiness_score": number|null,',
+      '  "recovery_score": number|null,',
+      '  "hrv_ms": number|null,',
+      '  "resting_hr": number|null,',
+      '  "sleep_score": number|null,',
+      '  "sleep_duration_hrs": number|null,',
+      '  "deep_sleep_hrs": number|null,',
+      '  "rem_sleep_hrs": number|null,',
+      '  "strain_score": number|null,',
+      '  "spo2_pct": number|null,',
+      '  "device_name": string|null',
+      "}",
+      "If a readiness score is not explicit, keep readiness_score as null.",
       "If a field is not visible, set it to null. Return JSON only.",
     ].join("\n");
   }
