@@ -14,9 +14,11 @@ type PrototypeParts = {
 type DashboardPayload = {
   role: "member" | "coach";
   memberId: string | null;
+  coachId: string | null;
   displayName: string;
   initials: string;
   tier: string;
+  memberOptions: Array<{ id: string; name: string }>;
   metrics: {
     carolFitness: string;
     arxOutput: string;
@@ -70,6 +72,7 @@ type DashboardPayload = {
     readyCount: string;
     alerts: string[];
     members: Array<{
+      id: string;
       name: string;
       initials: string;
       tier: string;
@@ -161,9 +164,11 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
   return {
     role: "member",
     memberId: null,
+    coachId: null,
     displayName: clerkName || "Member",
     initials: initialsFromName(clerkName || "Member"),
     tier: "Premier",
+    memberOptions: [],
     metrics: {
       carolFitness: "36.5",
       arxOutput: "699",
@@ -266,6 +271,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   payload.role = isCoach ? "coach" : "member";
 
   payload.memberId = stringOr(userRow?.id, "");
+  payload.coachId = payload.memberId;
   payload.displayName = stringOr(userRow?.full_name, clerkName);
   payload.initials = initialsFromName(payload.displayName);
   payload.tier = stringOr(
@@ -560,24 +566,35 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
       ),
     );
 
-    const [usersRes, coachWearableRes, coachHealthRes] = memberIds.length
-      ? await Promise.all([
-          supabase
+    const [usersRes, coachWearableRes, coachHealthRes, memberOptionsRes] = await Promise.all([
+      memberIds.length
+        ? supabase
             .from("users")
             .select("id,full_name,membership_tier")
-            .in("id", memberIds),
-          supabase
+            .in("id", memberIds)
+        : Promise.resolve({ data: [], error: null }),
+      memberIds.length
+        ? supabase
             .from("wearable_data")
             .select("member_id,recovery_score,readiness_score,recorded_date")
             .in("member_id", memberIds)
-            .order("recorded_date", { ascending: false }),
-          supabase
+            .order("recorded_date", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+      memberIds.length
+        ? supabase
             .from("healthspan_scores")
             .select("member_id,muscle_score,recorded_at")
             .in("member_id", memberIds)
-            .order("recorded_at", { ascending: false }),
-        ])
-      : [null, null, null];
+            .order("recorded_at", { ascending: false })
+        : Promise.resolve({ data: [], error: null }),
+      supabase
+        .from("users")
+        .select("id,full_name")
+        .eq("is_active", true)
+        .eq("role", "member")
+        .order("full_name", { ascending: true })
+        .limit(100),
+    ]);
 
     const users = usersRes && Array.isArray(usersRes.data)
       ? (usersRes.data as Array<Record<string, unknown>>)
@@ -588,6 +605,14 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     const coachHealthRows = coachHealthRes && Array.isArray(coachHealthRes.data)
       ? (coachHealthRes.data as Array<Record<string, unknown>>)
       : [];
+    const memberOptionsRows =
+      memberOptionsRes && Array.isArray(memberOptionsRes.data)
+        ? (memberOptionsRes.data as Array<Record<string, unknown>>)
+        : [];
+    payload.memberOptions = memberOptionsRows.map((member) => ({
+      id: stringOr(member.id, ""),
+      name: stringOr(member.full_name, "Member"),
+    })).filter((member) => member.id && member.name);
 
     const latestWearableByMember = new Map<string, Record<string, unknown>>();
     for (const row of wearableRows) {
@@ -619,6 +644,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
           })
         : "Today";
       return {
+        id,
         name,
         initials: initialsFromName(name),
         tier: stringOr(member.membership_tier, "Member"),
@@ -731,6 +757,270 @@ export default async function DashboardPage() {
           const value = el.querySelector(".metric-val");
           if (label) label.textContent = row.label;
           if (value) value.textContent = row.value;
+        });
+      };
+
+      const setStatus = (elementId, kind, message) => {
+        const el = document.getElementById(elementId);
+        if (!el) return;
+        el.textContent = message || "";
+        if (kind === "success") {
+          el.style.color = "var(--lime)";
+        } else if (kind === "error") {
+          el.style.color = "var(--coral)";
+        } else {
+          el.style.color = "var(--text3)";
+        }
+      };
+
+      const postJson = async (url, body) => {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || payload.success === false) {
+          throw new Error(payload.error || "Request failed.");
+        }
+        return payload;
+      };
+
+      const memberOptions = Array.isArray(data.memberOptions) && data.memberOptions.length
+        ? data.memberOptions
+        : Array.isArray(data.coach && data.coach.members)
+          ? data.coach.members
+          : [];
+      const fillMemberSelects = () => {
+        if (!memberOptions.length) return;
+        const selectIds = [
+          "log-member-select",
+          "health-member-select",
+          "protocol-member-select",
+          "message-recipient-select",
+        ];
+        selectIds.forEach((id) => {
+          const select = document.getElementById(id);
+          if (!select || select.tagName !== "SELECT") return;
+          const previousValue = select.value;
+          select.innerHTML = "";
+          memberOptions.forEach((member) => {
+            const option = document.createElement("option");
+            option.value = String(member.id || "");
+            option.textContent = String(member.name || "Member");
+            select.appendChild(option);
+          });
+          const hasPrevious = Array.from(select.options).some(
+            (option) => option.value === previousValue,
+          );
+          if (hasPrevious) {
+            select.value = previousValue;
+          }
+        });
+      };
+
+      const wireLogSessionForm = () => {
+        const submit = document.getElementById("log-session-submit");
+        if (!submit) return;
+        submit.addEventListener("click", async () => {
+          try {
+            setStatus("log-session-status", "info", "Saving session…");
+            submit.setAttribute("disabled", "true");
+            const member = document.getElementById("log-member-select");
+            const equipment = document.getElementById("log-equipment-select");
+            const duration = document.getElementById("log-duration-input");
+            const effort = document.getElementById("log-effort-input");
+            const completed = document.getElementById("log-completed-select");
+            const protocol = document.getElementById("log-protocol-input");
+            const notes = document.getElementById("log-notes-input");
+
+            const memberId = member && "value" in member ? member.value : "";
+            const equipmentValue = equipment && "value" in equipment ? equipment.value : "";
+            if (!memberId || !equipmentValue) {
+              throw new Error("Please choose a member and equipment.");
+            }
+
+            await postJson("/api/coach/log-session", {
+              member_id: memberId,
+              equipment: equipmentValue,
+              duration_minutes: duration && "value" in duration ? duration.value : "",
+              perceived_effort: effort && "value" in effort ? effort.value : "",
+              completed: completed && "value" in completed ? completed.value === "true" : true,
+              protocol_or_exercise: protocol && "value" in protocol ? protocol.value : "",
+              staff_notes: notes && "value" in notes ? notes.value : "",
+            });
+            setStatus("log-session-status", "success", "Session logged.");
+            if (notes && "value" in notes) notes.value = "";
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Could not log session.";
+            setStatus("log-session-status", "error", message);
+          } finally {
+            submit.removeAttribute("disabled");
+          }
+        });
+      };
+
+      const wireHealthspanForm = () => {
+        const submit = document.getElementById("health-submit");
+        if (!submit) return;
+        submit.addEventListener("click", async () => {
+          try {
+            setStatus("health-status", "info", "Saving scores…");
+            submit.setAttribute("disabled", "true");
+            const member = document.getElementById("health-member-select");
+            const muscle = document.getElementById("health-muscle-input");
+            const cardio = document.getElementById("health-cardio-input");
+            const metabolic = document.getElementById("health-metabolic-input");
+            const structural = document.getElementById("health-structural-input");
+            const recovery = document.getElementById("health-recovery-input");
+            const notes = document.getElementById("health-notes-input");
+            const memberId = member && "value" in member ? member.value : "";
+            if (!memberId) throw new Error("Please choose a member.");
+
+            const result = await postJson("/api/coach/healthspan", {
+              member_id: memberId,
+              muscle_score: muscle && "value" in muscle ? muscle.value : "",
+              cardio_score: cardio && "value" in cardio ? cardio.value : "",
+              metabolic_score: metabolic && "value" in metabolic ? metabolic.value : "",
+              structural_score: structural && "value" in structural ? structural.value : "",
+              recovery_score: recovery && "value" in recovery ? recovery.value : "",
+              dustin_notes: notes && "value" in notes ? notes.value : "",
+            });
+            setStatus(
+              "health-status",
+              "success",
+              "Scores updated. Overall " + String(result.overall_score || "") + ".",
+            );
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Could not update scores.";
+            setStatus("health-status", "error", message);
+          } finally {
+            submit.removeAttribute("disabled");
+          }
+        });
+      };
+
+      const wireProtocolForm = () => {
+        const submit = document.getElementById("protocol-submit");
+        if (!submit) return;
+        submit.addEventListener("click", async () => {
+          try {
+            setStatus("protocol-status", "info", "Creating protocol…");
+            submit.setAttribute("disabled", "true");
+            const member = document.getElementById("protocol-member-select");
+            const name = document.getElementById("protocol-name-input");
+            const primaryGoal = document.getElementById("protocol-primary-goal-input");
+            const secondaryGoal = document.getElementById("protocol-secondary-goal-input");
+            const weekCurrent = document.getElementById("protocol-week-current-input");
+            const weekTotal = document.getElementById("protocol-week-total-input");
+            const description = document.getElementById("protocol-description-input");
+            const sessionsInput = document.getElementById("protocol-sessions-input");
+            const notes = document.getElementById("protocol-notes-input");
+            const memberId = member && "value" in member ? member.value : "";
+            const protocolName = name && "value" in name ? name.value : "";
+            if (!memberId || !protocolName) {
+              throw new Error("Please choose a member and protocol name.");
+            }
+
+            const sessionLines = sessionsInput && "value" in sessionsInput
+              ? String(sessionsInput.value || "")
+                  .split("\\n")
+                  .map((line) => line.trim())
+                  .filter((line) => line.length > 0)
+              : [];
+            const sessions = sessionLines.map((line, index) => {
+              const parts = line.split("|").map((part) => part.trim());
+              return {
+                name: parts[0] || "Session " + String(index + 1),
+                description: parts[1] || "",
+                equipment: parts[2] || "other",
+                duration_minutes: parts[3] || "20",
+                order_index: index + 1,
+                status: "pending",
+              };
+            });
+            if (!sessions.length) {
+              sessions.push({
+                name: "Session 1",
+                description: "Auto-generated from protocol form",
+                equipment: "other",
+                duration_minutes: "20",
+                order_index: 1,
+                status: "pending",
+              });
+            }
+
+            await postJson("/api/coach/protocols", {
+              member_id: memberId,
+              name: protocolName,
+              primary_goal: primaryGoal && "value" in primaryGoal ? primaryGoal.value : "",
+              secondary_goal: secondaryGoal && "value" in secondaryGoal ? secondaryGoal.value : "",
+              week_current: weekCurrent && "value" in weekCurrent ? weekCurrent.value : "1",
+              week_total: weekTotal && "value" in weekTotal ? weekTotal.value : "12",
+              description: description && "value" in description ? description.value : "",
+              dustin_notes: notes && "value" in notes ? notes.value : "",
+              sessions,
+            });
+            setStatus("protocol-status", "success", "Protocol created.");
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Could not create protocol.";
+            setStatus("protocol-status", "error", message);
+          } finally {
+            submit.removeAttribute("disabled");
+          }
+        });
+      };
+
+      const wireCoachMessageForm = () => {
+        const submit = document.getElementById("message-submit");
+        if (!submit) return;
+        submit.addEventListener("click", async () => {
+          try {
+            setStatus("message-status", "info", "Sending message…");
+            submit.setAttribute("disabled", "true");
+            const recipient = document.getElementById("message-recipient-select");
+            const body = document.getElementById("message-body-input");
+            const recipientId = recipient && "value" in recipient ? recipient.value : "";
+            const bodyText = body && "value" in body ? body.value : "";
+            if (!recipientId || !bodyText.trim()) {
+              throw new Error("Please choose a member and write a message.");
+            }
+            await postJson("/api/messages/send", {
+              recipient_id: recipientId,
+              body: bodyText,
+            });
+            setStatus("message-status", "success", "Message sent.");
+            if (body && "value" in body) body.value = "";
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Could not send message.";
+            setStatus("message-status", "error", message);
+          } finally {
+            submit.removeAttribute("disabled");
+          }
+        });
+      };
+
+      const wireMemberMessageReply = () => {
+        const submit = document.getElementById("member-message-send");
+        if (!submit) return;
+        submit.addEventListener("click", async () => {
+          try {
+            setStatus("member-message-status", "info", "Sending…");
+            submit.setAttribute("disabled", "true");
+            const input = document.getElementById("member-message-input");
+            const bodyText = input && "value" in input ? input.value : "";
+            if (!bodyText.trim()) {
+              throw new Error("Message cannot be empty.");
+            }
+            await postJson("/api/messages/send", { body: bodyText });
+            setStatus("member-message-status", "success", "Message sent.");
+            if (input && "value" in input) input.value = "";
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "Could not send message.";
+            setStatus("member-message-status", "error", message);
+          } finally {
+            submit.removeAttribute("disabled");
+          }
         });
       };
 
@@ -885,6 +1175,15 @@ export default async function DashboardPage() {
           if (value) value.textContent = "Recovery " + member.recovery;
         });
       }
+
+      if (role === "coach") {
+        fillMemberSelects();
+        wireLogSessionForm();
+        wireHealthspanForm();
+        wireProtocolForm();
+        wireCoachMessageForm();
+      }
+      wireMemberMessageReply();
     })();
   `;
 

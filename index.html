@@ -238,7 +238,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div style="padding:10px;border:1px solid var(--border);background:var(--bg3);border-radius:var(--r-sm);color:var(--text2)">Hey Mark — your leg press output on ARX jumped 12% this week.</div>
           <div style="padding:10px;border:1px solid var(--border);background:var(--bg3);border-radius:var(--r-sm);color:var(--text2)">Adding a 3-second eccentric next session. Same load.</div>
           <div style="padding:10px;border:1px solid var(--border);background:var(--bg3);border-radius:var(--r-sm);color:var(--text2)">HRV is trending up. Keep the cold plunge protocol.</div>
-          <div style="display:flex;gap:8px;margin-top:auto"><input class="form-input" placeholder="Reply to Dustin…" style="flex:1"><button class="btn btn-lime">Send</button></div>
+          <div style="display:flex;gap:8px;margin-top:auto"><input id="member-message-input" class="form-input" placeholder="Reply to Dustin…" style="flex:1"><button id="member-message-send" class="btn btn-lime" type="button">Send</button></div>
+          <div id="member-message-status" style="font-size:12px;color:var(--text3)"></div>
         </div>
       </div>
     </div>
@@ -297,21 +298,25 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="sec-header"><div class="sec-title">Log a session</div></div>
       <div class="grid-2">
         <div class="card"><div class="card-header"><div class="card-title">Session details</div></div>
-          <div class="log-form">
-            <div class="form-field"><div class="form-label">Member</div><select class="form-select"><option>Mark Reynolds</option><option>Sarah Mitchell</option><option>Tom Bradley</option></select></div>
-            <div class="form-row"><div class="form-field"><div class="form-label">Equipment</div><select class="form-select"><option>ARX</option><option>CAROL</option><option>Vasper</option><option>Katalyst</option><option>Proteus</option></select></div><div class="form-field"><div class="form-label">Duration (min)</div><input class="form-input" value="20"></div></div>
-            <div class="form-field"><div class="form-label">Protocol / exercise</div><input class="form-input" placeholder="e.g. ARX upper body · Reps 6"></div>
-            <div class="form-field"><div class="form-label">Staff notes</div><textarea class="form-input" style="min-height:70px" placeholder="How did the session go?"></textarea></div>
-            <button class="btn btn-lime">Log session</button>
+          <div class="log-form" id="coach-log-session-form">
+            <div class="form-field"><div class="form-label">Member</div><select id="log-member-select" class="form-select"><option value="">Select member</option></select></div>
+            <div class="form-row"><div class="form-field"><div class="form-label">Equipment</div><select id="log-equipment-select" class="form-select"><option>ARX</option><option>CAROL</option><option>Vasper</option><option>Katalyst</option><option>Proteus</option><option>Quickboard</option><option>Infrared sauna</option><option>Cold plunge</option><option>NxPro</option><option>Compression</option></select></div><div class="form-field"><div class="form-label">Duration (min)</div><input id="log-duration-input" class="form-input" value="20"></div></div>
+            <div class="form-row"><div class="form-field"><div class="form-label">Perceived effort (0-10)</div><input id="log-effort-input" class="form-input" value="7"></div><div class="form-field"><div class="form-label">Completed</div><select id="log-completed-select" class="form-select"><option value="true">Yes</option><option value="false">No</option></select></div></div>
+            <div class="form-field"><div class="form-label">Protocol / exercise</div><input id="log-protocol-input" class="form-input" placeholder="e.g. ARX upper body · Reps 6"></div>
+            <div class="form-field"><div class="form-label">Staff notes</div><textarea id="log-notes-input" class="form-input" style="min-height:70px" placeholder="How did the session go?"></textarea></div>
+            <button id="log-session-submit" class="btn btn-lime" type="button">Log session</button>
+            <div id="log-session-status" style="font-size:12px;color:var(--text3)"></div>
           </div>
         </div>
         <div class="card"><div class="card-header"><div class="card-title">Update Healthspan OS scores</div></div>
-          <div class="log-form">
-            <div class="form-field"><div class="form-label">Member</div><select class="form-select"><option>Mark Reynolds</option><option>Sarah Mitchell</option><option>Jeff La Rue</option></select></div>
-            <div class="form-row"><div class="form-field"><div class="form-label">Muscle (0-100)</div><input class="form-input" placeholder="78"></div><div class="form-field"><div class="form-label">Cardio (0-100)</div><input class="form-input" placeholder="65"></div></div>
-            <div class="form-row"><div class="form-field"><div class="form-label">Metabolic (0-100)</div><input class="form-input" placeholder="71"></div><div class="form-field"><div class="form-label">Structural (0-100)</div><input class="form-input" placeholder="58"></div></div>
-            <div class="form-field"><div class="form-label">Recovery (0-100)</div><input class="form-input" placeholder="82"></div>
-            <button class="btn btn-lime">Update scores</button>
+          <div class="log-form" id="coach-healthspan-form">
+            <div class="form-field"><div class="form-label">Member</div><select id="health-member-select" class="form-select"><option value="">Select member</option></select></div>
+            <div class="form-row"><div class="form-field"><div class="form-label">Muscle (0-100)</div><input id="health-muscle-input" class="form-input" value="78"></div><div class="form-field"><div class="form-label">Cardio (0-100)</div><input id="health-cardio-input" class="form-input" value="65"></div></div>
+            <div class="form-row"><div class="form-field"><div class="form-label">Metabolic (0-100)</div><input id="health-metabolic-input" class="form-input" value="71"></div><div class="form-field"><div class="form-label">Structural (0-100)</div><input id="health-structural-input" class="form-input" value="58"></div></div>
+            <div class="form-field"><div class="form-label">Recovery (0-100)</div><input id="health-recovery-input" class="form-input" value="82"></div>
+            <div class="form-field"><div class="form-label">Coach notes</div><textarea id="health-notes-input" class="form-input" style="min-height:70px" placeholder="Progress context for this score update"></textarea></div>
+            <button id="health-submit" class="btn btn-lime" type="button">Update scores</button>
+            <div id="health-status" style="font-size:12px;color:var(--text3)"></div>
           </div>
         </div>
       </div>
@@ -325,14 +330,37 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="metric-row"><span class="metric-label">Jeff La Rue · Concierge</span><span class="metric-val">Recovery 82</span><button class="btn btn-sm">View</button></div>
         <div class="metric-row"><span class="metric-label">Tom Bradley · Essential</span><span class="metric-val" style="color:var(--amber)">Recovery 44</span><button class="btn btn-sm">View</button></div>
       </div>
+      <div class="card" style="margin-top:12px">
+        <div class="card-header"><div class="card-title">Coach note / message</div></div>
+        <div class="log-form" id="coach-message-form">
+          <div class="form-field"><div class="form-label">Member</div><select id="message-recipient-select" class="form-select"><option value="">Select member</option></select></div>
+          <div class="form-field"><div class="form-label">Message body</div><textarea id="message-body-input" class="form-input" style="min-height:70px" placeholder="Write note to member"></textarea></div>
+          <button id="message-submit" class="btn btn-lime" type="button">Send message</button>
+          <div id="message-status" style="font-size:12px;color:var(--text3)"></div>
+        </div>
+      </div>
     </div>
 
     <div id="coach-protocols" class="content" style="display:none">
-      <div class="sec-header"><div class="sec-title">Protocols</div><button class="btn btn-lime btn-sm">+ New protocol</button></div>
+      <div class="sec-header"><div class="sec-title">Protocols</div><button class="btn btn-lime btn-sm" type="button">+ New protocol</button></div>
       <div class="card">
         <div class="session-item"><div class="s-info"><div class="s-name">Strength Foundation · 12 weeks</div><div class="s-detail">ARX lower/upper · CAROL REHIT · Vasper · Recovery</div></div><span class="tag tag-lime">Active</span><button class="btn btn-sm">Edit</button></div>
         <div class="session-item"><div class="s-info"><div class="s-name">Metabolic Reset · 8 weeks</div><div class="s-detail">CAROL Fat Burn · Katalyst · Cold plunge</div></div><span class="tag tag-lime">Active</span><button class="btn btn-sm">Edit</button></div>
         <div class="session-item"><div class="s-info"><div class="s-name">Cardio Focus · 6 weeks</div><div class="s-detail">CAROL REHIT + Fat Burn · Quickboard</div></div><span class="tag tag-lime">Active</span><button class="btn btn-sm">Edit</button></div>
+      </div>
+      <div class="card" style="margin-top:12px">
+        <div class="card-header"><div class="card-title">Create new protocol</div></div>
+        <div class="log-form" id="protocol-create-form">
+          <div class="form-field"><div class="form-label">Member</div><select id="protocol-member-select" class="form-select"><option value="">Select member</option></select></div>
+          <div class="form-field"><div class="form-label">Protocol name</div><input id="protocol-name-input" class="form-input" placeholder="Strength Foundation"></div>
+          <div class="form-row"><div class="form-field"><div class="form-label">Primary goal</div><input id="protocol-primary-goal-input" class="form-input" placeholder="Muscle development"></div><div class="form-field"><div class="form-label">Secondary goal</div><input id="protocol-secondary-goal-input" class="form-input" placeholder="Bone density"></div></div>
+          <div class="form-row"><div class="form-field"><div class="form-label">Week current</div><input id="protocol-week-current-input" class="form-input" value="1"></div><div class="form-field"><div class="form-label">Week total</div><input id="protocol-week-total-input" class="form-input" value="12"></div></div>
+          <div class="form-field"><div class="form-label">Description</div><textarea id="protocol-description-input" class="form-input" style="min-height:70px" placeholder="High-level protocol summary"></textarea></div>
+          <div class="form-field"><div class="form-label">Sessions (one per line: Name | Description | Equipment | Duration)</div><textarea id="protocol-sessions-input" class="form-input" style="min-height:90px" placeholder="Session A — ARX Lower | Leg press + RDL | arx | 25"></textarea></div>
+          <div class="form-field"><div class="form-label">Coach notes</div><textarea id="protocol-notes-input" class="form-input" style="min-height:70px" placeholder="Internal coaching notes"></textarea></div>
+          <button id="protocol-submit" class="btn btn-lime" type="button">Create protocol</button>
+          <div id="protocol-status" style="font-size:12px;color:var(--text3)"></div>
+        </div>
       </div>
     </div>
   </main>

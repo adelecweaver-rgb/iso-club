@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SignInButton, UserButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
+import { OnboardingForm } from "@/components/onboarding-form";
 
 export default async function HomePage() {
   const { userId } = await auth();
@@ -38,6 +39,7 @@ export default async function HomePage() {
             </Link>
           )}
         </div>
+        {userId ? <OnboardingForm /> : null}
       </div>
     </main>
   );
