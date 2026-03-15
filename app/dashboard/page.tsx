@@ -1,5 +1,6 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { promises as fs } from "fs";
 import path from "path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -676,7 +677,11 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   return payload;
 }
 
-export default async function DashboardPage() {
+export async function DashboardPageView({
+  route,
+}: {
+  route: "dashboard" | "coach";
+}) {
   const clerkConfigured = isClerkConfigured();
   const { userId } = await safeAuth();
   const prototype = await loadPrototypeParts();
@@ -720,6 +725,12 @@ export default async function DashboardPage() {
   }
 
   const livePayload = await loadDashboardLiveData(userId);
+  if (route === "dashboard" && livePayload.role === "coach") {
+    redirect("/coach");
+  }
+  if (route === "coach" && livePayload.role !== "coach") {
+    redirect("/dashboard");
+  }
   const payload = JSON.stringify(livePayload).replace(/</g, "\\u003c");
   const bootstrapScript = `
     (() => {
@@ -1266,4 +1277,8 @@ export default async function DashboardPage() {
       <script dangerouslySetInnerHTML={{ __html: bootstrapScript }} />
     </>
   );
+}
+
+export default async function DashboardPage() {
+  return <DashboardPageView route="dashboard" />;
 }
