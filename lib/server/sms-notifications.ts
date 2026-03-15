@@ -32,6 +32,15 @@ type MemberContact = {
   phone: string;
 };
 
+type NotificationPreferences = {
+  welcome_sms: boolean;
+  protocol_ready_sms: boolean;
+  scan_results_sms: boolean;
+  weekly_summary_sms: boolean;
+  session_reminder_sms: boolean;
+  low_recovery_sms: boolean;
+};
+
 function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -62,6 +71,29 @@ function statusFromResult(result: SmsResult): string {
   return `failed${result.error ? `: ${result.error}` : ""}`.slice(0, 250);
 }
 
+function defaultPreferences(): NotificationPreferences {
+  return {
+    welcome_sms: true,
+    protocol_ready_sms: true,
+    scan_results_sms: true,
+    weekly_summary_sms: true,
+    session_reminder_sms: true,
+    low_recovery_sms: true,
+  };
+}
+
+function preferenceEnabled(
+  prefs: NotificationPreferences,
+  messageType: MessageType,
+): boolean {
+  if (messageType === "welcome") return prefs.welcome_sms;
+  if (messageType === "protocol_ready") return prefs.protocol_ready_sms;
+  if (messageType === "scan_results_ready") return prefs.scan_results_sms;
+  if (messageType === "weekly_summary") return prefs.weekly_summary_sms;
+  if (messageType === "session_reminder") return prefs.session_reminder_sms;
+  return prefs.low_recovery_sms;
+}
+
 async function appendSmsLog(
   supabase: SupabaseClient,
   entry: {
@@ -82,6 +114,54 @@ async function appendSmsLog(
   } catch {
     // Never crash the request if sms_log write fails.
   }
+}
+
+async function loadNotificationPreferences(
+  supabase: SupabaseClient,
+  memberId: string,
+): Promise<NotificationPreferences> {
+  const prefsRes = await supabase
+    .from("member_notification_preferences")
+    .select(
+      "welcome_sms,protocol_ready_sms,scan_results_sms,weekly_summary_sms,session_reminder_sms,low_recovery_sms",
+    )
+    .eq("member_id", memberId)
+    .limit(1);
+  if (prefsRes.error || !Array.isArray(prefsRes.data) || prefsRes.data.length === 0) {
+    return defaultPreferences();
+  }
+  const row = prefsRes.data[0] as AnyRow;
+  return {
+    welcome_sms: row.welcome_sms !== false,
+    protocol_ready_sms: row.protocol_ready_sms !== false,
+    scan_results_sms: row.scan_results_sms !== false,
+    weekly_summary_sms: row.weekly_summary_sms !== false,
+    session_reminder_sms: row.session_reminder_sms !== false,
+    low_recovery_sms: row.low_recovery_sms !== false,
+  };
+}
+
+async function skipAndLog(
+  supabase: SupabaseClient,
+  memberId: string,
+  messageType: MessageType,
+  messageBody: string,
+  reason: string,
+): Promise<NotificationResult> {
+  const result: NotificationResult = {
+    success: false,
+    skipped: true,
+    error: reason,
+    memberId,
+    messageType,
+  };
+  await appendSmsLog(supabase, {
+    memberId,
+    messageType,
+    messageBody,
+    status: statusFromResult(result),
+  });
+  return result;
 }
 
 async function sendAndLog(
@@ -144,6 +224,16 @@ export async function sendWelcomeSms(
   phone: string,
 ): Promise<NotificationResult> {
   const messageBody = buildWelcomeSmsTemplate(fullName);
+  const prefs = await loadNotificationPreferences(supabase, memberId);
+  if (!preferenceEnabled(prefs, "welcome")) {
+    return skipAndLog(
+      supabase,
+      memberId,
+      "welcome",
+      messageBody,
+      "Welcome SMS disabled by member preference.",
+    );
+  }
   return sendAndLog(supabase, memberId, "welcome", phone, messageBody);
 }
 
@@ -152,23 +242,25 @@ export async function sendProtocolReadySmsForMember(
   memberId: string,
   primaryGoal: string,
 ): Promise<NotificationResult> {
+  const prefs = await loadNotificationPreferences(supabase, memberId);
+  if (!preferenceEnabled(prefs, "protocol_ready")) {
+    return skipAndLog(
+      supabase,
+      memberId,
+      "protocol_ready",
+      buildProtocolReadySmsTemplate("Member", primaryGoal),
+      "Protocol ready SMS disabled by member preference.",
+    );
+  }
   const contact = await loadMemberContact(supabase, memberId);
   if (!contact?.phone) {
-    const messageBody = buildProtocolReadySmsTemplate("Member", primaryGoal);
-    const skipped: NotificationResult = {
-      success: false,
-      skipped: true,
-      error: "Member phone not available.",
+    return skipAndLog(
+      supabase,
       memberId,
-      messageType: "protocol_ready",
-    };
-    await appendSmsLog(supabase, {
-      memberId,
-      messageType: "protocol_ready",
-      messageBody,
-      status: statusFromResult(skipped),
-    });
-    return skipped;
+      "protocol_ready",
+      buildProtocolReadySmsTemplate("Member", primaryGoal),
+      "Member phone not available.",
+    );
   }
   const messageBody = buildProtocolReadySmsTemplate(contact.fullName, primaryGoal);
   return sendAndLog(
@@ -214,23 +306,25 @@ export async function sendScanResultsSmsForMember(
   memberId: string,
   scanRow?: AnyRow | null,
 ): Promise<NotificationResult> {
+  const prefs = await loadNotificationPreferences(supabase, memberId);
+  if (!preferenceEnabled(prefs, "scan_results_ready")) {
+    return skipAndLog(
+      supabase,
+      memberId,
+      "scan_results_ready",
+      buildScanResultsSmsTemplate("Member", "new metrics available"),
+      "Scan results SMS disabled by member preference.",
+    );
+  }
   const contact = await loadMemberContact(supabase, memberId);
   if (!contact?.phone) {
-    const messageBody = buildScanResultsSmsTemplate("Member", "new metrics available");
-    const skipped: NotificationResult = {
-      success: false,
-      skipped: true,
-      error: "Member phone not available.",
+    return skipAndLog(
+      supabase,
       memberId,
-      messageType: "scan_results_ready",
-    };
-    await appendSmsLog(supabase, {
-      memberId,
-      messageType: "scan_results_ready",
-      messageBody,
-      status: statusFromResult(skipped),
-    });
-    return skipped;
+      "scan_results_ready",
+      buildScanResultsSmsTemplate("Member", "new metrics available"),
+      "Member phone not available.",
+    );
   }
 
   let currentScan = scanRow ?? null;
@@ -393,6 +487,16 @@ export async function sendWeeklySummarySmsForMember(
   phone: string,
   now: Date,
 ): Promise<NotificationResult> {
+  const prefs = await loadNotificationPreferences(supabase, memberId);
+  if (!preferenceEnabled(prefs, "weekly_summary")) {
+    return skipAndLog(
+      supabase,
+      memberId,
+      "weekly_summary",
+      buildWeeklySummarySmsTemplate(fullName, 0, "--", "flat", "Summary disabled"),
+      "Weekly summary SMS disabled by member preference.",
+    );
+  }
   const sessionsCompleted = await countSessionsCompletedLast7Days(supabase, memberId, now);
   const healthspan = await loadHealthspanSummary(supabase, memberId);
   const highlight = await loadWeeklyHighlight(supabase, memberId);
@@ -413,28 +517,25 @@ export async function sendSessionReminderSmsForMember(
   sessionTimeLabel: string,
   keyFocus: string,
 ): Promise<NotificationResult> {
+  const prefs = await loadNotificationPreferences(supabase, memberId);
+  if (!preferenceEnabled(prefs, "session_reminder")) {
+    return skipAndLog(
+      supabase,
+      memberId,
+      "session_reminder",
+      buildSessionReminderSmsTemplate("Member", sessionName, sessionTimeLabel, keyFocus),
+      "Session reminder SMS disabled by member preference.",
+    );
+  }
   const contact = await loadMemberContact(supabase, memberId);
   if (!contact?.phone) {
-    const messageBody = buildSessionReminderSmsTemplate(
-      "Member",
-      sessionName,
-      sessionTimeLabel,
-      keyFocus,
+    return skipAndLog(
+      supabase,
+      memberId,
+      "session_reminder",
+      buildSessionReminderSmsTemplate("Member", sessionName, sessionTimeLabel, keyFocus),
+      "Member phone not available.",
     );
-    const skipped: NotificationResult = {
-      success: false,
-      skipped: true,
-      error: "Member phone not available.",
-      memberId,
-      messageType: "session_reminder",
-    };
-    await appendSmsLog(supabase, {
-      memberId,
-      messageType: "session_reminder",
-      messageBody,
-      status: statusFromResult(skipped),
-    });
-    return skipped;
   }
   const messageBody = buildSessionReminderSmsTemplate(
     contact.fullName,
@@ -456,23 +557,25 @@ export async function sendLowRecoverySmsForMember(
   memberId: string,
   recoveryScore: number,
 ): Promise<NotificationResult> {
+  const prefs = await loadNotificationPreferences(supabase, memberId);
+  if (!preferenceEnabled(prefs, "low_recovery_flag")) {
+    return skipAndLog(
+      supabase,
+      memberId,
+      "low_recovery_flag",
+      buildLowRecoverySmsTemplate("Member", recoveryScore),
+      "Low recovery SMS disabled by member preference.",
+    );
+  }
   const contact = await loadMemberContact(supabase, memberId);
   if (!contact?.phone) {
-    const messageBody = buildLowRecoverySmsTemplate("Member", recoveryScore);
-    const skipped: NotificationResult = {
-      success: false,
-      skipped: true,
-      error: "Member phone not available.",
+    return skipAndLog(
+      supabase,
       memberId,
-      messageType: "low_recovery_flag",
-    };
-    await appendSmsLog(supabase, {
-      memberId,
-      messageType: "low_recovery_flag",
-      messageBody,
-      status: statusFromResult(skipped),
-    });
-    return skipped;
+      "low_recovery_flag",
+      buildLowRecoverySmsTemplate("Member", recoveryScore),
+      "Member phone not available.",
+    );
   }
   const messageBody = buildLowRecoverySmsTemplate(
     contact.fullName,

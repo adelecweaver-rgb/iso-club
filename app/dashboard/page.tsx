@@ -14,7 +14,7 @@ type DashboardPayload = {
   displayName: string;
   initials: string;
   tier: string;
-  memberOptions: Array<{ id: string; name: string }>;
+  memberOptions: Array<{ id: string; name: string; phone: string }>;
   metrics: {
     carolFitness: string;
     arxOutput: string;
@@ -662,7 +662,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
         : Promise.resolve({ data: [], error: null }),
       supabase
         .from("users")
-        .select("id,full_name")
+        .select("id,full_name,phone")
         .eq("is_active", true)
         .eq("role", "member")
         .order("full_name", { ascending: true })
@@ -685,6 +685,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     payload.memberOptions = memberOptionsRows.map((member) => ({
       id: stringOr(member.id, ""),
       name: stringOr(member.full_name, "Member"),
+      phone: stringOr(member.phone, ""),
     })).filter((member) => member.id && member.name);
 
     const latestWearableByMember = new Map<string, Record<string, unknown>>();
@@ -805,7 +806,7 @@ export async function DashboardPageView({
     if (authState.role === "member" || authState.role === "unknown") {
       redirect(routeForRole(authState.role));
     }
-    if (authState.role === "staff" && initialCoachView !== "log") {
+    if (authState.role === "staff" && initialCoachView === "morning") {
       redirect("/coach/log");
     }
   }
@@ -1184,6 +1185,110 @@ export async function DashboardPageView({
         topbarRight.insertBefore(link, topbarRight.firstChild);
       };
 
+      const injectMemberSettingsButton = () => {
+        const topbarRight = document.querySelector(".topbar-right");
+        if (!topbarRight) return;
+        if (document.getElementById("member-settings-link")) return;
+
+        const link = document.createElement("a");
+        link.id = "member-settings-link";
+        link.href = "/dashboard/settings";
+        link.textContent = "Settings";
+        link.className = "btn btn-sm";
+        link.style.textDecoration = "none";
+        link.style.display = "inline-flex";
+        link.style.alignItems = "center";
+        topbarRight.insertBefore(link, topbarRight.firstChild);
+      };
+
+      const injectCoachPhoneEditor = () => {
+        const root = document.getElementById("coach-members");
+        if (!root) return;
+        if (document.getElementById("coach-phone-editor")) return;
+
+        const card = document.createElement("div");
+        card.id = "coach-phone-editor";
+        card.className = "card";
+        card.style.marginTop = "16px";
+        card.innerHTML = [
+          '<div class="sec-header">',
+          '  <div class="sec-title">Member contact editor</div>',
+          '  <span class="tag tag-lime">SMS required</span>',
+          "</div>",
+          '<div class="form-grid">',
+          '  <div class="form-field"><div class="form-label">Member</div><select id="coach-phone-member-select" class="form-select"></select></div>',
+          '  <div class="form-field"><div class="form-label">Full name</div><input id="coach-phone-name-input" class="form-input" placeholder="Member name"></div>',
+          "</div>",
+          '<div class="form-field"><div class="form-label">Phone number</div><input id="coach-phone-input" class="form-input" placeholder="(555) 555-1234"></div>',
+          '<div style="display:flex;align-items:center;gap:10px;margin-top:10px">',
+          '  <button id="coach-phone-save" class="btn btn-lime">Save contact</button>',
+          '  <span id="coach-phone-status" style="font-size:12px;color:var(--text3)"></span>',
+          "</div>",
+        ].join("");
+        root.appendChild(card);
+
+        const select = document.getElementById("coach-phone-member-select");
+        const nameInput = document.getElementById("coach-phone-name-input");
+        const phoneInput = document.getElementById("coach-phone-input");
+        const status = document.getElementById("coach-phone-status");
+        const saveButton = document.getElementById("coach-phone-save");
+        if (!select || !nameInput || !phoneInput || !saveButton) return;
+
+        const members = Array.isArray(memberOptions) ? memberOptions : [];
+        select.innerHTML = "";
+        members.forEach((member) => {
+          const option = document.createElement("option");
+          option.value = String(member.id || "");
+          option.textContent = String(member.name || "Member");
+          select.appendChild(option);
+        });
+
+        const setStatus = (message, kind) => {
+          if (!status) return;
+          status.textContent = message || "";
+          if (kind === "error") status.style.color = "var(--coral)";
+          else if (kind === "success") status.style.color = "var(--lime)";
+          else status.style.color = "var(--text3)";
+        };
+
+        const syncInputs = () => {
+          const selected = members.find((member) => String(member.id) === String(select.value));
+          if (!selected) return;
+          if ("value" in nameInput) nameInput.value = String(selected.name || "");
+          if ("value" in phoneInput) phoneInput.value = String(selected.phone || "");
+        };
+        select.addEventListener("change", syncInputs);
+        syncInputs();
+
+        saveButton.addEventListener("click", async () => {
+          try {
+            setStatus("Saving…", "info");
+            saveButton.setAttribute("disabled", "true");
+            const memberId = "value" in select ? String(select.value || "") : "";
+            const fullName = "value" in nameInput ? String(nameInput.value || "").trim() : "";
+            const phone = "value" in phoneInput ? String(phoneInput.value || "").trim() : "";
+            if (!memberId || !phone) {
+              throw new Error("Member and phone are required.");
+            }
+            await postJson("/api/coach/members/contact", {
+              member_id: memberId,
+              full_name: fullName,
+              phone,
+            });
+            const selected = members.find((member) => String(member.id) === memberId);
+            if (selected) {
+              selected.name = fullName || selected.name;
+              selected.phone = phone;
+            }
+            setStatus("Contact updated.", "success");
+          } catch (error) {
+            setStatus(error instanceof Error ? error.message : "Unable to save.", "error");
+          } finally {
+            saveButton.removeAttribute("disabled");
+          }
+        });
+      };
+
       const memberPathByView = {
         dashboard: "/dashboard",
         protocol: "/dashboard/protocol",
@@ -1393,10 +1498,12 @@ export async function DashboardPageView({
         wireHealthspanForm();
         wireProtocolForm();
         wireCoachMessageForm();
+        injectCoachPhoneEditor();
       }
       if (role === "member") {
         injectMemberRecoveryLogLink();
         injectMemberUploadDataButton();
+        injectMemberSettingsButton();
       }
       wireMemberMessageReply();
     })();

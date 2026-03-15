@@ -51,6 +51,34 @@ export default async function CoachLogPage() {
 
   return (
     <>
+      <div
+        style={{
+          position: "fixed",
+          top: 12,
+          right: 12,
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          background: "rgba(30,43,27,0.9)",
+          border: "1px solid rgba(175,189,165,0.22)",
+          borderRadius: 999,
+          padding: "6px 10px",
+          backdropFilter: "blur(2px)",
+        }}
+      >
+        <Link
+          href="/coach/members"
+          style={{
+            color: "#afbda5",
+            textDecoration: "none",
+            fontSize: 12,
+            letterSpacing: "0.04em",
+          }}
+        >
+          Member contacts
+        </Link>
+      </div>
       <style dangerouslySetInnerHTML={{ __html: prototype.styles }} />
       <div dangerouslySetInnerHTML={{ __html: prototype.body }} />
       {prototype.script ? (

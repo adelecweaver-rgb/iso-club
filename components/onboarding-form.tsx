@@ -30,6 +30,9 @@ export function OnboardingForm() {
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
+      if (!phone.trim()) {
+        throw new Error("Phone number is required for SMS notifications.");
+      }
       setState({ kind: "loading", message: "Saving onboarding…" });
       const response = await fetch("/api/onboarding/complete", {
         method: "POST",
@@ -88,6 +91,7 @@ export function OnboardingForm() {
         placeholder="Phone"
         value={phone}
         onChange={(event) => setPhone(event.target.value)}
+        required
       />
       <input
         className="btn secondary"

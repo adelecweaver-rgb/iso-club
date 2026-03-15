@@ -16,6 +16,14 @@ type Body = {
   oura_connected?: boolean;
   whoop_user_id?: string;
   oura_user_id?: string;
+  notification_preferences?: {
+    welcome_sms?: boolean;
+    protocol_ready_sms?: boolean;
+    scan_results_sms?: boolean;
+    weekly_summary_sms?: boolean;
+    session_reminder_sms?: boolean;
+    low_recovery_sms?: boolean;
+  };
 };
 
 function normalizeMembershipTier(value: string | undefined): "essential" | "premier" | "concierge" {
@@ -66,6 +74,13 @@ export async function POST(request: Request) {
     const heightInches = asOptionalNumber(body.height_inches);
     const role =
       ["coach", "admin", "staff"].includes(context.role) ? context.role : "member";
+    const incomingPhoneRaw = typeof body.phone === "string" ? body.phone.trim() : "";
+    if (role === "member" && !incomingPhoneRaw) {
+      return NextResponse.json(
+        { success: false, error: "Phone number is required for SMS notifications." },
+        { status: 400 },
+      );
+    }
 
     const payload = {
       clerk_id: context.clerkUserId,
@@ -73,7 +88,7 @@ export async function POST(request: Request) {
       full_name: fullName,
       role,
       membership_tier: membershipTier,
-      phone: typeof body.phone === "string" ? body.phone.trim() || null : null,
+      phone: incomingPhoneRaw || null,
       date_of_birth:
         typeof body.date_of_birth === "string" ? body.date_of_birth.trim() || null : null,
       gender: typeof body.gender === "string" ? body.gender.trim() || null : null,
@@ -100,6 +115,31 @@ export async function POST(request: Request) {
       .single();
 
     if (upserted.error) throw new Error(upserted.error.message);
+
+    const prefs = body.notification_preferences ?? {};
+    const upsertPrefs = await supabaseAdmin
+      .from("member_notification_preferences")
+      .upsert(
+        {
+          member_id: String(upserted.data.id),
+          welcome_sms: prefs.welcome_sms ?? true,
+          protocol_ready_sms: prefs.protocol_ready_sms ?? true,
+          scan_results_sms: prefs.scan_results_sms ?? true,
+          weekly_summary_sms: prefs.weekly_summary_sms ?? true,
+          session_reminder_sms: prefs.session_reminder_sms ?? true,
+          low_recovery_sms: prefs.low_recovery_sms ?? true,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "member_id" },
+      );
+    if (
+      upsertPrefs.error &&
+      !/relation ["']?member_notification_preferences["']? does not exist|Could not find the table ["']?member_notification_preferences["']?/i.test(
+        upsertPrefs.error.message,
+      )
+    ) {
+      throw new Error(upsertPrefs.error.message);
+    }
 
     const incomingPhone = String(payload.phone ?? "").trim();
     if (role === "member" && incomingPhone && !existingPhone) {
