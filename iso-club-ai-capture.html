@@ -1,0 +1,1036 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Iso Club — AI Data Capture</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:        #0b0c09;
+  --bg2:       #111209;
+  --bg3:       #181910;
+  --bg4:       #1f2014;
+  --border:    rgba(255,255,255,0.08);
+  --border2:   rgba(255,255,255,0.14);
+  --text:      #edeae0;
+  --text2:     #9b9889;
+  --text3:     #585750;
+  --lime:      #c9f055;
+  --lime2:     #a8d038;
+  --lime-dim:  rgba(201,240,85,0.12);
+  --lime-dim2: rgba(201,240,85,0.06);
+  --amber:     #f0b955;
+  --amber-dim: rgba(240,185,85,0.12);
+  --blue:      #55b8f0;
+  --blue-dim:  rgba(85,184,240,0.12);
+  --coral:     #f07055;
+  --coral-dim: rgba(240,112,85,0.12);
+  --teal:      #55e8c8;
+  --teal-dim:  rgba(85,232,200,0.12);
+  --serif:     'Instrument Serif', Georgia, serif;
+  --sans:      'Instrument Sans', sans-serif;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:2px}
+
+.app{min-height:100vh;display:flex;flex-direction:column}
+
+/* TOP BAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 24px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;z-index:50}
+.topbar-logo{font-family:var(--serif);font-size:20px}
+.topbar-logo em{color:var(--lime);font-style:normal}
+.topbar-title{font-size:14px;font-weight:500;color:var(--text2)}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.btn-back{padding:7px 14px;border-radius:7px;border:1px solid var(--border2);background:transparent;color:var(--text3);font-family:var(--sans);font-size:12px;cursor:pointer;transition:all .15s}
+.btn-back:hover{color:var(--text2);border-color:var(--border2)}
+
+/* MAIN */
+.main{flex:1;max-width:680px;margin:0 auto;width:100%;padding:28px 20px 40px}
+
+/* STEP SYSTEM */
+.step{display:none}
+.step.active{display:block}
+
+/* MACHINE SELECTOR */
+.step-eyebrow{font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:var(--lime);margin-bottom:10px}
+.step-title{font-family:var(--serif);font-size:30px;color:var(--text);margin-bottom:8px;line-height:1.2}
+.step-sub{font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:24px}
+
+.machine-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:28px}
+.machine-btn{padding:18px 12px;border-radius:12px;border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .2s;text-align:center;-webkit-tap-highlight-color:transparent}
+.machine-btn:hover{border-color:var(--border2);background:var(--bg3)}
+.machine-btn.selected{border-color:var(--lime);background:var(--lime-dim)}
+.machine-btn.selected .machine-name{color:var(--lime)}
+.machine-icon{font-size:26px;margin-bottom:8px;display:block}
+.machine-name{font-size:13px;font-weight:500;color:var(--text2);margin-bottom:3px}
+.machine-fields{font-size:11px;color:var(--text3);line-height:1.4}
+
+/* MEMBER SELECTOR */
+.member-grid{display:flex;flex-direction:column;gap:6px;margin-bottom:28px}
+.member-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .15s;-webkit-tap-highlight-color:transparent}
+.member-row:hover{border-color:var(--border2)}
+.member-row.selected{border-color:var(--lime);background:var(--lime-dim2)}
+.member-row.selected .member-row-name{color:var(--lime)}
+.member-av{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:13px;flex-shrink:0;border:1px solid var(--border2)}
+.member-row-name{font-size:14px;font-weight:500;color:var(--text)}
+.member-row-detail{font-size:12px;color:var(--text3);margin-top:1px}
+.member-recovery{margin-left:auto;text-align:right;flex-shrink:0}
+.member-rec-val{font-family:var(--serif);font-size:18px}
+.member-rec-label{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em}
+
+/* UPLOAD AREA */
+.upload-area{border:2px dashed var(--border2);border-radius:16px;padding:48px 24px;text-align:center;cursor:pointer;transition:all .3s;margin-bottom:20px;position:relative;overflow:hidden;-webkit-tap-highlight-color:transparent}
+.upload-area:hover{border-color:var(--lime);background:var(--lime-dim2)}
+.upload-area.dragover{border-color:var(--lime);background:var(--lime-dim)}
+.upload-icon{font-size:48px;margin-bottom:14px;display:block}
+.upload-title{font-family:var(--serif);font-size:20px;color:var(--text);margin-bottom:8px}
+.upload-sub{font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:16px}
+.upload-input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upload-formats{display:flex;justify-content:center;gap:8px;flex-wrap:wrap}
+.format-chip{font-size:11px;padding:3px 8px;border-radius:5px;background:var(--bg3);border:1px solid var(--border);color:var(--text3)}
+
+/* PREVIEW */
+.image-preview-wrap{position:relative;border-radius:12px;overflow:hidden;margin-bottom:20px;background:var(--bg2);border:1px solid var(--border2)}
+.image-preview{width:100%;max-height:300px;object-fit:contain;display:block}
+.image-preview-overlay{position:absolute;top:10px;right:10px;display:flex;gap:6px}
+.preview-btn{padding:6px 12px;border-radius:6px;border:1px solid var(--border2);background:rgba(11,12,9,0.85);color:var(--text2);font-family:var(--sans);font-size:11px;cursor:pointer;transition:all .15s;backdrop-filter:blur(8px)}
+.preview-btn:hover{color:var(--text);border-color:var(--border2)}
+.machine-badge{position:absolute;top:10px;left:10px;padding:5px 10px;border-radius:6px;background:rgba(11,12,9,0.85);backdrop-filter:blur(8px);font-size:11px;font-weight:500;border:1px solid var(--border2)}
+
+/* ANALYZING STATE */
+.analyzing-card{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:36px 24px;text-align:center;margin-bottom:20px}
+.analyzing-icon{width:56px;height:56px;border-radius:50%;background:var(--lime-dim);border:2px solid var(--lime);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:24px}
+.analyzing-title{font-family:var(--serif);font-size:22px;color:var(--text);margin-bottom:8px}
+.analyzing-sub{font-size:13px;color:var(--text2);margin-bottom:24px;line-height:1.6}
+.progress-dots{display:flex;justify-content:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--border2);animation:pulse 1.4s ease infinite}
+.dot:nth-child(2){animation-delay:.2s}
+.dot:nth-child(3){animation-delay:.4s}
+@keyframes pulse{0%,100%{background:var(--border2);transform:scale(1)}50%{background:var(--lime);transform:scale(1.3)}}
+
+.analyzing-steps{display:flex;flex-direction:column;gap:8px;margin-top:20px;text-align:left}
+.a-step{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;background:var(--bg3);font-size:13px}
+.a-step-icon{width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.a-step.done .a-step-icon{background:var(--lime-dim);border:1px solid var(--lime);color:var(--lime)}
+.a-step.active .a-step-icon{background:var(--amber-dim);border:1px solid var(--amber);color:var(--amber)}
+.a-step.pending .a-step-icon{background:var(--bg4);border:1px solid var(--border);color:var(--text3)}
+.a-step.done{color:var(--text2)}
+.a-step.active{color:var(--text)}
+.a-step.pending{color:var(--text3)}
+
+/* RESULTS */
+.results-header{display:flex;align-items:center;gap:12px;padding:16px 18px;background:var(--lime-dim);border:1px solid rgba(201,240,85,0.2);border-radius:12px;margin-bottom:16px}
+.results-icon{width:36px;height:36px;border-radius:50%;background:var(--lime);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.results-title{font-size:14px;font-weight:500;color:var(--lime)}
+.results-sub{font-size:12px;color:var(--lime);opacity:0.7;margin-top:1px}
+.results-confidence{margin-left:auto;text-align:right}
+.confidence-val{font-family:var(--serif);font-size:20px;color:var(--lime)}
+.confidence-label{font-size:10px;color:var(--lime);opacity:0.7;text-transform:uppercase;letter-spacing:0.08em}
+
+.extracted-grid{display:flex;flex-direction:column;gap:3px;margin-bottom:20px}
+.extracted-row{display:flex;align-items:center;gap:12px;padding:11px 16px;border-radius:8px;background:var(--bg2);border:1px solid var(--border);transition:all .15s}
+.extracted-row:hover{border-color:var(--border2)}
+.extracted-row.flagged{border-color:var(--amber);background:var(--amber-dim)}
+.extracted-label{font-size:12px;color:var(--text3);width:160px;flex-shrink:0}
+.extracted-val{flex:1;font-size:14px;font-weight:500;color:var(--text)}
+.extracted-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;transition:border-color .15s}
+.extracted-input:focus{border-color:var(--lime)}
+.extracted-edit{font-size:11px;color:var(--text3);cursor:pointer;padding:4px 8px;border-radius:5px;transition:all .15s;white-space:nowrap}
+.extracted-edit:hover{color:var(--lime);background:var(--lime-dim2)}
+.extracted-flag{font-size:10px;color:var(--amber);margin-left:auto;white-space:nowrap}
+.extracted-row.confirmed .extracted-val{color:var(--lime)}
+.extracted-row.confirmed::after{content:'✓';color:var(--lime);font-size:14px;margin-left:auto}
+
+/* SECTION DIVIDER */
+.section-divider{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);padding:10px 0 6px;border-top:1px solid var(--border);margin-top:6px}
+
+/* SUMMARY CARD */
+.summary-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:16px 18px;margin-bottom:20px}
+.summary-member{display:flex;align-items:center;gap:10px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.summary-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:1px}
+.summary-detail{font-size:11px;color:var(--text3)}
+.summary-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.summary-stat{text-align:center}
+.summary-stat-val{font-family:var(--serif);font-size:20px;color:var(--text);margin-bottom:2px}
+.summary-stat-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em}
+
+/* NOTES */
+.notes-field{margin-bottom:20px}
+.notes-label{font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.notes-textarea{width:100%;background:var(--bg2);border:1.5px solid var(--border2);border-radius:8px;padding:12px 14px;color:var(--text);font-family:var(--sans);font-size:14px;outline:none;resize:none;height:70px;transition:border-color .2s}
+.notes-textarea:focus{border-color:var(--lime)}
+.notes-textarea::placeholder{color:var(--text3)}
+
+/* BUTTONS */
+.btn-primary{width:100%;padding:15px;border-radius:10px;background:var(--lime);color:var(--bg);border:none;font-family:var(--sans);font-size:15px;font-weight:500;cursor:pointer;transition:all .2s;margin-bottom:8px;-webkit-tap-highlight-color:transparent}
+.btn-primary:hover{background:var(--lime2)}
+.btn-primary:active{transform:scale(0.99)}
+.btn-secondary{width:100%;padding:12px;border-radius:10px;background:transparent;color:var(--text3);border:1.5px solid var(--border2);font-family:var(--sans);font-size:13px;cursor:pointer;transition:all .2s;-webkit-tap-highlight-color:transparent}
+.btn-secondary:hover{color:var(--text2);border-color:var(--border2)}
+.btn-row{display:flex;gap:10px}
+.btn-row .btn-primary{margin-bottom:0}
+.btn-row .btn-secondary{flex:0.5;padding:12px}
+
+/* SUCCESS */
+.success-screen{text-align:center;padding:40px 20px}
+.success-graphic{width:80px;height:80px;border-radius:50%;background:var(--lime-dim);border:2px solid var(--lime);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:36px}
+.success-title{font-family:var(--serif);font-size:28px;color:var(--text);margin-bottom:8px}
+.success-sub{font-size:14px;color:var(--text2);line-height:1.7;margin-bottom:28px;max-width:400px;margin-left:auto;margin-right:auto}
+.success-details{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin-bottom:24px;text-align:left}
+.success-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.success-row:last-child{border-bottom:none}
+.success-row-label{color:var(--text3)}
+.success-row-val{color:var(--text);font-weight:500}
+.success-actions{display:flex;flex-direction:column;gap:8px}
+
+/* TAG */
+.tag{display:inline-flex;align-items:center;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;padding:2px 8px;border-radius:20px;font-weight:500}
+.tag-lime{background:var(--lime-dim);color:var(--lime)}
+.tag-amber{background:var(--amber-dim);color:var(--amber)}
+.tag-blue{background:var(--blue-dim);color:var(--blue)}
+.tag-teal{background:var(--teal-dim);color:var(--teal)}
+
+/* PROGRESS INDICATOR */
+.progress-steps{display:flex;align-items:center;gap:0;margin-bottom:28px}
+.p-step{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)}
+.p-step.active{color:var(--lime)}
+.p-step.done{color:var(--text2)}
+.p-dot{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;transition:all .2s}
+.p-step.active .p-dot{border-color:var(--lime);background:var(--lime-dim);color:var(--lime)}
+.p-step.done .p-dot{border-color:var(--lime);background:var(--lime);color:var(--bg)}
+.p-line{flex:1;height:1px;background:var(--border);margin:0 6px}
+.p-line.done{background:var(--lime)}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+.anim{animation:fadeUp .35s ease both}
+@keyframes shimmer{0%{opacity:.6}50%{opacity:1}100%{opacity:.6}}
+.shimmer{animation:shimmer 1.5s ease infinite}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-logo">Iso<em>.</em></div>
+    <div class="topbar-title">AI Data Capture</div>
+    <div class="topbar-right">
+      <button class="btn-back" onclick="goBack()">← Back to log</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- PROGRESS INDICATOR -->
+    <div class="progress-steps" id="progress-steps">
+      <div class="p-step active" id="ps-1">
+        <div class="p-dot">1</div>
+        <span>Machine</span>
+      </div>
+      <div class="p-line" id="pl-1"></div>
+      <div class="p-step" id="ps-2">
+        <div class="p-dot">2</div>
+        <span>Member</span>
+      </div>
+      <div class="p-line" id="pl-2"></div>
+      <div class="p-step" id="ps-3">
+        <div class="p-dot">3</div>
+        <span>Photo</span>
+      </div>
+      <div class="p-line" id="pl-3"></div>
+      <div class="p-step" id="ps-4">
+        <div class="p-dot">4</div>
+        <span>Review</span>
+      </div>
+      <div class="p-line" id="pl-4"></div>
+      <div class="p-step" id="ps-5">
+        <div class="p-dot">5</div>
+        <span>Save</span>
+      </div>
+    </div>
+
+    <!-- STEP 1: SELECT MACHINE -->
+    <div class="step active anim" id="step-1">
+      <div class="step-eyebrow">Step 1 of 5</div>
+      <h1 class="step-title">Which machine?</h1>
+      <p class="step-sub">Select the equipment used. Claude will know exactly what data to look for in the photo.</p>
+
+      <div class="machine-grid">
+        <button class="machine-btn" onclick="selectMachine(this,'ARX','amber')">
+          <span class="machine-icon">🏋️</span>
+          <div class="machine-name">ARX</div>
+          <div class="machine-fields">Output · Concentric · Eccentric · Protocol</div>
+        </button>
+        <button class="machine-btn" onclick="selectMachine(this,'CAROL','blue')">
+          <span class="machine-icon">🚲</span>
+          <div class="machine-name">CAROL</div>
+          <div class="machine-fields">Fitness score · Peak power · Max HR · Calories</div>
+        </button>
+        <button class="machine-btn" onclick="selectMachine(this,'Fit3D','teal')">
+          <span class="machine-icon">🔍</span>
+          <div class="machine-name">Fit3D</div>
+          <div class="machine-fields">Body fat · Lean mass · BMR · Posture · Balance</div>
+        </button>
+        <button class="machine-btn" onclick="selectMachine(this,'Vasper','lime')">
+          <span class="machine-icon">❄️</span>
+          <div class="machine-name">Vasper</div>
+          <div class="machine-fields">Duration · HR · Power output</div>
+        </button>
+        <button class="machine-btn" onclick="selectMachine(this,'Katalyst','coral')">
+          <span class="machine-icon">⚡</span>
+          <div class="machine-name">Katalyst</div>
+          <div class="machine-fields">Program · Duration · Intensity</div>
+        </button>
+        <button class="machine-btn" onclick="selectMachine(this,'Proteus','lime')">
+          <span class="machine-icon">🔄</span>
+          <div class="machine-name">Proteus</div>
+          <div class="machine-fields">Rotational power · Force output</div>
+        </button>
+        <button class="machine-btn" onclick="selectMachine(this,'Quickboard','amber')">
+          <span class="machine-icon">⬜</span>
+          <div class="machine-name">Quickboard</div>
+          <div class="machine-fields">Drill type · Score · Duration</div>
+        </button>
+        <button class="machine-btn" onclick="selectMachine(this,'Whoop','coral')">
+          <span class="machine-icon">⌚</span>
+          <div class="machine-name">Whoop</div>
+          <div class="machine-fields">Recovery · HRV · Sleep · Strain</div>
+        </button>
+        <button class="machine-btn" onclick="selectMachine(this,'Oura','blue')">
+          <span class="machine-icon">💍</span>
+          <div class="machine-name">Oura</div>
+          <div class="machine-fields">Readiness · Sleep · HRV · Temp</div>
+        </button>
+      </div>
+
+      <button class="btn-primary" id="btn-next-1" onclick="goToStep(2)" style="opacity:0.4;pointer-events:none">Select a machine to continue</button>
+    </div>
+
+    <!-- STEP 2: SELECT MEMBER -->
+    <div class="step anim" id="step-2">
+      <div class="step-eyebrow">Step 2 of 5</div>
+      <h1 class="step-title">Which member?</h1>
+      <p class="step-sub">Select who this session belongs to. The data will be saved to their profile.</p>
+
+      <div class="member-grid">
+        <div class="member-row" onclick="selectMember(this,'Mark Reynolds','MR','lime','Premier · Strength Foundation W7','74','lime')">
+          <div class="member-av" style="background:var(--lime-dim);color:var(--lime)">MR</div>
+          <div>
+            <div class="member-row-name">Mark Reynolds</div>
+            <div class="member-row-detail">Premier · Strength Foundation W7</div>
+          </div>
+          <div class="member-recovery">
+            <div class="member-rec-val" style="color:var(--lime)">74</div>
+            <div class="member-rec-label">Recovery</div>
+          </div>
+        </div>
+        <div class="member-row" onclick="selectMember(this,'Sarah Mitchell','SM','coral','Premier · Cardio Focus W4','31','coral')">
+          <div class="member-av" style="background:var(--coral-dim);color:var(--coral)">SM</div>
+          <div>
+            <div class="member-row-name">Sarah Mitchell</div>
+            <div class="member-row-detail">Premier · Cardio Focus W4</div>
+          </div>
+          <div class="member-recovery">
+            <div class="member-rec-val" style="color:var(--coral)">31</div>
+            <div class="member-rec-label">Recovery</div>
+          </div>
+        </div>
+        <div class="member-row" onclick="selectMember(this,'Jeff La Rue','JL','blue','Concierge · Metabolic Reset W6','82','lime')">
+          <div class="member-av" style="background:var(--blue-dim);color:var(--blue)">JL</div>
+          <div>
+            <div class="member-row-name">Jeff La Rue</div>
+            <div class="member-row-detail">Concierge · Metabolic Reset W6</div>
+          </div>
+          <div class="member-recovery">
+            <div class="member-rec-val" style="color:var(--lime)">82</div>
+            <div class="member-rec-label">Readiness</div>
+          </div>
+        </div>
+        <div class="member-row" onclick="selectMember(this,'Tom Bradley','TB','amber','Essential · Strength Foundation W3','44','amber')">
+          <div class="member-av" style="background:var(--amber-dim);color:var(--amber)">TB</div>
+          <div>
+            <div class="member-row-name">Tom Bradley</div>
+            <div class="member-row-detail">Essential · Strength Foundation W3</div>
+          </div>
+          <div class="member-recovery">
+            <div class="member-rec-val" style="color:var(--amber)">44</div>
+            <div class="member-rec-label">Recovery</div>
+          </div>
+        </div>
+        <div class="member-row" onclick="selectMember(this,'Karen Walsh','KW','teal','Premier · Longevity W2','79','lime')">
+          <div class="member-av" style="background:var(--teal-dim);color:var(--teal)">KW</div>
+          <div>
+            <div class="member-row-name">Karen Walsh</div>
+            <div class="member-row-detail">Premier · Longevity W2</div>
+          </div>
+          <div class="member-recovery">
+            <div class="member-rec-val" style="color:var(--lime)">79</div>
+            <div class="member-rec-label">Readiness</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="goToStep(1)">← Back</button>
+        <button class="btn-primary" id="btn-next-2" onclick="goToStep(3)" style="opacity:0.4;pointer-events:none">Select a member to continue</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: UPLOAD PHOTO -->
+    <div class="step anim" id="step-3">
+      <div class="step-eyebrow">Step 3 of 5</div>
+      <h1 class="step-title">Take or upload<br>a photo</h1>
+      <p class="step-sub" id="upload-sub">Photo the <strong id="machine-name-display">ARX</strong> screen clearly. Claude will extract all the data automatically.</p>
+
+      <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+        <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none" onchange="handleFileSelect(this)">
+        <span class="upload-icon">📸</span>
+        <div class="upload-title">Tap to take a photo</div>
+        <div class="upload-sub">Or upload from your camera roll.<br>Make sure the screen is clearly visible and well-lit.</div>
+        <div class="upload-formats">
+          <span class="format-chip">JPG</span>
+          <span class="format-chip">PNG</span>
+          <span class="format-chip">HEIC</span>
+          <span class="format-chip">PDF</span>
+        </div>
+      </div>
+
+      <!-- Tips -->
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:20px">
+        <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:8px">Photo tips</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)"><span style="color:var(--lime)">✓</span> Hold phone steady and parallel to screen</div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)"><span style="color:var(--lime)">✓</span> Make sure all numbers are visible and in focus</div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)"><span style="color:var(--lime)">✓</span> Avoid glare — slight angle helps</div>
+          <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2)"><span style="color:var(--lime)">✓</span> Include the full screen — don't crop data out</div>
+        </div>
+      </div>
+
+      <!-- Demo button -->
+      <button class="btn-primary" onclick="loadDemoImage()" style="margin-bottom:8px">Demo — use sample ARX photo →</button>
+      <div class="btn-row">
+        <button class="btn-secondary" onclick="goToStep(2)">← Back</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: ANALYZING -->
+    <div class="step anim" id="step-4">
+      <div class="step-eyebrow">Step 4 of 5</div>
+      <h1 class="step-title">Claude is reading<br>the photo</h1>
+
+      <div class="analyzing-card">
+        <div class="analyzing-icon shimmer">🤖</div>
+        <div class="analyzing-title" id="analyzing-title">Analyzing image…</div>
+        <div class="analyzing-sub" id="analyzing-sub">Claude is identifying all data points from your ARX screen photo.</div>
+        <div class="progress-dots">
+          <div class="dot"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+        </div>
+
+        <div class="analyzing-steps" id="analyzing-steps">
+          <div class="a-step done" id="as-1">
+            <div class="a-step-icon">✓</div>
+            <span>Image received and validated</span>
+          </div>
+          <div class="a-step active" id="as-2">
+            <div class="a-step-icon shimmer">●</div>
+            <span>Identifying machine type and layout</span>
+          </div>
+          <div class="a-step pending" id="as-3">
+            <div class="a-step-icon">3</div>
+            <span>Extracting data fields</span>
+          </div>
+          <div class="a-step pending" id="as-4">
+            <div class="a-step-icon">4</div>
+            <span>Validating against schema</span>
+          </div>
+          <div class="a-step pending" id="as-5">
+            <div class="a-step-icon">5</div>
+            <span>Ready for review</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 5: REVIEW EXTRACTED DATA -->
+    <div class="step anim" id="step-5">
+      <div class="step-eyebrow">Step 5 of 5</div>
+      <h1 class="step-title">Review extracted<br>data</h1>
+      <p class="step-sub">Claude extracted the following from the photo. Check everything looks right — edit anything that's wrong.</p>
+
+      <!-- Results header -->
+      <div class="results-header">
+        <div class="results-icon">✓</div>
+        <div>
+          <div class="results-title" id="results-machine-label">ARX session data extracted</div>
+          <div class="results-sub" id="results-confidence-sub">High confidence · 9 fields extracted</div>
+        </div>
+        <div class="results-confidence">
+          <div class="confidence-val" id="confidence-val">97%</div>
+          <div class="confidence-label">Confidence</div>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="summary-card">
+        <div class="summary-member">
+          <div class="member-av" id="summary-av" style="width:30px;height:30px;font-size:12px;background:var(--lime-dim);color:var(--lime)">MR</div>
+          <div>
+            <div class="summary-title" id="summary-name">Mark Reynolds</div>
+            <div class="summary-detail" id="summary-detail">ARX · Today · Iso Club Tulsa</div>
+          </div>
+          <span class="tag tag-lime" id="summary-machine-tag" style="margin-left:auto">ARX</span>
+        </div>
+        <div class="summary-stats" id="summary-stats"></div>
+      </div>
+
+      <!-- Extracted fields -->
+      <div class="extracted-grid" id="extracted-grid"></div>
+
+      <!-- Staff notes -->
+      <div class="notes-field">
+        <div class="notes-label">Add staff notes (optional)</div>
+        <textarea class="notes-textarea" id="final-notes" placeholder="Any observations about this session…"></textarea>
+      </div>
+
+      <button class="btn-primary" onclick="saveData()">Save to <span id="save-member-name">Mark</span>'s profile →</button>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn-secondary" onclick="goToStep(3)">← Retake photo</button>
+        <button class="btn-secondary" onclick="editAll()">Edit all fields</button>
+      </div>
+    </div>
+
+    <!-- STEP 6: SUCCESS -->
+    <div class="step anim" id="step-6">
+      <div class="success-screen">
+        <div class="success-graphic">✓</div>
+        <h1 class="success-title">Data saved.</h1>
+        <p class="success-sub">The session data has been saved to <strong id="success-member-name">Mark's</strong> profile. Dustin will see it in his dashboard and it will appear in the member's app immediately.</p>
+
+        <div class="success-details">
+          <div class="success-row">
+            <span class="success-row-label">Member</span>
+            <span class="success-row-val" id="s-member">Mark Reynolds</span>
+          </div>
+          <div class="success-row">
+            <span class="success-row-label">Machine</span>
+            <span class="success-row-val" id="s-machine">ARX</span>
+          </div>
+          <div class="success-row">
+            <span class="success-row-label">Fields saved</span>
+            <span class="success-row-val" id="s-fields">9 data points</span>
+          </div>
+          <div class="success-row">
+            <span class="success-row-label">Confidence</span>
+            <span class="success-row-val" style="color:var(--lime)" id="s-confidence">97%</span>
+          </div>
+          <div class="success-row">
+            <span class="success-row-label">Saved to table</span>
+            <span class="success-row-val" id="s-table">arx_sessions</span>
+          </div>
+          <div class="success-row">
+            <span class="success-row-label">Dustin notified</span>
+            <span class="success-row-val" style="color:var(--lime)">Yes</span>
+          </div>
+        </div>
+
+        <div class="success-actions">
+          <button class="btn-primary" onclick="resetAll()">Log another session →</button>
+          <button class="btn-secondary" onclick="goBack()">Back to staff log</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+let selectedMachine = null;
+let selectedMachineColor = null;
+let selectedMemberName = null;
+let selectedMemberAv = null;
+let selectedMemberColor = null;
+let uploadedImage = null;
+
+const machineKeyMap = {
+  ARX: "arx",
+  CAROL: "carol",
+  Fit3D: "fit3d",
+  Vasper: "vasper",
+  Katalyst: "katalyst",
+  Proteus: "proteus",
+  Quickboard: "quickboard",
+  Whoop: "whoop",
+  Oura: "oura",
+};
+
+const machineData = {
+  ARX: { color: "amber", table: "arx_sessions", confidence: 0, fields: [], summary: [] },
+  CAROL: { color: "blue", table: "carol_sessions", confidence: 0, fields: [], summary: [] },
+  Fit3D: { color: "teal", table: "fit3d_scans", confidence: 0, fields: [], summary: [] },
+  Vasper: { color: "lime", table: "manual_workout_sessions", confidence: 0, fields: [], summary: [] },
+  Katalyst: { color: "coral", table: "manual_workout_sessions", confidence: 0, fields: [], summary: [] },
+  Proteus: { color: "lime", table: "manual_workout_sessions", confidence: 0, fields: [], summary: [] },
+  Quickboard: { color: "amber", table: "manual_workout_sessions", confidence: 0, fields: [], summary: [] },
+  Whoop: { color: "coral", table: "wearable_data", confidence: 0, fields: [], summary: [] },
+  Oura: { color: "blue", table: "wearable_data", confidence: 0, fields: [], summary: [] },
+};
+
+function fieldSpecs(machine) {
+  const common = (label, key, type = "text") => ({ label, key, type });
+  if (machine === "ARX") {
+    return [
+      common("Exercise", "exercise"),
+      common("Type", "exercise_type"),
+      common("Protocol", "protocol"),
+      common("Speed", "speed"),
+      common("Time (seconds)", "time_seconds", "number"),
+      common("Intensity", "intensity", "number"),
+      common("Output", "output", "number"),
+      common("Concentric max", "concentric_max", "number"),
+      common("Eccentric max", "eccentric_max", "number"),
+    ];
+  }
+  if (machine === "CAROL") {
+    return [
+      common("Ride type", "ride_type"),
+      common("Fitness score", "fitness_score", "number"),
+      common("Calories", "calories", "number"),
+      common("Peak power", "peak_power", "number"),
+      common("Energy", "energy", "number"),
+      common("Max HR", "max_hr", "number"),
+      common("Resistance", "resistance_direction"),
+    ];
+  }
+  if (machine === "Fit3D") {
+    return [
+      common("Body fat %", "body_fat_pct", "number"),
+      common("Weight (lbs)", "weight_lbs", "number"),
+      common("Lean mass (lbs)", "lean_mass_lbs", "number"),
+      common("Fat mass (lbs)", "fat_mass_lbs", "number"),
+      common("BMR", "bmr", "number"),
+      common("Visceral fat", "visceral_fat", "number"),
+      common("BMI", "bmi", "number"),
+      common("Body shape rating", "body_shape_rating"),
+      common("Head forward (in)", "posture_head_forward_in", "number"),
+      common("Shoulder forward (in)", "posture_shoulder_forward_in", "number"),
+      common("Hip forward (in)", "posture_hip_forward_in", "number"),
+      common("Balance left %", "balance_left_pct", "number"),
+      common("Balance right %", "balance_right_pct", "number"),
+    ];
+  }
+  if (machine === "Whoop") {
+    return [
+      common("Recovery score", "recovery_score", "number"),
+      common("HRV (ms)", "hrv_ms", "number"),
+      common("Resting HR", "resting_hr", "number"),
+      common("Sleep score", "sleep_score", "number"),
+      common("Sleep duration (hrs)", "sleep_duration_hrs", "number"),
+      common("Strain score", "strain_score", "number"),
+      common("SpO2 %", "spo2_pct", "number"),
+    ];
+  }
+  if (machine === "Oura") {
+    return [
+      common("Readiness score", "readiness_score", "number"),
+      common("Sleep score", "sleep_score", "number"),
+      common("HRV (ms)", "hrv_ms", "number"),
+      common("Sleep duration (hrs)", "sleep_duration_hrs", "number"),
+      common("Deep sleep (hrs)", "deep_sleep_hrs", "number"),
+      common("REM sleep (hrs)", "rem_sleep_hrs", "number"),
+      common("SpO2 %", "spo2_pct", "number"),
+      common("Body temp deviation", "body_temp_deviation"),
+    ];
+  }
+  return [
+    common("Duration (min)", "duration_minutes", "number"),
+    common("Visible output numbers", "visible_output_numbers"),
+  ];
+}
+
+function asText(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value.trim() || null;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value)) return value.join(", ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return null;
+}
+
+function buildModelData(machine, extracted) {
+  const specs = fieldSpecs(machine);
+  const rows = specs.map((spec) => ({
+    ...spec,
+    val: asText(extracted[spec.key]),
+    flagged: extracted[spec.key] === null || typeof extracted[spec.key] === "undefined",
+  }));
+  const total = rows.length || 1;
+  const present = rows.filter((row) => row.val !== null && row.val !== "").length;
+  const confidence = Math.round(65 + (present / total) * 35);
+  const summary = rows.filter((row) => row.val).slice(0, 3).map((row) => ({
+    val: row.val,
+    label: row.label,
+    color: machineData[machine]?.color || "lime",
+  }));
+  machineData[machine].fields = rows;
+  machineData[machine].confidence = confidence;
+  machineData[machine].summary = summary;
+}
+
+function selectMachine(el, name, color) {
+  document.querySelectorAll(".machine-btn").forEach((b) => b.classList.remove("selected"));
+  el.classList.add("selected");
+  selectedMachine = name;
+  selectedMachineColor = color;
+  const btn = document.getElementById("btn-next-1");
+  btn.style.opacity = "1";
+  btn.style.pointerEvents = "auto";
+  btn.textContent = `Continue with ${name} →`;
+  const machineDisplay = document.getElementById("machine-name-display");
+  if (machineDisplay) machineDisplay.textContent = name;
+}
+
+function selectMember(el, name, av, color) {
+  document.querySelectorAll(".member-row").forEach((r) => r.classList.remove("selected"));
+  el.classList.add("selected");
+  selectedMemberName = name;
+  selectedMemberAv = av;
+  selectedMemberColor = color;
+  const btn = document.getElementById("btn-next-2");
+  btn.style.opacity = "1";
+  btn.style.pointerEvents = "auto";
+  btn.textContent = `Continue with ${name.split(" ")[0]} →`;
+}
+
+function handleFileSelect(input) {
+  if (input.files && input.files[0]) {
+    uploadedImage = input.files[0];
+    goToStep(4);
+    runAnalysis();
+  }
+}
+
+function loadDemoImage() {
+  uploadedImage = "demo";
+  goToStep(4);
+  runAnalysis();
+}
+
+function setAnalyzeStep(index, state, icon) {
+  const el = document.getElementById(`as-${index}`);
+  if (!el) return;
+  el.className = `a-step ${state}`;
+  const iconEl = el.querySelector(".a-step-icon");
+  if (iconEl && typeof icon !== "undefined") iconEl.innerHTML = icon;
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function demoExtraction(machine) {
+  const sample = {
+    ARX: {
+      exercise: "Leg Press",
+      exercise_type: "Static",
+      protocol: "Time Trial (5000)",
+      speed: "Static",
+      time_seconds: 88,
+      intensity: 563,
+      output: 5000,
+      concentric_max: 699,
+      eccentric_max: 0,
+    },
+    CAROL: {
+      ride_type: "REHIT",
+      fitness_score: 36.5,
+      calories: 162,
+      peak_power: 1024,
+      energy: 30558,
+      max_hr: 138,
+      resistance_direction: "Up",
+    },
+    Fit3D: {
+      body_fat_pct: 29.17,
+      weight_lbs: 225.3,
+      lean_mass_lbs: 159.6,
+      bmr: 1902,
+      posture_head_forward_in: 5.0,
+      posture_shoulder_forward_in: 3.5,
+      posture_hip_forward_in: 1.7,
+    },
+    Vasper: { duration_minutes: 20, visible_output_numbers: ["HR 118", "Peak 134"] },
+    Katalyst: { duration_minutes: 20, visible_output_numbers: ["Intensity 7"] },
+    Proteus: { duration_minutes: 18, visible_output_numbers: ["Power 412"] },
+    Quickboard: { duration_minutes: 15, visible_output_numbers: ["Score 87"] },
+    Whoop: {
+      recovery_score: 74,
+      hrv_ms: 68,
+      resting_hr: 52,
+      sleep_score: 81,
+      sleep_duration_hrs: 7.4,
+      strain_score: 14.2,
+      spo2_pct: 96,
+    },
+    Oura: {
+      readiness_score: 81,
+      sleep_score: 79,
+      hrv_ms: 65,
+      sleep_duration_hrs: 7.8,
+      deep_sleep_hrs: 2.1,
+      rem_sleep_hrs: 1.8,
+      spo2_pct: 97,
+      body_temp_deviation: "+0.2",
+    },
+  };
+  return sample[machine] || { duration_minutes: 20 };
+}
+
+async function extractViaApi(file, machine) {
+  const machineKey = machineKeyMap[machine] || "other";
+  const formData = new FormData();
+  formData.append("equipment", machineKey);
+  formData.append("image", file);
+  const response = await fetch("/api/ai/extract-machine-data", {
+    method: "POST",
+    body: formData,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.success === false) {
+    throw new Error(payload.error || "Extraction failed.");
+  }
+  return payload.extracted || {};
+}
+
+async function runAnalysis() {
+  try {
+    setAnalyzeStep(1, "done", "✓");
+    setAnalyzeStep(2, "active", '<span class="shimmer">●</span>');
+    await wait(300);
+    setAnalyzeStep(2, "done", "✓");
+    setAnalyzeStep(3, "active", '<span class="shimmer">●</span>');
+
+    const extracted =
+      uploadedImage === "demo"
+        ? demoExtraction(selectedMachine)
+        : await extractViaApi(uploadedImage, selectedMachine);
+
+    await wait(300);
+    setAnalyzeStep(3, "done", "✓");
+    setAnalyzeStep(4, "active", '<span class="shimmer">●</span>');
+    buildModelData(selectedMachine, extracted);
+    await wait(280);
+    setAnalyzeStep(4, "done", "✓");
+    setAnalyzeStep(5, "done", "✓");
+    buildResultsScreen();
+    goToStep(5);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to analyze photo.";
+    alert(message);
+    goToStep(3);
+  }
+}
+
+function buildResultsScreen() {
+  const data = machineData[selectedMachine] || machineData.ARX;
+  document.getElementById("results-machine-label").textContent = `${selectedMachine} session data extracted`;
+  document.getElementById("results-confidence-sub").textContent = `${data.confidence >= 85 ? "High" : "Medium"} confidence · ${data.fields.length} fields extracted`;
+  document.getElementById("confidence-val").textContent = `${data.confidence}%`;
+  document.getElementById("summary-name").textContent = selectedMemberName || "Member";
+  document.getElementById("summary-detail").textContent = `${selectedMachine} · Today · Iso Club Tulsa`;
+  document.getElementById("summary-machine-tag").textContent = selectedMachine;
+  document.getElementById("summary-machine-tag").className = `tag tag-${data.color}`;
+  document.getElementById("save-member-name").textContent = (selectedMemberName || "Member").split(" ")[0];
+
+  const av = document.getElementById("summary-av");
+  av.textContent = selectedMemberAv || "MB";
+  av.style.background = `var(--${selectedMemberColor || "lime"}-dim)`;
+  av.style.color = `var(--${selectedMemberColor || "lime"})`;
+
+  const stats = document.getElementById("summary-stats");
+  const summaryRows = data.summary.length
+    ? data.summary
+    : [
+        { val: "—", label: "No summary field", color: data.color },
+        { val: "—", label: "Review fields below", color: "text" },
+        { val: "—", label: "Edit as needed", color: "text" },
+      ];
+  stats.innerHTML = summaryRows
+    .map(
+      (s) => `
+      <div class="summary-stat">
+        <div class="summary-stat-val" style="color:var(--${s.color})">${s.val}</div>
+        <div class="summary-stat-label">${s.label}</div>
+      </div>
+    `,
+    )
+    .join("");
+
+  const grid = document.getElementById("extracted-grid");
+  grid.innerHTML = data.fields
+    .map(
+      (f, i) => `
+      <div class="extracted-row${f.flagged ? " flagged" : ""}" id="er-${i}">
+        <div class="extracted-label">${f.label}</div>
+        <div class="extracted-val" id="ev-${i}">${f.val ?? "null"}</div>
+        <span class="extracted-edit" onclick="editField(${i},'${String(f.val ?? "").replace(/'/g, "&#39;")}')">Edit</span>
+      </div>
+    `,
+    )
+    .join("");
+
+  document.getElementById("s-member").textContent = selectedMemberName || "Member";
+  document.getElementById("s-machine").textContent = selectedMachine || "Machine";
+  document.getElementById("s-fields").textContent = `${data.fields.length} data points`;
+  document.getElementById("s-confidence").textContent = `${data.confidence}%`;
+  document.getElementById("s-table").textContent = data.table;
+  document.getElementById("success-member-name").textContent = `${(selectedMemberName || "Member").split(" ")[0]}'s`;
+}
+
+function editField(i, currentVal) {
+  const row = document.getElementById(`er-${i}`);
+  const valEl = document.getElementById(`ev-${i}`);
+  const editBtn = row.querySelector(".extracted-edit");
+
+  if (editBtn.textContent === "Edit") {
+    valEl.innerHTML = `<input type="text" class="extracted-input" value="${currentVal}" id="ei-${i}" autofocus>`;
+    editBtn.textContent = "Save";
+  } else {
+    const newVal = document.getElementById(`ei-${i}`).value;
+    valEl.textContent = newVal;
+    editBtn.textContent = "Edit";
+    row.classList.add("confirmed");
+    if (machineData[selectedMachine] && machineData[selectedMachine].fields[i]) {
+      machineData[selectedMachine].fields[i].val = newVal;
+      machineData[selectedMachine].fields[i].flagged = false;
+    }
+  }
+}
+
+function editAll() {
+  const data = machineData[selectedMachine] || machineData.ARX;
+  data.fields.forEach((f, i) => editField(i, f.val ?? ""));
+}
+
+function numberOrNull(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value.replace(/,/g, ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function buildExtractionPayload() {
+  const data = machineData[selectedMachine] || machineData.ARX;
+  const payload = {};
+  data.fields.forEach((field) => {
+    if (field.type === "number") {
+      payload[field.key] = numberOrNull(field.val);
+    } else {
+      payload[field.key] = field.val === "null" ? null : field.val || null;
+    }
+  });
+  return payload;
+}
+
+async function saveData() {
+  try {
+    const machineKey = machineKeyMap[selectedMachine] || "other";
+    const extraction = buildExtractionPayload();
+    const response = await fetch("/api/coach/log-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        member_name: selectedMemberName,
+        equipment: machineKey,
+        protocol_or_exercise:
+          extraction.exercise || extraction.protocol || `${selectedMachine} capture`,
+        duration_minutes:
+          extraction.duration_minutes ??
+          (typeof extraction.time_seconds === "number"
+            ? Math.max(1, Math.round(extraction.time_seconds / 60))
+            : ""),
+        perceived_effort: extraction.intensity ?? "",
+        ride_type: extraction.ride_type ?? undefined,
+        temperature_f: extraction.temperature_f ?? undefined,
+        extraction_data: extraction,
+        completed: true,
+        staff_notes: document.getElementById("final-notes").value || null,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.success === false) {
+      throw new Error(payload.error || "Save failed.");
+    }
+    goToStep(6);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to save data.";
+    alert(message);
+  }
+}
+
+function goToStep(n) {
+  document.querySelectorAll(".step").forEach((s) => s.classList.remove("active"));
+  document.getElementById(`step-${n}`).classList.add("active");
+  window.scrollTo(0, 0);
+  updateProgress(n);
+}
+
+function updateProgress(step) {
+  for (let i = 1; i <= 5; i++) {
+    const ps = document.getElementById(`ps-${i}`);
+    const pl = document.getElementById(`pl-${i}`);
+    if (i < step) {
+      ps.className = "p-step done";
+      ps.querySelector(".p-dot").textContent = "✓";
+      if (pl) pl.classList.add("done");
+    } else if (i === step) {
+      ps.className = "p-step active";
+    } else {
+      ps.className = "p-step";
+      ps.querySelector(".p-dot").textContent = String(i);
+      if (pl) pl.classList.remove("done");
+    }
+  }
+  if (step === 6) {
+    document.getElementById("progress-steps").style.display = "none";
+  } else {
+    document.getElementById("progress-steps").style.display = "flex";
+  }
+}
+
+function resetAll() {
+  selectedMachine = null;
+  selectedMachineColor = null;
+  selectedMemberName = null;
+  selectedMemberAv = null;
+  selectedMemberColor = null;
+  uploadedImage = null;
+  document.querySelectorAll(".machine-btn").forEach((b) => b.classList.remove("selected"));
+  document.querySelectorAll(".member-row").forEach((r) => r.classList.remove("selected"));
+  document.getElementById("btn-next-1").style.opacity = "0.4";
+  document.getElementById("btn-next-1").style.pointerEvents = "none";
+  document.getElementById("btn-next-1").textContent = "Select a machine to continue";
+  document.getElementById("btn-next-2").style.opacity = "0.4";
+  document.getElementById("btn-next-2").style.pointerEvents = "none";
+  document.getElementById("btn-next-2").textContent = "Select a member to continue";
+  document.getElementById("final-notes").value = "";
+  document.getElementById("progress-steps").style.display = "flex";
+  goToStep(1);
+}
+
+function goBack() {
+  window.location.href = "/coach/log";
+}
+</script>
+</body>
+</html>

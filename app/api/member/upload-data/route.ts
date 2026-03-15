@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { asOptionalNumber, asRequiredString, getActorContext } from "@/lib/server/actor";
+import { sendLowRecoverySmsForMember } from "@/lib/server/sms-notifications";
 
 type Body = {
   equipment?: string;
@@ -14,7 +15,6 @@ type UploadEquipment =
   | "whoop"
   | "oura"
   | "garmin"
-  | "fitbit"
   | "apple_health"
   | "other_wearable";
 
@@ -27,7 +27,6 @@ function normalizeEquipment(input: string): UploadEquipment {
   if (value === "garmin" || value === "garmin_connect" || value === "garmin connect") {
     return "garmin";
   }
-  if (value === "fitbit") return "fitbit";
   if (value === "apple_health" || value === "apple health" || value === "applehealth") {
     return "apple_health";
   }
@@ -179,6 +178,13 @@ export async function POST(request: Request) {
         insert = await context.supabase.from("wearable_data").insert(wearablePayloadBase);
       }
       if (insert.error) throw new Error(insert.error.message);
+      if (
+        recoveryScore !== null &&
+        recoveryScore < 50 &&
+        (deviceType === "whoop" || deviceType === "oura")
+      ) {
+        await sendLowRecoverySmsForMember(context.supabase, memberId, recoveryScore);
+      }
     }
 
     return NextResponse.json({ success: true });

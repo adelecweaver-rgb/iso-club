@@ -1,7 +1,8 @@
 import "server-only";
 
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { safeAuth, safeCurrentUser } from "@/lib/server/clerk";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type AnyRow = Record<string, unknown>;
 
@@ -30,12 +31,12 @@ export async function getActorContext(): Promise<{
   context: ActorContext | null;
   error: string | null;
 }> {
-  const { userId } = await auth();
+  const { userId } = await safeAuth();
   if (!userId) {
     return { context: null, error: "Not authenticated." };
   }
 
-  const clerkUser = await currentUser();
+  const clerkUser = await safeCurrentUser();
   if (!clerkUser) {
     return { context: null, error: "Unable to resolve Clerk user." };
   }
@@ -44,6 +45,7 @@ export async function getActorContext(): Promise<{
   if (!supabase) {
     return { context: null, error: "Supabase is not configured." };
   }
+  const supabaseAdmin = createSupabaseAdminClient();
 
   const email = clerkUser.primaryEmailAddress?.emailAddress ?? "";
   const fullName =
@@ -62,7 +64,9 @@ export async function getActorContext(): Promise<{
 
   let dbUser: AnyRow | null = null;
 
-  const byClerk = await supabase
+  const usersClient = supabaseAdmin ?? supabase;
+
+  const byClerk = await usersClient
     .from("users")
     .select("*")
     .eq("clerk_id", userId)
@@ -70,7 +74,7 @@ export async function getActorContext(): Promise<{
   if (!byClerk.error && Array.isArray(byClerk.data) && byClerk.data.length > 0) {
     dbUser = byClerk.data[0] as AnyRow;
   } else if (email) {
-    const byEmail = await supabase
+    const byEmail = await usersClient
       .from("users")
       .select("*")
       .eq("email", email)
@@ -81,6 +85,13 @@ export async function getActorContext(): Promise<{
   }
 
   if (!dbUser) {
+    if (!supabaseAdmin) {
+      return {
+        context: null,
+        error:
+          "SUPABASE_SERVICE_ROLE_KEY is required for automatic user provisioning.",
+      };
+    }
     const createPayload = {
       clerk_id: userId,
       email,
@@ -92,7 +103,7 @@ export async function getActorContext(): Promise<{
       is_active: true,
       avatar_url: clerkUser.imageUrl ?? null,
     };
-    const created = await supabase
+    const created = await supabaseAdmin
       .from("users")
       .upsert(createPayload, { onConflict: "clerk_id" })
       .select("*")

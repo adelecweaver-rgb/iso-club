@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { asOptionalNumber, asRequiredString, getActorContext, isCoachRole } from "@/lib/server/actor";
+import { sendProtocolReadySmsForMember } from "@/lib/server/sms-notifications";
 
 type ProtocolSessionInput = {
   name?: string;
@@ -120,6 +121,12 @@ export async function POST(request: Request) {
         throw new Error(sessionsInsert.error.message);
       }
     }
+
+    await sendProtocolReadySmsForMember(
+      context.supabase,
+      memberId,
+      primaryGoal ?? "",
+    );
 
     return NextResponse.json({ success: true, protocol_id: protocolInsert.data.id });
   } catch (err) {

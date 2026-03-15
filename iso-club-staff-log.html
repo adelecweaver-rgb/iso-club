@@ -544,230 +544,601 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 function updateClock() {
   const now = new Date();
   let h = now.getHours();
-  const m = now.getMinutes().toString().padStart(2,'0');
-  const ampm = h >= 12 ? 'PM' : 'AM';
+  const m = now.getMinutes().toString().padStart(2, "0");
+  const ampm = h >= 12 ? "PM" : "AM";
   h = h % 12 || 12;
-  document.getElementById('clock').textContent = `${h}:${m} ${ampm}`;
+  document.getElementById("clock").textContent = `${h}:${m} ${ampm}`;
 }
 updateClock();
 setInterval(updateClock, 1000);
 
 // DATE
-const d = new Date(2026,2,14);
-document.getElementById('top-date').textContent = d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+const d = new Date(2026, 2, 14);
+document.getElementById("top-date").textContent = d.toLocaleDateString("en-US", {
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
 
 // MEMBER DATA
 const members = {
-  'Mark Reynolds': {
-    av:'MR', color:'lime',
-    meta:'Premier · Week 7 of 12 · Strength Foundation',
-    protocol:'Dustin\'s protocol — Session C',
-    protocolSession:'ARX Upper Body · 20 min',
-    alert:{type:'ok', msg:'✓ Recovery 74 — good to train as prescribed'},
-    wearable:{recovery:'74',recoveryColor:'lime',hrv:'68ms',sleep:'7.4h'},
-    defaultEquip:'ARX', defaultDuration:20
+  "Mark Reynolds": {
+    av: "MR",
+    color: "lime",
+    meta: "Premier · Week 7 of 12 · Strength Foundation",
+    protocol: "Dustin's protocol — Session C",
+    protocolSession: "ARX Upper Body · 20 min",
+    alert: { type: "ok", msg: "✓ Recovery 74 — good to train as prescribed" },
+    wearable: { recovery: "74", recoveryColor: "lime", hrv: "68ms", sleep: "7.4h" },
+    defaultEquip: "ARX",
+    defaultDuration: 20,
   },
-  'Sarah Mitchell': {
-    av:'SM', color:'coral',
-    meta:'Premier · Week 4 · Cardio Focus',
-    protocol:'Dustin\'s protocol — Session B',
-    protocolSession:'CAROL REHIT · 12 min',
-    alert:{type:'low', msg:'⚠ Recovery 31 — consider modifying session intensity'},
-    wearable:{recovery:'31',recoveryColor:'coral',hrv:'28ms ⚠',sleep:'5.1h'},
-    defaultEquip:'CAROL', defaultDuration:12
+  "Sarah Mitchell": {
+    av: "SM",
+    color: "coral",
+    meta: "Premier · Week 4 · Cardio Focus",
+    protocol: "Dustin's protocol — Session B",
+    protocolSession: "CAROL REHIT · 12 min",
+    alert: { type: "low", msg: "⚠ Recovery 31 — consider modifying session intensity" },
+    wearable: { recovery: "31", recoveryColor: "coral", hrv: "28ms ⚠", sleep: "5.1h" },
+    defaultEquip: "CAROL",
+    defaultDuration: 12,
   },
-  'Jeff La Rue': {
-    av:'JL', color:'blue',
-    meta:'Concierge · Week 6 · Metabolic Reset',
-    protocol:'Scheduled today',
-    protocolSession:'Fit3D Body Scan · 5 min',
-    alert:{type:'ok', msg:'✓ Readiness 82 — optimal. Fit3D scan scheduled today'},
-    wearable:{recovery:'82',recoveryColor:'lime',hrv:'71ms',sleep:'8.1h'},
-    defaultEquip:'Fit3D', defaultDuration:5
+  "Jeff La Rue": {
+    av: "JL",
+    color: "blue",
+    meta: "Concierge · Week 6 · Metabolic Reset",
+    protocol: "Scheduled today",
+    protocolSession: "Fit3D Body Scan · 5 min",
+    alert: { type: "ok", msg: "✓ Readiness 82 — optimal. Fit3D scan scheduled today" },
+    wearable: { recovery: "82", recoveryColor: "lime", hrv: "71ms", sleep: "8.1h" },
+    defaultEquip: "Fit3D",
+    defaultDuration: 5,
   },
-  'Tom Bradley': {
-    av:'TB', color:'amber',
-    meta:'Essential · Week 3 · Strength Foundation',
-    protocol:'Dustin\'s protocol — Session A',
-    protocolSession:'ARX Lower Body · 20 min',
-    alert:{type:'warn', msg:'⚠ Sleep 4.9hrs · Recovery 44 — heads up, monitor closely'},
-    wearable:{recovery:'44',recoveryColor:'amber',hrv:'42ms',sleep:'4.9h ⚠'},
-    defaultEquip:'ARX', defaultDuration:20
+  "Tom Bradley": {
+    av: "TB",
+    color: "amber",
+    meta: "Essential · Week 3 · Strength Foundation",
+    protocol: "Dustin's protocol — Session A",
+    protocolSession: "ARX Lower Body · 20 min",
+    alert: { type: "warn", msg: "⚠ Sleep 4.9hrs · Recovery 44 — heads up, monitor closely" },
+    wearable: { recovery: "44", recoveryColor: "amber", hrv: "42ms", sleep: "4.9h ⚠" },
+    defaultEquip: "ARX",
+    defaultDuration: 20,
   },
-  'Karen Walsh': {
-    av:'KW', color:'teal',
-    meta:'Premier · Week 2 · Longevity Protocol',
-    protocol:'Dustin\'s protocol — Session D',
-    protocolSession:'Vasper + Katalyst · 30 min',
-    alert:{type:'ok', msg:'✓ Readiness 79 — good to train'},
-    wearable:{recovery:'79',recoveryColor:'lime',hrv:'72ms',sleep:'8.1h'},
-    defaultEquip:'Vasper', defaultDuration:30
+  "Karen Walsh": {
+    av: "KW",
+    color: "teal",
+    meta: "Premier · Week 2 · Longevity Protocol",
+    protocol: "Dustin's protocol — Session D",
+    protocolSession: "Vasper + Katalyst · 30 min",
+    alert: { type: "ok", msg: "✓ Readiness 79 — good to train" },
+    wearable: { recovery: "79", recoveryColor: "lime", hrv: "72ms", sleep: "8.1h" },
+    defaultEquip: "Vasper",
+    defaultDuration: 30,
   },
-  'David Park': {
-    av:'DP', color:'text2',
-    meta:'Essential · Week 1 · Strength Foundation',
-    protocol:'Dustin\'s protocol — Session B',
-    protocolSession:'CAROL REHIT · 12 min',
-    alert:{type:'warn', msg:'↓ Recovery 61 — moderate. Proceed at normal intensity'},
-    wearable:{recovery:'61',recoveryColor:'amber',hrv:'55ms',sleep:'6.8h'},
-    defaultEquip:'CAROL', defaultDuration:12
-  }
+  "David Park": {
+    av: "DP",
+    color: "text2",
+    meta: "Essential · Week 1 · Strength Foundation",
+    protocol: "Dustin's protocol — Session B",
+    protocolSession: "CAROL REHIT · 12 min",
+    alert: { type: "warn", msg: "↓ Recovery 61 — moderate. Proceed at normal intensity" },
+    wearable: { recovery: "61", recoveryColor: "amber", hrv: "55ms", sleep: "6.8h" },
+    defaultEquip: "CAROL",
+    defaultDuration: 12,
+  },
 };
 
-let currentMember = 'Mark Reynolds';
-let selectedEquip = 'ARX';
+let currentMember = "Mark Reynolds";
+let selectedEquip = "ARX";
 let selectedEffort = 7;
 let recoveryItems = [];
 let quickNotes = [];
 let loggedCount = 3;
+let pendingPhotoEquipment = null;
+let pendingExtraction = null;
 
-function selectMember(el, name, av, color, detail, score, scoreColor) {
-  document.querySelectorAll('.member-btn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
+function selectMember(el, name, av, color) {
+  document.querySelectorAll(".member-btn").forEach((b) => b.classList.remove("active"));
+  el.classList.add("active");
   currentMember = name;
 
   const data = members[name];
-  if(!data) return;
+  if (!data) return;
 
-  // Update header
-  document.getElementById('log-av').textContent = av;
-  document.getElementById('log-av').style.background = `var(--${color}-dim)`;
-  document.getElementById('log-av').style.color = `var(--${color})`;
-  document.getElementById('log-name').textContent = name;
-  document.getElementById('log-meta').textContent = data.meta;
+  document.getElementById("log-av").textContent = av;
+  document.getElementById("log-av").style.background = `var(--${color}-dim)`;
+  document.getElementById("log-av").style.color = `var(--${color})`;
+  document.getElementById("log-name").textContent = name;
+  document.getElementById("log-meta").textContent = data.meta;
 
-  // Wearable
-  document.getElementById('log-wearable').innerHTML = `
+  document.getElementById("log-wearable").innerHTML = `
     <div class="wearable-row"><span class="wearable-val" style="color:var(--${data.wearable.recoveryColor})">${data.wearable.recovery}</span><span class="wearable-lbl">Recovery</span></div>
     <div class="wearable-row"><span class="wearable-val">${data.wearable.hrv}</span><span class="wearable-lbl">HRV</span></div>
     <div class="wearable-row"><span class="wearable-val">${data.wearable.sleep}</span><span class="wearable-lbl">Sleep</span></div>
   `;
 
-  // Protocol banner
-  document.getElementById('protocol-banner').innerHTML = `
+  document.getElementById("protocol-banner").innerHTML = `
     <span class="pb-icon">📋</span>
     <span class="pb-text">${data.protocol}</span>
     <span class="pb-session">${data.protocolSession}</span>
   `;
 
-  // Alert
-  const alertEl = document.getElementById('member-alert');
+  const alertEl = document.getElementById("member-alert");
   alertEl.className = `alert alert-${data.alert.type}`;
   alertEl.textContent = data.alert.msg;
 
-  // Default equipment
-  document.querySelectorAll('.equip-btn:not(.recovery-btn)').forEach(b => b.classList.remove('selected'));
-  const equipBtns = document.querySelectorAll('.equip-btn:not(.recovery-btn)');
-  equipBtns.forEach(b => {
-    if(b.querySelector('.equip-name').textContent === data.defaultEquip) {
-      b.classList.add('selected');
+  document.querySelectorAll(".equip-btn:not(.recovery-btn)").forEach((b) => b.classList.remove("selected"));
+  const equipBtns = document.querySelectorAll(".equip-btn:not(.recovery-btn)");
+  equipBtns.forEach((b) => {
+    const label = b.querySelector(".equip-name");
+    if (label && label.textContent === data.defaultEquip) {
+      b.classList.add("selected");
       selectedEquip = data.defaultEquip;
     }
   });
 
-  // Duration
-  document.getElementById('duration').value = data.defaultDuration;
+  document.getElementById("duration").value = data.defaultDuration;
+  document.getElementById("log-btn").textContent = `Log session for ${name.split(" ")[0]} →`;
+  document.getElementById("ai-confirm-save").textContent = `Confirm & save to ${name.split(" ")[0]}`;
 
-  // Log button
-  document.getElementById('log-btn').textContent = `Log session for ${name.split(' ')[0]} →`;
-
-  // Clear recovery and quick notes
-  document.querySelectorAll('.recovery-btn').forEach(b => b.classList.remove('selected'));
-  document.querySelectorAll('.quick-note').forEach(n => n.classList.remove('selected'));
+  document.querySelectorAll(".recovery-btn").forEach((b) => b.classList.remove("selected"));
+  document.querySelectorAll(".quick-note").forEach((n) => n.classList.remove("selected"));
   recoveryItems = [];
   quickNotes = [];
-  document.getElementById('staff-notes').value = '';
+  document.getElementById("staff-notes").value = "";
 }
 
-function selectEquip(el, name, type) {
-  document.querySelectorAll('.equip-btn:not(.recovery-btn)').forEach(b => b.classList.remove('selected'));
-  el.classList.add('selected');
+function selectEquip(el, name) {
+  document.querySelectorAll(".equip-btn:not(.recovery-btn)").forEach((b) => b.classList.remove("selected"));
+  el.classList.add("selected");
   selectedEquip = name;
 }
 
 function toggleRecovery(el, name) {
-  el.classList.toggle('selected');
-  if(el.classList.contains('selected')) {
-    recoveryItems.push(name);
+  el.classList.toggle("selected");
+  if (el.classList.contains("selected")) {
+    if (!recoveryItems.includes(name)) recoveryItems.push(name);
   } else {
-    recoveryItems = recoveryItems.filter(r => r !== name);
+    recoveryItems = recoveryItems.filter((r) => r !== name);
   }
 }
 
 function selectEffort(el, val) {
-  document.querySelectorAll('.effort-btn').forEach(b => b.classList.remove('selected'));
-  el.classList.add('selected');
+  document.querySelectorAll(".effort-btn").forEach((b) => b.classList.remove("selected"));
+  el.classList.add("selected");
   selectedEffort = val;
 }
 
 function toggleQuickNote(el) {
-  el.classList.toggle('selected');
+  el.classList.toggle("selected");
   const text = el.textContent;
-  if(el.classList.contains('selected')) {
-    quickNotes.push(text);
+  if (el.classList.contains("selected")) {
+    if (!quickNotes.includes(text)) quickNotes.push(text);
   } else {
-    quickNotes = quickNotes.filter(n => n !== text);
+    quickNotes = quickNotes.filter((n) => n !== text);
   }
 }
 
-function logSession() {
-  const duration = document.getElementById('duration').value;
-  const notes = document.getElementById('staff-notes').value;
-  const allNotes = [...quickNotes, ...(notes ? [notes] : [])].join(' · ');
+function normalizeMachineName(name) {
+  const value = (name || "").trim().toLowerCase();
+  if (value === "arx") return "arx";
+  if (value === "carol") return "carol";
+  if (value === "fit3d" || value === "fit 3d") return "fit3d";
+  if (value === "vasper") return "vasper";
+  if (value === "katalyst") return "katalyst";
+  if (value === "proteus") return "proteus";
+  if (value === "quickboard") return "quickboard";
+  if (value === "nxpro") return "nxpro";
+  if (value === "ir sauna" || value === "infrared sauna") return "infrared_sauna";
+  if (value === "cold plunge") return "cold_plunge";
+  if (value === "compression") return "compression";
+  if (value === "other") return "other";
+  return "other";
+}
 
-  // Show success
-  document.getElementById('success-member').textContent = currentMember;
-  document.getElementById('success-detail').textContent =
-    `${selectedEquip} · ${duration} min · Effort ${selectedEffort}${recoveryItems.length ? ' · + Recovery' : ''}`;
-  document.getElementById('success-overlay').classList.add('show');
+function displayMachineName(machine) {
+  const map = {
+    arx: "ARX",
+    carol: "CAROL",
+    fit3d: "Fit3D",
+    vasper: "Vasper",
+    katalyst: "Katalyst",
+    proteus: "Proteus",
+    quickboard: "Quickboard",
+    nxpro: "NxPro",
+    infrared_sauna: "IR Sauna",
+    cold_plunge: "Cold plunge",
+    compression: "Compression",
+    other: "Other",
+  };
+  return map[machine] || machine;
+}
 
-  // Add to log list
+function setAiStatus(kind, message) {
+  const el = document.getElementById("ai-status");
+  if (!el) return;
+  el.textContent = message || "";
+  if (!message) {
+    el.style.display = "none";
+    return;
+  }
+  el.style.display = "flex";
+  if (kind === "success") {
+    el.style.background = "var(--lime-dim)";
+    el.style.borderColor = "rgba(201,240,85,0.25)";
+    el.style.color = "var(--lime)";
+  } else if (kind === "error") {
+    el.style.background = "var(--coral-dim)";
+    el.style.borderColor = "rgba(240,112,85,0.25)";
+    el.style.color = "var(--coral)";
+  } else {
+    el.style.background = "var(--blue-dim)";
+    el.style.borderColor = "rgba(85,184,240,0.25)";
+    el.style.color = "var(--blue)";
+  }
+}
+
+function ensureAiUi() {
+  if (document.getElementById("ai-enhancements-style")) return;
+
+  const style = document.createElement("style");
+  style.id = "ai-enhancements-style";
+  style.textContent = `
+    .equip-upload-wrap{display:flex;flex-direction:column;gap:6px}
+    .equip-upload-wrap .equip-btn{width:100%}
+    .equip-upload-btn{padding:6px 8px;border-radius:8px;border:1px dashed var(--border2);background:var(--bg3);color:var(--text3);font-size:11px;cursor:pointer}
+    .equip-upload-btn:hover{border-color:var(--lime);color:var(--lime)}
+    .ai-status{display:none;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid transparent;margin-top:10px;font-size:12px}
+    .ai-confirm-list{max-height:240px;overflow:auto;text-align:left;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin:10px 0 16px}
+    .ai-confirm-row{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--border)}
+    .ai-confirm-row:last-child{border-bottom:none}
+    .ai-confirm-key{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text3)}
+    .ai-confirm-val{font-size:12px;color:var(--text2);text-align:right}
+    .ai-confirm-actions{display:flex;gap:8px;justify-content:center}
+  `;
+  document.head.appendChild(style);
+
+  const alert = document.getElementById("member-alert");
+  if (alert) {
+    const status = document.createElement("div");
+    status.id = "ai-status";
+    status.className = "ai-status";
+    alert.insertAdjacentElement("afterend", status);
+  }
+
+  const photoInput = document.createElement("input");
+  photoInput.type = "file";
+  photoInput.accept = "image/*";
+  photoInput.setAttribute("capture", "environment");
+  photoInput.id = "machine-photo-input";
+  photoInput.style.display = "none";
+  photoInput.addEventListener("change", async (event) => {
+    const input = event.target;
+    if (!input || !input.files || !input.files[0]) return;
+    const file = input.files[0];
+    await extractFromPhoto(file);
+    input.value = "";
+  });
+  document.body.appendChild(photoInput);
+
+  const overlay = document.createElement("div");
+  overlay.className = "success-overlay";
+  overlay.id = "ai-extract-overlay";
+  overlay.innerHTML = `
+    <div class="success-card" style="max-width:560px;width:92vw">
+      <div class="success-check">📷</div>
+      <div class="success-title" style="font-size:24px">Photo uploaded ✓</div>
+      <div class="success-sub" id="ai-confirm-sub">Claude extracted the following data:</div>
+      <div class="ai-confirm-list" id="ai-confirm-list"></div>
+      <div class="ai-confirm-actions">
+        <button class="btn-success" id="ai-confirm-save">Confirm & save to Mark</button>
+        <button class="btn-log btn-log-ghost" id="ai-confirm-edit" style="flex:unset;padding:12px 16px">Edit manually</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById("ai-confirm-edit").addEventListener("click", () => {
+    document.getElementById("ai-extract-overlay").classList.remove("show");
+    setAiStatus("info", "Extraction loaded into form. Edit anything, then log session.");
+  });
+  document.getElementById("ai-confirm-save").addEventListener("click", async () => {
+    if (!pendingExtraction) return;
+    const button = document.getElementById("ai-confirm-save");
+    button.setAttribute("disabled", "true");
+    button.textContent = "Saving…";
+    try {
+      await saveSessionToServer(pendingExtraction.extracted, pendingExtraction.machine);
+      document.getElementById("ai-extract-overlay").classList.remove("show");
+      pendingExtraction = null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Save failed.";
+      setAiStatus("error", message);
+    } finally {
+      button.removeAttribute("disabled");
+      button.textContent = `Confirm & save to ${currentMember.split(" ")[0]}`;
+    }
+  });
+}
+
+function initUploadButtons() {
+  const allButtons = document.querySelectorAll("#equip-grid .equip-btn, .equip-grid-recovery .equip-btn");
+  allButtons.forEach((btn) => {
+    if (btn.parentElement && btn.parentElement.classList.contains("equip-upload-wrap")) return;
+    const label = btn.querySelector(".equip-name");
+    if (!label || !label.textContent) return;
+    const wrap = document.createElement("div");
+    wrap.className = "equip-upload-wrap";
+    btn.parentNode.insertBefore(wrap, btn);
+    wrap.appendChild(btn);
+
+    const upload = document.createElement("button");
+    upload.type = "button";
+    upload.className = "equip-upload-btn";
+    upload.textContent = "Upload Photo";
+    upload.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      pendingPhotoEquipment = label.textContent.trim();
+      const input = document.getElementById("machine-photo-input");
+      if (input) input.click();
+    });
+    wrap.appendChild(upload);
+  });
+}
+
+function chooseEquipment(name) {
+  const machine = normalizeMachineName(name);
+  const display = displayMachineName(machine);
+  const equipButtons = Array.from(document.querySelectorAll("#equip-grid .equip-btn"));
+  const target = equipButtons.find((btn) => {
+    const text = btn.querySelector(".equip-name");
+    return text && text.textContent && text.textContent.trim().toLowerCase() === display.toLowerCase();
+  });
+  if (target) {
+    target.click();
+  } else {
+    selectedEquip = machine;
+  }
+
+  if (["infrared_sauna", "cold_plunge", "compression", "nxpro"].includes(machine)) {
+    const recoveryMap = {
+      infrared_sauna: "infrared_sauna",
+      cold_plunge: "cold_plunge",
+      compression: "compression",
+      nxpro: "nxpro",
+    };
+    const targetRecovery = recoveryMap[machine];
+    document.querySelectorAll(".recovery-btn").forEach((btn) => {
+      btn.classList.remove("selected");
+      const onclick = btn.getAttribute("onclick") || "";
+      if (onclick.includes(`'${targetRecovery}'`)) {
+        btn.classList.add("selected");
+        recoveryItems = [targetRecovery];
+      }
+    });
+    selectedEquip = machine;
+  }
+}
+
+function firstNumber(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function applyExtractedData(machine, extracted) {
+  chooseEquipment(machine);
+
+  const timeSeconds = firstNumber(extracted.time_seconds);
+  const durationMins =
+    firstNumber(extracted.duration_minutes) ??
+    (timeSeconds !== null ? Math.max(1, Math.round(timeSeconds / 60)) : null);
+  if (durationMins !== null) {
+    document.getElementById("duration").value = String(durationMins);
+  }
+
+  const intensity = firstNumber(extracted.intensity);
+  if (intensity !== null) {
+    const effort = Math.max(1, Math.min(10, Math.round(intensity)));
+    const btn = Array.from(document.querySelectorAll(".effort-btn")).find((item) => item.textContent === String(effort));
+    if (btn) btn.click();
+  }
+
+  const summaryEntries = [];
+  Object.entries(extracted || {}).forEach(([key, value]) => {
+    if (value === null || value === undefined || value === "") return;
+    if (Array.isArray(value) && value.length === 0) return;
+    summaryEntries.push(`${key}: ${Array.isArray(value) ? value.join(", ") : value}`);
+  });
+  if (summaryEntries.length) {
+    const existing = document.getElementById("staff-notes").value.trim();
+    const aiSummary = `AI extracted (${displayMachineName(machine)}): ${summaryEntries.join(" | ")}`;
+    document.getElementById("staff-notes").value = existing
+      ? `${existing}\n${aiSummary}`
+      : aiSummary;
+  }
+}
+
+function renderExtractionConfirmation(machine, extracted) {
+  const list = document.getElementById("ai-confirm-list");
+  const sub = document.getElementById("ai-confirm-sub");
+  const rows = Object.entries(extracted || {}).filter(([, value]) => {
+    if (value === null || value === undefined || value === "") return false;
+    if (Array.isArray(value) && value.length === 0) return false;
+    return true;
+  });
+
+  sub.textContent = `Claude extracted from ${displayMachineName(machine)}:`;
+  list.innerHTML = rows.length
+    ? rows
+        .map(([key, value]) => {
+          const displayValue = Array.isArray(value) ? value.join(", ") : String(value);
+          return `
+            <div class="ai-confirm-row">
+              <div class="ai-confirm-key">${key.replace(/_/g, " ")}</div>
+              <div class="ai-confirm-val">${displayValue}</div>
+            </div>
+          `;
+        })
+        .join("")
+    : '<div style="color:var(--text3);font-size:12px">No visible fields were extracted.</div>';
+}
+
+async function extractFromPhoto(file) {
+  try {
+    const machine = normalizeMachineName(pendingPhotoEquipment || selectedEquip);
+    setAiStatus("info", "Uploading photo and extracting data with Claude…");
+
+    const formData = new FormData();
+    formData.append("equipment", machine);
+    formData.append("image", file);
+
+    const response = await fetch("/api/ai/extract-machine-data", {
+      method: "POST",
+      body: formData,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.success === false) {
+      throw new Error(payload.error || "Extraction failed.");
+    }
+
+    const extracted = payload.extracted || {};
+    const extractedMachine = payload.machine || machine;
+    pendingExtraction = { machine: extractedMachine, extracted };
+
+    applyExtractedData(extractedMachine, extracted);
+    renderExtractionConfirmation(extractedMachine, extracted);
+    document.getElementById("ai-extract-overlay").classList.add("show");
+    setAiStatus("success", "Photo uploaded ✓ Claude extracted the data. Confirm to save.");
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not process the photo.";
+    setAiStatus("error", message);
+  }
+}
+
+function buildPayload(extractionData, machineOverride) {
+  const duration = document.getElementById("duration").value;
+  const notes = document.getElementById("staff-notes").value;
+  const sessionType = document.getElementById("session-type").value;
+  const completedRaw = document.getElementById("completed").value;
+  const completed = completedRaw === "false" ? false : true;
+  const quickNoteText = [...quickNotes, ...(completedRaw === "partial" ? ["Partial completion"] : [])].join(" · ");
+  const allNotes = [quickNoteText, notes].filter(Boolean).join(" · ");
+  const normalizedMachine = machineOverride || normalizeMachineName(selectedEquip);
+
+  return {
+    member_name: currentMember,
+    equipment: normalizedMachine,
+    duration_minutes: duration,
+    protocol_or_exercise: sessionType,
+    staff_notes: allNotes || null,
+    perceived_effort: selectedEffort,
+    completed,
+    extraction_data: extractionData || undefined,
+    ride_type: extractionData && extractionData.ride_type ? extractionData.ride_type : undefined,
+    temperature_f:
+      extractionData && typeof extractionData.temperature_f !== "undefined"
+        ? extractionData.temperature_f
+        : undefined,
+  };
+}
+
+function appendLogItem(equipLabel, duration, allNotes) {
   loggedCount++;
-  document.getElementById('logged-count').textContent = loggedCount;
+  document.getElementById("logged-count").textContent = loggedCount;
   const now = new Date();
   let h = now.getHours() % 12 || 12;
-  const m = now.getMinutes().toString().padStart(2,'0');
-  const ampm = now.getHours() >= 12 ? 'PM' : 'AM';
+  const m = now.getMinutes().toString().padStart(2, "0");
+  const ampm = now.getHours() >= 12 ? "PM" : "AM";
   const timeStr = `${h}:${m} ${ampm}`;
   const memberData = members[currentMember];
-  const color = memberData ? memberData.color : 'text2';
+  const color = memberData ? memberData.color : "text2";
 
-  const item = document.createElement('div');
-  item.className = 'logged-item';
+  const item = document.createElement("div");
+  item.className = "logged-item";
   item.innerHTML = `
     <div class="logged-top">
       <div class="logged-member">${currentMember}</div>
       <div class="logged-time">${timeStr}</div>
     </div>
-    <span class="logged-equip" style="background:var(--${color}-dim);color:var(--${color})">${selectedEquip}</span>
-    <div class="logged-detail">${duration} min · Effort ${selectedEffort}</div>
-    ${allNotes ? `<div class="logged-notes">${allNotes}</div>` : ''}
+    <span class="logged-equip" style="background:var(--${color}-dim);color:var(--${color})">${equipLabel}</span>
+    <div class="logged-detail">${duration} min · Effort ${selectedEffort || "-"}</div>
+    ${allNotes ? `<div class="logged-notes">${allNotes}</div>` : ""}
   `;
-  const list = document.getElementById('session-log-list');
+  const list = document.getElementById("session-log-list");
   list.insertBefore(item, list.firstChild);
 }
 
+async function saveSessionToServer(extractionData = null, machineOverride = null) {
+  const payload = buildPayload(extractionData, machineOverride);
+  const response = await fetch("/api/coach/log-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || result.success === false) {
+    throw new Error(result.error || "Unable to log session.");
+  }
+
+  const duration = document.getElementById("duration").value;
+  const allNotes = payload.staff_notes || "";
+  const machine = machineOverride || normalizeMachineName(selectedEquip);
+  const equipLabel = displayMachineName(machine);
+
+  document.getElementById("success-member").textContent = currentMember;
+  document.getElementById("success-detail").textContent =
+    `${equipLabel} · ${duration} min · Effort ${selectedEffort || "-"}`;
+  document.getElementById("success-overlay").classList.add("show");
+  appendLogItem(equipLabel, duration, allNotes);
+  setAiStatus("success", "Saved to Supabase successfully.");
+}
+
+async function logSession() {
+  const button = document.getElementById("log-btn");
+  button.setAttribute("disabled", "true");
+  button.textContent = "Saving…";
+  try {
+    await saveSessionToServer();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save session.";
+    setAiStatus("error", message);
+  } finally {
+    button.removeAttribute("disabled");
+    button.textContent = `Log session for ${currentMember.split(" ")[0]} →`;
+  }
+}
+
 function closeSuccess() {
-  document.getElementById('success-overlay').classList.remove('show');
+  document.getElementById("success-overlay").classList.remove("show");
   clearForm();
 }
 
 function clearForm() {
-  document.getElementById('staff-notes').value = '';
-  document.querySelectorAll('.recovery-btn').forEach(b => b.classList.remove('selected'));
-  document.querySelectorAll('.quick-note').forEach(n => n.classList.remove('selected'));
-  document.querySelectorAll('.effort-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById("staff-notes").value = "";
+  document.querySelectorAll(".recovery-btn").forEach((b) => b.classList.remove("selected"));
+  document.querySelectorAll(".quick-note").forEach((n) => n.classList.remove("selected"));
+  document.querySelectorAll(".effort-btn").forEach((b) => b.classList.remove("selected"));
   selectedEffort = null;
   recoveryItems = [];
   quickNotes = [];
 }
 
 function filterMembers(val) {
-  document.querySelectorAll('.member-btn').forEach(btn => {
-    const name = btn.querySelector('.member-name').textContent.toLowerCase();
-    btn.style.display = name.includes(val.toLowerCase()) ? '' : 'none';
+  document.querySelectorAll(".member-btn").forEach((btn) => {
+    const name = btn.querySelector(".member-name").textContent.toLowerCase();
+    btn.style.display = name.includes(val.toLowerCase()) ? "" : "none";
   });
 }
+
+ensureAiUi();
+initUploadButtons();
 </script>
 </body>
 </html>

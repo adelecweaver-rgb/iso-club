@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 type SubmitState =
   | { kind: "idle"; message: string }
@@ -15,6 +16,7 @@ function statusColor(kind: SubmitState["kind"]): string {
 }
 
 export function OnboardingForm() {
+  const router = useRouter();
   const [state, setState] = useState<SubmitState>({ kind: "idle", message: "" });
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -28,6 +30,9 @@ export function OnboardingForm() {
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
+      if (!phone.trim()) {
+        throw new Error("Phone number is required for SMS notifications.");
+      }
       setState({ kind: "loading", message: "Saving onboarding…" });
       const response = await fetch("/api/onboarding/complete", {
         method: "POST",
@@ -47,7 +52,9 @@ export function OnboardingForm() {
       if (!response.ok || payload.success === false) {
         throw new Error(payload.error || "Unable to save onboarding data.");
       }
-      setState({ kind: "success", message: "Onboarding saved." });
+      setState({ kind: "success", message: "Onboarding saved. Redirecting…" });
+      router.push("/dashboard");
+      router.refresh();
     } catch (error) {
       setState({
         kind: "error",
@@ -84,6 +91,7 @@ export function OnboardingForm() {
         placeholder="Phone"
         value={phone}
         onChange={(event) => setPhone(event.target.value)}
+        required
       />
       <input
         className="btn secondary"
