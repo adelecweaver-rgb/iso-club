@@ -85,7 +85,7 @@ type DashboardPayload = {
 
 async function loadPrototypeParts(): Promise<PrototypeParts> {
   try {
-    const html = await fs.readFile(path.join(process.cwd(), "index.html"), "utf8");
+    const html = await fs.readFile(path.join(process.cwd(), "iso-club-v2.html"), "utf8");
 
     const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
     const bodyMatch = html.match(/<body>([\s\S]*?)<script>/i);
@@ -106,7 +106,7 @@ async function loadPrototypeParts(): Promise<PrototypeParts> {
       body: `
         <main style="min-height:100vh;padding:24px;background:#1e2b1b;color:#f2e8dd;font-family:Arial,Helvetica,sans-serif;">
           <h2 style="margin:0 0 8px 0;">Dashboard template missing</h2>
-          <p style="margin:0;">Could not load <code>/index.html</code>.</p>
+          <p style="margin:0;">Could not load <code>/iso-club-v2.html</code>.</p>
         </main>
       `,
       script: "",
