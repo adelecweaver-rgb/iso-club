@@ -1851,63 +1851,92 @@ export async function DashboardPageView({
         baseSetMode(mode);
       };
 
-      const wireClickTarget = (selector, parser) => {
-        document.querySelectorAll(selector).forEach((node) => {
-          if (node.getAttribute("data-wired-nav") === "true") return;
-          const inline = node.getAttribute("onclick") || "";
-          const target = parser(inline, node);
-          if (!target) return;
-          node.setAttribute("data-wired-nav", "true");
-          node.addEventListener("click", (event) => {
+      // Ensure inline HTML handlers and programmatic handlers can both reach these.
+      globalThis.showView = window.showView;
+      globalThis.showCoachView = window.showCoachView;
+      globalThis.setMode = window.setMode;
+
+      const bindMemberNavButtons = () => {
+        const views = [
+          "dashboard",
+          "protocol",
+          "carol",
+          "arx",
+          "scans",
+          "recovery",
+          "wearables",
+          "messages",
+          "reports",
+          "schedule",
+        ];
+        const buttons = Array.from(document.querySelectorAll("#member-nav .nav-item"));
+        buttons.forEach((button, index) => {
+          if (button.getAttribute("data-wired-nav") === "true") return;
+          const targetView = views[index];
+          if (!targetView) return;
+          button.setAttribute("data-wired-nav", "true");
+          button.addEventListener("click", (event) => {
             event.preventDefault();
-            const invoke = parser === parseCoachViewFromOnclick ? window.showCoachView : window.showView;
-            if (typeof invoke === "function") invoke(target);
+            if (typeof window.showView === "function") {
+              window.showView(targetView);
+            }
           });
         });
       };
 
-      const parseMemberViewFromOnclick = (inline, node) => {
-        const match = inline.match(/showView\\('([^']+)'\\)/);
-        if (match && match[1]) return match[1];
-        const text = (node.textContent || "").toLowerCase();
-        if (text.includes("dashboard")) return "dashboard";
-        if (text.includes("protocol")) return "protocol";
-        if (text.includes("carol")) return "carol";
-        if (text.includes("arx")) return "arx";
-        if (text.includes("body scan")) return "scans";
-        if (text.includes("recovery")) return "recovery";
-        if (text.includes("wearable")) return "wearables";
-        if (text.includes("message")) return "messages";
-        if (text.includes("report")) return "reports";
-        if (text.includes("schedule")) return "schedule";
-        return "";
-      };
-
-      const parseCoachViewFromOnclick = (inline, node) => {
-        const match = inline.match(/showCoachView\\('([^']+)'\\)/);
-        if (match && match[1]) return match[1];
-        const text = (node.textContent || "").toLowerCase();
-        if (text.includes("morning")) return "morning";
-        if (text.includes("member")) return "members";
-        if (text.includes("log")) return "log";
-        if (text.includes("protocol")) return "protocols";
-        return "";
-      };
-
-      wireClickTarget("#member-nav .nav-item", parseMemberViewFromOnclick);
-      wireClickTarget("#coach-nav .nav-item", parseCoachViewFromOnclick);
-      wireClickTarget(".topbar-right button", parseMemberViewFromOnclick);
-
-      document.querySelectorAll(".view-toggle .vt-btn").forEach((button, index) => {
-        if (button.getAttribute("data-wired-toggle") === "true") return;
-        button.setAttribute("data-wired-toggle", "true");
-        button.addEventListener("click", (event) => {
-          event.preventDefault();
-          if (typeof window.setMode === "function") {
-            window.setMode(index === 1 ? "coach" : "member");
-          }
+      const bindCoachNavButtons = () => {
+        const views = ["morning", "members", "log", "protocols"];
+        const buttons = Array.from(document.querySelectorAll("#coach-nav .nav-item"));
+        buttons.forEach((button, index) => {
+          if (button.getAttribute("data-wired-coach-nav") === "true") return;
+          const targetView = views[index];
+          if (!targetView) return;
+          button.setAttribute("data-wired-coach-nav", "true");
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            if (typeof window.showCoachView === "function") {
+              window.showCoachView(targetView);
+            }
+          });
         });
-      });
+      };
+
+      const bindTopbarButtons = () => {
+        const buttons = Array.from(document.querySelectorAll(".topbar-right button"));
+        buttons.forEach((button) => {
+          if (button.getAttribute("data-wired-topbar-nav") === "true") return;
+          const label = String(button.textContent || "").toLowerCase();
+          let targetView = "";
+          if (label.includes("message")) targetView = "messages";
+          if (label.includes("book session")) targetView = "schedule";
+          if (!targetView) return;
+          button.setAttribute("data-wired-topbar-nav", "true");
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            if (typeof window.showView === "function") {
+              window.showView(targetView);
+            }
+          });
+        });
+      };
+
+      const bindViewToggleButtons = () => {
+        document.querySelectorAll(".view-toggle .vt-btn").forEach((button, index) => {
+          if (button.getAttribute("data-wired-toggle") === "true") return;
+          button.setAttribute("data-wired-toggle", "true");
+          button.addEventListener("click", (event) => {
+            event.preventDefault();
+            if (typeof window.setMode === "function") {
+              window.setMode(index === 1 ? "coach" : "member");
+            }
+          });
+        });
+      };
+
+      bindMemberNavButtons();
+      bindCoachNavButtons();
+      bindTopbarButtons();
+      bindViewToggleButtons();
 
       const applyRoleBasedToggleVisibility = () => {
         const toggle = document.querySelector(".view-toggle");
