@@ -65,6 +65,9 @@ type DashboardPayload = {
     weekTotal: string;
     sessions: Array<{ name: string; detail: string; duration: string; status: string }>;
   };
+  emptyStates: {
+    protocol: boolean;
+  };
   bookings: Array<{ label: string; status: string }>;
   reports: Array<{ title: string }>;
   coach: {
@@ -171,6 +174,10 @@ function numberOr(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function hasValue(value: unknown): boolean {
+  return value !== null && value !== undefined && `${value}`.trim().length > 0;
+}
+
 function fmtDate(value: unknown): string {
   if (typeof value !== "string" || !value) return "Recent";
   const date = new Date(value);
@@ -199,30 +206,30 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     coachId: null,
     displayName: clerkName || "Member",
     initials: initialsFromName(clerkName || "Member"),
-    tier: "Premier",
+    tier: "Member",
     memberOptions: [],
     metrics: {
-      carolFitness: "36.5",
-      arxOutput: "699",
-      leanMass: "159.6",
-      whoopRecovery: "74",
+      carolFitness: "--",
+      arxOutput: "--",
+      leanMass: "--",
+      whoopRecovery: "--",
     },
     healthspan: {
-      muscle: "78",
-      cardio: "65",
-      metabolic: "71",
-      structural: "58",
-      recovery: "82",
+      muscle: "--",
+      cardio: "--",
+      metabolic: "--",
+      structural: "--",
+      recovery: "--",
     },
     carolHistory: [],
     arxHistory: [],
     scan: {
-      bodyFatPct: "29.17",
-      weightLbs: "225.3",
-      leanMassLbs: "159.6",
-      headForwardIn: "5.0",
-      shoulderForwardIn: "3.5",
-      hipForwardIn: "1.7",
+      bodyFatPct: "--",
+      weightLbs: "--",
+      leanMassLbs: "--",
+      headForwardIn: "--",
+      shoulderForwardIn: "--",
+      hipForwardIn: "--",
     },
     recoveryCounts: {
       infraredSauna: "8",
@@ -235,16 +242,19 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       quickboard: "5",
     },
     wearables: {
-      whoopRecovery: "74",
-      ouraReadiness: "81",
-      hrvMs: "68",
-      sleepHours: "7.4",
+      whoopRecovery: "--",
+      ouraReadiness: "--",
+      hrvMs: "--",
+      sleepHours: "--",
     },
     protocol: {
-      name: "Strength Foundation Track",
-      weekCurrent: "7",
-      weekTotal: "12",
+      name: "",
+      weekCurrent: "--",
+      weekTotal: "--",
       sessions: [],
+    },
+    emptyStates: {
+      protocol: true,
     },
     bookings: [],
     reports: [],
@@ -308,7 +318,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   payload.initials = initialsFromName(payload.displayName);
   payload.tier = stringOr(
     userRow?.membership_tier,
-    payload.role === "coach" ? "Head Coach" : "Premier",
+    payload.role === "coach" ? "Head Coach" : "Member",
   );
 
   const memberId = payload.memberId || "__missing_member__";
@@ -454,21 +464,44 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   const arxLatest = legPress ?? arxRows[0] ?? null;
   const carolLatest = carolRows[0] ?? null;
 
-  payload.metrics.carolFitness = numberOr(carolLatest?.fitness_score, 36.5).toFixed(1);
-  payload.metrics.arxOutput = Math.round(
-    numberOr(arxLatest?.concentric_max, numberOr(arxLatest?.output, 699)),
-  ).toString();
-  payload.metrics.leanMass = numberOr(scanRow?.lean_mass_lbs, 159.6).toFixed(1);
-  payload.metrics.whoopRecovery = Math.round(
-    numberOr(whoopRow?.recovery_score, 74),
-  ).toString();
+  payload.metrics.carolFitness =
+    carolLatest && hasValue(carolLatest.fitness_score)
+      ? numberOr(carolLatest.fitness_score, 0).toFixed(1)
+      : "--";
+  payload.metrics.arxOutput =
+    arxLatest && (hasValue(arxLatest.concentric_max) || hasValue(arxLatest.output))
+      ? Math.round(numberOr(arxLatest.concentric_max, numberOr(arxLatest.output, 0))).toString()
+      : "--";
+  payload.metrics.leanMass =
+    scanRow && hasValue(scanRow.lean_mass_lbs)
+      ? numberOr(scanRow.lean_mass_lbs, 0).toFixed(1)
+      : "--";
+  payload.metrics.whoopRecovery =
+    whoopRow && hasValue(whoopRow.recovery_score)
+      ? Math.round(numberOr(whoopRow.recovery_score, 0)).toString()
+      : "--";
 
   payload.healthspan = {
-    muscle: Math.round(numberOr(healthRow?.muscle_score, 78)).toString(),
-    cardio: Math.round(numberOr(healthRow?.cardio_score, 65)).toString(),
-    metabolic: Math.round(numberOr(healthRow?.metabolic_score, 71)).toString(),
-    structural: Math.round(numberOr(healthRow?.structural_score, 58)).toString(),
-    recovery: Math.round(numberOr(healthRow?.recovery_score, 82)).toString(),
+    muscle:
+      healthRow && hasValue(healthRow.muscle_score)
+        ? Math.round(numberOr(healthRow.muscle_score, 0)).toString()
+        : "--",
+    cardio:
+      healthRow && hasValue(healthRow.cardio_score)
+        ? Math.round(numberOr(healthRow.cardio_score, 0)).toString()
+        : "--",
+    metabolic:
+      healthRow && hasValue(healthRow.metabolic_score)
+        ? Math.round(numberOr(healthRow.metabolic_score, 0)).toString()
+        : "--",
+    structural:
+      healthRow && hasValue(healthRow.structural_score)
+        ? Math.round(numberOr(healthRow.structural_score, 0)).toString()
+        : "--",
+    recovery:
+      healthRow && hasValue(healthRow.recovery_score)
+        ? Math.round(numberOr(healthRow.recovery_score, 0)).toString()
+        : "--",
   };
 
   payload.carolHistory = carolRows.slice(0, 3).map((row) => ({
@@ -482,12 +515,30 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   }));
 
   payload.scan = {
-    bodyFatPct: numberOr(scanRow?.body_fat_pct, 29.17).toFixed(2),
-    weightLbs: numberOr(scanRow?.weight_lbs, 225.3).toFixed(1),
-    leanMassLbs: numberOr(scanRow?.lean_mass_lbs, 159.6).toFixed(1),
-    headForwardIn: numberOr(scanRow?.posture_head_forward_in, 5.0).toFixed(1),
-    shoulderForwardIn: numberOr(scanRow?.posture_shoulder_forward_in, 3.5).toFixed(1),
-    hipForwardIn: numberOr(scanRow?.posture_hip_forward_in, 1.7).toFixed(1),
+    bodyFatPct:
+      scanRow && hasValue(scanRow.body_fat_pct)
+        ? numberOr(scanRow.body_fat_pct, 0).toFixed(2)
+        : "--",
+    weightLbs:
+      scanRow && hasValue(scanRow.weight_lbs)
+        ? numberOr(scanRow.weight_lbs, 0).toFixed(1)
+        : "--",
+    leanMassLbs:
+      scanRow && hasValue(scanRow.lean_mass_lbs)
+        ? numberOr(scanRow.lean_mass_lbs, 0).toFixed(1)
+        : "--",
+    headForwardIn:
+      scanRow && hasValue(scanRow.posture_head_forward_in)
+        ? numberOr(scanRow.posture_head_forward_in, 0).toFixed(1)
+        : "--",
+    shoulderForwardIn:
+      scanRow && hasValue(scanRow.posture_shoulder_forward_in)
+        ? numberOr(scanRow.posture_shoulder_forward_in, 0).toFixed(1)
+        : "--",
+    hipForwardIn:
+      scanRow && hasValue(scanRow.posture_hip_forward_in)
+        ? numberOr(scanRow.posture_hip_forward_in, 0).toFixed(1)
+        : "--",
   };
 
   const modalityCounts: Record<string, number> = {};
@@ -518,13 +569,24 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   };
 
   payload.wearables = {
-    whoopRecovery: Math.round(numberOr(whoopRow?.recovery_score, 74)).toString(),
-    ouraReadiness: Math.round(numberOr(ouraRow?.readiness_score, 81)).toString(),
-    hrvMs: Math.round(numberOr(whoopRow?.hrv_ms, 68)).toString(),
-    sleepHours: numberOr(
-      whoopRow?.sleep_duration_hrs,
-      numberOr(ouraRow?.sleep_duration_hrs, 7.4),
-    ).toFixed(1),
+    whoopRecovery:
+      whoopRow && hasValue(whoopRow.recovery_score)
+        ? Math.round(numberOr(whoopRow.recovery_score, 0)).toString()
+        : "--",
+    ouraReadiness:
+      ouraRow && hasValue(ouraRow.readiness_score)
+        ? Math.round(numberOr(ouraRow.readiness_score, 0)).toString()
+        : "--",
+    hrvMs:
+      whoopRow && hasValue(whoopRow.hrv_ms)
+        ? Math.round(numberOr(whoopRow.hrv_ms, 0)).toString()
+        : "--",
+    sleepHours:
+      whoopRow && hasValue(whoopRow.sleep_duration_hrs)
+        ? numberOr(whoopRow.sleep_duration_hrs, 0).toFixed(1)
+        : ouraRow && hasValue(ouraRow.sleep_duration_hrs)
+          ? numberOr(ouraRow.sleep_duration_hrs, 0).toFixed(1)
+          : "--",
   };
 
   payload.bookings = bookingRows.slice(0, 3).map((row) => {
@@ -544,12 +606,13 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   }));
 
   if (protocolRow) {
+    payload.emptyStates.protocol = false;
     payload.protocol.name = stringOr(protocolRow.name, payload.protocol.name);
     payload.protocol.weekCurrent = Math.round(
-      numberOr(protocolRow.week_current, Number(payload.protocol.weekCurrent)),
+      numberOr(protocolRow.week_current, 1),
     ).toString();
     payload.protocol.weekTotal = Math.round(
-      numberOr(protocolRow.week_total, Number(payload.protocol.weekTotal)),
+      numberOr(protocolRow.week_total, 12),
     ).toString();
 
     const protocolId = stringOr(protocolRow.id, "");
@@ -1099,6 +1162,23 @@ export async function DashboardPageView({
       setText("#user-av", data.initials);
       setText("#user-tier", data.tier);
       setText("#top-title", "Good morning, " + firstName(data.displayName) + ".");
+
+      if (data.emptyStates && data.emptyStates.protocol) {
+        const applyProtocolEmptyState = (rootSelector) => {
+          const track = document.querySelector(rootSelector + " .track-name");
+          if (track) track.textContent = "Your protocol is being prepared by Dustin";
+          const trackMeta = document.querySelector(rootSelector + " .track-meta");
+          if (trackMeta) {
+            trackMeta.textContent = "You'll see your personalized plan here soon.";
+          }
+          const sessions = Array.from(document.querySelectorAll(rootSelector + " .session-item"));
+          sessions.forEach((session) => {
+            session.style.display = "none";
+          });
+        };
+        applyProtocolEmptyState("#view-dashboard");
+        applyProtocolEmptyState("#view-protocol");
+      }
 
       if (data.metrics) {
         setStatCardValue("CAROL fitness score", data.metrics.carolFitness);
