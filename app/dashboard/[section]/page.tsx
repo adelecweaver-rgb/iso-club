@@ -6,5 +6,5 @@ export default async function DashboardSectionPage({
   params: Promise<{ section: string }>;
 }) {
   const { section } = await params;
-  return DashboardPageView({ initialSection: section });
+  return <DashboardPageView route="dashboard" initialSection={section} />;
 }
