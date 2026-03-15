@@ -1,9 +1,10 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
-import { getCurrentAuthState, routeForRole } from "@/lib/server/roles";
+import { getCurrentAuthState, routeForRole, type AppRole } from "@/lib/server/roles";
 import { loadPrototypeFromFiles, type PrototypeParts } from "@/lib/server/prototype";
 
 type DashboardPayload = {
@@ -78,6 +79,20 @@ type DashboardPayload = {
   };
 };
 
+type MemberSection =
+  | "dashboard"
+  | "protocol"
+  | "carol"
+  | "arx"
+  | "scans"
+  | "recovery"
+  | "wearables"
+  | "messages"
+  | "reports"
+  | "schedule";
+
+type CoachSection = "morning" | "members" | "log" | "protocols";
+
 async function loadPrototypeParts(): Promise<PrototypeParts> {
   return loadPrototypeFromFiles(["iso-club-v2.html"], "Iso Club Dashboard");
 }
@@ -107,6 +122,10 @@ function numberOr(value: unknown, fallback: number): number {
   return fallback;
 }
 
+function hasValue(value: unknown): boolean {
+  return value !== null && value !== undefined && `${value}`.trim().length > 0;
+}
+
 function fmtDate(value: unknown): string {
   if (typeof value !== "string" || !value) return "Recent";
   const date = new Date(value);
@@ -128,6 +147,33 @@ function formatDateForLabel(value: unknown): string {
   });
 }
 
+function normalizeMemberSection(input: string | undefined): MemberSection {
+  const value = (input ?? "").trim().toLowerCase();
+  if (
+    value === "dashboard" ||
+    value === "protocol" ||
+    value === "carol" ||
+    value === "arx" ||
+    value === "scans" ||
+    value === "recovery" ||
+    value === "wearables" ||
+    value === "messages" ||
+    value === "reports" ||
+    value === "schedule"
+  ) {
+    return value;
+  }
+  return "dashboard";
+}
+
+function normalizeCoachSection(input: string | undefined): CoachSection {
+  const value = (input ?? "").trim().toLowerCase();
+  if (value === "morning" || value === "members" || value === "log" || value === "protocols") {
+    return value;
+  }
+  return "morning";
+}
+
 function makeDefaultPayload(clerkName: string): DashboardPayload {
   return {
     role: "member",
@@ -135,30 +181,30 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     coachId: null,
     displayName: clerkName || "Member",
     initials: initialsFromName(clerkName || "Member"),
-    tier: "Premier",
+    tier: "Member",
     memberOptions: [],
     metrics: {
-      carolFitness: "36.5",
-      arxOutput: "699",
-      leanMass: "159.6",
-      whoopRecovery: "74",
+      carolFitness: "--",
+      arxOutput: "--",
+      leanMass: "--",
+      whoopRecovery: "--",
     },
     healthspan: {
-      muscle: "78",
-      cardio: "65",
-      metabolic: "71",
-      structural: "58",
-      recovery: "82",
+      muscle: "--",
+      cardio: "--",
+      metabolic: "--",
+      structural: "--",
+      recovery: "--",
     },
     carolHistory: [],
     arxHistory: [],
     scan: {
-      bodyFatPct: "29.17",
-      weightLbs: "225.3",
-      leanMassLbs: "159.6",
-      headForwardIn: "5.0",
-      shoulderForwardIn: "3.5",
-      hipForwardIn: "1.7",
+      bodyFatPct: "--",
+      weightLbs: "--",
+      leanMassLbs: "--",
+      headForwardIn: "--",
+      shoulderForwardIn: "--",
+      hipForwardIn: "--",
     },
     recoveryCounts: {
       infraredSauna: "8",
@@ -171,15 +217,15 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       quickboard: "5",
     },
     wearables: {
-      whoopRecovery: "74",
-      ouraReadiness: "81",
-      hrvMs: "68",
-      sleepHours: "7.4",
+      whoopRecovery: "--",
+      ouraReadiness: "--",
+      hrvMs: "--",
+      sleepHours: "--",
     },
     protocol: {
-      name: "Strength Foundation Track",
-      weekCurrent: "7",
-      weekTotal: "12",
+      name: "",
+      weekCurrent: "--",
+      weekTotal: "--",
       sessions: [],
     },
     bookings: [],
@@ -194,7 +240,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
   };
 }
 
-async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> {
+async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise<DashboardPayload> {
   const user = await safeCurrentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? "";
   const clerkName =
@@ -203,7 +249,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     "Member";
 
   const payload = makeDefaultPayload(clerkName);
-  const supabase = await createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient());
   if (!supabase) return payload;
 
   let userRow: Record<string, unknown> | null = null;
@@ -232,8 +278,15 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
     "",
   );
   const userRole = stringOr(userRow?.role, "").toLowerCase();
+  const authRoleValue = (authRole ?? "unknown").toLowerCase();
   const isCoach =
+    userRole === "coach" ||
+    userRole === "admin" ||
+    userRole === "staff" ||
     userRole.includes("coach") ||
+    authRoleValue === "coach" ||
+    authRoleValue === "admin" ||
+    authRoleValue === "staff" ||
     metadataRole.toLowerCase().includes("coach") ||
     email.toLowerCase().includes("dustin");
   payload.role = isCoach ? "coach" : "member";
@@ -244,7 +297,7 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   payload.initials = initialsFromName(payload.displayName);
   payload.tier = stringOr(
     userRow?.membership_tier,
-    payload.role === "coach" ? "Head Coach" : "Premier",
+    payload.role === "coach" ? "Head Coach" : "Member",
   );
 
   const memberId = payload.memberId || "__missing_member__";
@@ -390,21 +443,44 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   const arxLatest = legPress ?? arxRows[0] ?? null;
   const carolLatest = carolRows[0] ?? null;
 
-  payload.metrics.carolFitness = numberOr(carolLatest?.fitness_score, 36.5).toFixed(1);
-  payload.metrics.arxOutput = Math.round(
-    numberOr(arxLatest?.concentric_max, numberOr(arxLatest?.output, 699)),
-  ).toString();
-  payload.metrics.leanMass = numberOr(scanRow?.lean_mass_lbs, 159.6).toFixed(1);
-  payload.metrics.whoopRecovery = Math.round(
-    numberOr(whoopRow?.recovery_score, 74),
-  ).toString();
+  payload.metrics.carolFitness =
+    carolLatest && hasValue(carolLatest.fitness_score)
+      ? numberOr(carolLatest.fitness_score, 0).toFixed(1)
+      : "--";
+  payload.metrics.arxOutput =
+    arxLatest && (hasValue(arxLatest.concentric_max) || hasValue(arxLatest.output))
+      ? Math.round(numberOr(arxLatest.concentric_max, numberOr(arxLatest.output, 0))).toString()
+      : "--";
+  payload.metrics.leanMass =
+    scanRow && hasValue(scanRow.lean_mass_lbs)
+      ? numberOr(scanRow.lean_mass_lbs, 0).toFixed(1)
+      : "--";
+  payload.metrics.whoopRecovery =
+    whoopRow && hasValue(whoopRow.recovery_score)
+      ? Math.round(numberOr(whoopRow.recovery_score, 0)).toString()
+      : "--";
 
   payload.healthspan = {
-    muscle: Math.round(numberOr(healthRow?.muscle_score, 78)).toString(),
-    cardio: Math.round(numberOr(healthRow?.cardio_score, 65)).toString(),
-    metabolic: Math.round(numberOr(healthRow?.metabolic_score, 71)).toString(),
-    structural: Math.round(numberOr(healthRow?.structural_score, 58)).toString(),
-    recovery: Math.round(numberOr(healthRow?.recovery_score, 82)).toString(),
+    muscle:
+      healthRow && hasValue(healthRow.muscle_score)
+        ? Math.round(numberOr(healthRow.muscle_score, 0)).toString()
+        : "--",
+    cardio:
+      healthRow && hasValue(healthRow.cardio_score)
+        ? Math.round(numberOr(healthRow.cardio_score, 0)).toString()
+        : "--",
+    metabolic:
+      healthRow && hasValue(healthRow.metabolic_score)
+        ? Math.round(numberOr(healthRow.metabolic_score, 0)).toString()
+        : "--",
+    structural:
+      healthRow && hasValue(healthRow.structural_score)
+        ? Math.round(numberOr(healthRow.structural_score, 0)).toString()
+        : "--",
+    recovery:
+      healthRow && hasValue(healthRow.recovery_score)
+        ? Math.round(numberOr(healthRow.recovery_score, 0)).toString()
+        : "--",
   };
 
   payload.carolHistory = carolRows.slice(0, 3).map((row) => ({
@@ -418,12 +494,30 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   }));
 
   payload.scan = {
-    bodyFatPct: numberOr(scanRow?.body_fat_pct, 29.17).toFixed(2),
-    weightLbs: numberOr(scanRow?.weight_lbs, 225.3).toFixed(1),
-    leanMassLbs: numberOr(scanRow?.lean_mass_lbs, 159.6).toFixed(1),
-    headForwardIn: numberOr(scanRow?.posture_head_forward_in, 5.0).toFixed(1),
-    shoulderForwardIn: numberOr(scanRow?.posture_shoulder_forward_in, 3.5).toFixed(1),
-    hipForwardIn: numberOr(scanRow?.posture_hip_forward_in, 1.7).toFixed(1),
+    bodyFatPct:
+      scanRow && hasValue(scanRow.body_fat_pct)
+        ? numberOr(scanRow.body_fat_pct, 0).toFixed(2)
+        : "--",
+    weightLbs:
+      scanRow && hasValue(scanRow.weight_lbs)
+        ? numberOr(scanRow.weight_lbs, 0).toFixed(1)
+        : "--",
+    leanMassLbs:
+      scanRow && hasValue(scanRow.lean_mass_lbs)
+        ? numberOr(scanRow.lean_mass_lbs, 0).toFixed(1)
+        : "--",
+    headForwardIn:
+      scanRow && hasValue(scanRow.posture_head_forward_in)
+        ? numberOr(scanRow.posture_head_forward_in, 0).toFixed(1)
+        : "--",
+    shoulderForwardIn:
+      scanRow && hasValue(scanRow.posture_shoulder_forward_in)
+        ? numberOr(scanRow.posture_shoulder_forward_in, 0).toFixed(1)
+        : "--",
+    hipForwardIn:
+      scanRow && hasValue(scanRow.posture_hip_forward_in)
+        ? numberOr(scanRow.posture_hip_forward_in, 0).toFixed(1)
+        : "--",
   };
 
   const modalityCounts: Record<string, number> = {};
@@ -454,13 +548,24 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   };
 
   payload.wearables = {
-    whoopRecovery: Math.round(numberOr(whoopRow?.recovery_score, 74)).toString(),
-    ouraReadiness: Math.round(numberOr(ouraRow?.readiness_score, 81)).toString(),
-    hrvMs: Math.round(numberOr(whoopRow?.hrv_ms, 68)).toString(),
-    sleepHours: numberOr(
-      whoopRow?.sleep_duration_hrs,
-      numberOr(ouraRow?.sleep_duration_hrs, 7.4),
-    ).toFixed(1),
+    whoopRecovery:
+      whoopRow && hasValue(whoopRow.recovery_score)
+        ? Math.round(numberOr(whoopRow.recovery_score, 0)).toString()
+        : "--",
+    ouraReadiness:
+      ouraRow && hasValue(ouraRow.readiness_score)
+        ? Math.round(numberOr(ouraRow.readiness_score, 0)).toString()
+        : "--",
+    hrvMs:
+      whoopRow && hasValue(whoopRow.hrv_ms)
+        ? Math.round(numberOr(whoopRow.hrv_ms, 0)).toString()
+        : "--",
+    sleepHours:
+      whoopRow && hasValue(whoopRow.sleep_duration_hrs)
+        ? numberOr(whoopRow.sleep_duration_hrs, 0).toFixed(1)
+        : ouraRow && hasValue(ouraRow.sleep_duration_hrs)
+          ? numberOr(ouraRow.sleep_duration_hrs, 0).toFixed(1)
+          : "--",
   };
 
   payload.bookings = bookingRows.slice(0, 3).map((row) => {
@@ -482,10 +587,10 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   if (protocolRow) {
     payload.protocol.name = stringOr(protocolRow.name, payload.protocol.name);
     payload.protocol.weekCurrent = Math.round(
-      numberOr(protocolRow.week_current, Number(payload.protocol.weekCurrent)),
+      numberOr(protocolRow.week_current, 1),
     ).toString();
     payload.protocol.weekTotal = Math.round(
-      numberOr(protocolRow.week_total, Number(payload.protocol.weekTotal)),
+      numberOr(protocolRow.week_total, 12),
     ).toString();
 
     const protocolId = stringOr(protocolRow.id, "");
@@ -646,11 +751,19 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
 
 export async function DashboardPageView({
   route,
+  initialSection,
 }: {
   route: "dashboard" | "coach";
+  initialSection?: string;
 }) {
   const clerkConfigured = isClerkConfigured();
   const prototype = await loadPrototypeParts();
+  const initialMemberView = normalizeMemberSection(
+    route === "dashboard" ? initialSection : undefined,
+  );
+  const initialCoachView = normalizeCoachSection(
+    route === "coach" ? initialSection : undefined,
+  );
 
   if (!clerkConfigured) {
     return (
@@ -689,18 +802,23 @@ export async function DashboardPageView({
       redirect("/onboarding");
     }
   } else if (route === "coach") {
-    if (!(authState.role === "coach" || authState.role === "admin")) {
+    if (authState.role === "member" || authState.role === "unknown") {
       redirect(routeForRole(authState.role));
+    }
+    if (authState.role === "staff" && initialCoachView !== "log") {
+      redirect("/coach/log");
     }
   }
 
-  const livePayload = await loadDashboardLiveData(authState.userId);
+  const livePayload = await loadDashboardLiveData(authState.userId, authState.role);
   const payload = JSON.stringify(livePayload).replace(/</g, "\\u003c");
   const bootstrapScript = `
     (() => {
       const payload = ${payload};
       const role = payload.role === "coach" ? "coach" : "member";
       const data = payload || {};
+      const initialMemberView = ${JSON.stringify(initialMemberView)};
+      const initialCoachView = ${JSON.stringify(initialCoachView)};
 
       const firstName = (name) => {
         if (!name || typeof name !== "string") return "Member";
@@ -1066,8 +1184,59 @@ export async function DashboardPageView({
         topbarRight.insertBefore(link, topbarRight.firstChild);
       };
 
+      const memberPathByView = {
+        dashboard: "/dashboard",
+        protocol: "/dashboard/protocol",
+        carol: "/dashboard/carol",
+        arx: "/dashboard/arx",
+        scans: "/dashboard/scans",
+        recovery: "/dashboard/recovery",
+        wearables: "/dashboard/wearables",
+        messages: "/dashboard/messages",
+        reports: "/dashboard/reports",
+        schedule: "/dashboard/schedule",
+      };
+      const coachPathByView = {
+        morning: "/coach",
+        members: "/coach/members",
+        log: "/coach/log",
+        protocols: "/coach/protocols",
+      };
+      const originalShowView = typeof window.showView === "function"
+        ? window.showView.bind(window)
+        : null;
+      const originalShowCoachView = typeof window.showCoachView === "function"
+        ? window.showCoachView.bind(window)
+        : null;
+
+      if (originalShowView) {
+        window.showView = (name) => {
+          originalShowView(name);
+          const targetPath = memberPathByView[name] || "/dashboard";
+          if (window.location.pathname !== targetPath) {
+            window.history.pushState({}, "", targetPath);
+          }
+        };
+      }
+
+      if (originalShowCoachView) {
+        window.showCoachView = (name) => {
+          originalShowCoachView(name);
+          const targetPath = coachPathByView[name] || "/coach";
+          if (window.location.pathname !== targetPath) {
+            window.history.pushState({}, "", targetPath);
+          }
+        };
+      }
+
       if (typeof setMode === "function") {
         setMode(role);
+      }
+      if (role === "member" && typeof showView === "function") {
+        showView(initialMemberView);
+      }
+      if (role === "coach" && typeof showCoachView === "function") {
+        showCoachView(initialCoachView);
       }
 
       setText("#user-name", data.displayName);

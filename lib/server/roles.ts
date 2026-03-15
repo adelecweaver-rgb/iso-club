@@ -2,6 +2,7 @@ import "server-only";
 
 import { safeAuth, safeCurrentUser } from "@/lib/server/clerk";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type AppRole = "member" | "coach" | "admin" | "staff" | "unknown";
 
@@ -64,9 +65,12 @@ export async function getCurrentAuthState(): Promise<AuthState> {
     ),
   );
 
-  const admin = createSupabaseAdminClient();
-  if (admin) {
-    const byClerk = await admin
+  const resolveFromUsersTable = async (
+    client: Awaited<ReturnType<typeof createSupabaseServerClient>> | ReturnType<typeof createSupabaseAdminClient>,
+  ): Promise<AuthState | null> => {
+    if (!client) return null;
+
+    const byClerk = await client
       .from("users")
       .select("role,phone,date_of_birth,height_inches,gender,emergency_contact")
       .eq("clerk_id", userId)
@@ -89,7 +93,7 @@ export async function getCurrentAuthState(): Promise<AuthState> {
     }
 
     if (email) {
-      const byEmail = await admin
+      const byEmail = await client
         .from("users")
         .select("role,phone,date_of_birth,height_inches,gender,emergency_contact")
         .eq("email", email)
@@ -111,6 +115,20 @@ export async function getCurrentAuthState(): Promise<AuthState> {
         };
       }
     }
+
+    return null;
+  };
+
+  const admin = createSupabaseAdminClient();
+  const adminState = await resolveFromUsersTable(admin);
+  if (adminState) {
+    return adminState;
+  }
+
+  const server = await createSupabaseServerClient();
+  const serverState = await resolveFromUsersTable(server);
+  if (serverState) {
+    return serverState;
   }
 
   if (metadataRole !== "unknown") {
