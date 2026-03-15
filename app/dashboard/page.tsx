@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import Script from "next/script";
 import { promises as fs } from "fs";
 import path from "path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -82,6 +83,37 @@ type DashboardPayload = {
     }>;
   };
 };
+
+type MemberSection =
+  | "dashboard"
+  | "protocol"
+  | "carol"
+  | "arx"
+  | "scans"
+  | "recovery"
+  | "wearables"
+  | "messages"
+  | "reports"
+  | "schedule";
+
+function normalizeMemberSection(input: string | undefined): MemberSection {
+  const value = (input ?? "").trim().toLowerCase();
+  if (
+    value === "dashboard" ||
+    value === "protocol" ||
+    value === "carol" ||
+    value === "arx" ||
+    value === "scans" ||
+    value === "recovery" ||
+    value === "wearables" ||
+    value === "messages" ||
+    value === "reports" ||
+    value === "schedule"
+  ) {
+    return value;
+  }
+  return "dashboard";
+}
 
 async function loadPrototypeParts(): Promise<PrototypeParts> {
   try {
@@ -676,9 +708,14 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
   return payload;
 }
 
-export default async function DashboardPage() {
+export async function DashboardPageView({
+  initialSection,
+}: {
+  initialSection?: string;
+} = {}) {
   const { userId } = await auth();
   const prototype = await loadPrototypeParts();
+  const initialMemberView = normalizeMemberSection(initialSection);
 
   if (!userId) {
     return null;
@@ -691,6 +728,7 @@ export default async function DashboardPage() {
       const payload = ${payload};
       const role = payload.role === "coach" ? "coach" : "member";
       const data = payload || {};
+      const initialMemberView = ${JSON.stringify(initialMemberView)};
 
       const firstName = (name) => {
         if (!name || typeof name !== "string") return "Member";
@@ -1024,8 +1062,37 @@ export default async function DashboardPage() {
         });
       };
 
+      const memberPathByView = {
+        dashboard: "/dashboard",
+        protocol: "/dashboard/protocol",
+        carol: "/dashboard/carol",
+        arx: "/dashboard/arx",
+        scans: "/dashboard/scans",
+        recovery: "/dashboard/recovery",
+        wearables: "/dashboard/wearables",
+        messages: "/dashboard/messages",
+        reports: "/dashboard/reports",
+        schedule: "/dashboard/schedule",
+      };
+
+      const originalShowView = typeof window.showView === "function"
+        ? window.showView.bind(window)
+        : null;
+      if (originalShowView) {
+        window.showView = (name) => {
+          originalShowView(name);
+          const targetPath = memberPathByView[name] || "/dashboard";
+          if (window.location.pathname !== targetPath) {
+            window.history.pushState({}, "", targetPath);
+          }
+        };
+      }
+
       if (typeof setMode === "function") {
         setMode(role);
+      }
+      if (role === "member" && typeof showView === "function") {
+        showView(initialMemberView);
       }
 
       setText("#user-name", data.displayName);
@@ -1186,6 +1253,7 @@ export default async function DashboardPage() {
       wireMemberMessageReply();
     })();
   `;
+  const combinedScript = `${prototype.script}\n${bootstrapScript}`;
 
   return (
     <>
@@ -1222,13 +1290,13 @@ export default async function DashboardPage() {
       </div>
 
       <div dangerouslySetInnerHTML={{ __html: prototype.body }} />
-      {prototype.script ? (
-        <script
-          // This script powers prototype view switching and date rendering.
-          dangerouslySetInnerHTML={{ __html: prototype.script }}
-        />
-      ) : null}
-      <script dangerouslySetInnerHTML={{ __html: bootstrapScript }} />
+      <Script id="dashboard-bootstrap-script" strategy="afterInteractive">
+        {combinedScript}
+      </Script>
     </>
   );
+}
+
+export default async function DashboardPage() {
+  return DashboardPageView({ initialSection: "dashboard" });
 }
