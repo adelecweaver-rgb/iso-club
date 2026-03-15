@@ -814,11 +814,12 @@ export async function DashboardPageView({
   }
 
   const livePayload = await loadDashboardLiveData(authState.userId, authState.role);
+  const uiRole = authState.role === "member" ? "member" : "coach";
   const payload = JSON.stringify(livePayload).replace(/</g, "\\u003c");
   const bootstrapScript = `
     (() => {
       const payload = ${payload};
-      const role = payload.role === "coach" ? "coach" : "member";
+      const role = ${JSON.stringify(uiRole)};
       const data = payload || {};
       const initialMemberView = ${JSON.stringify(initialMemberView)};
       const initialCoachView = ${JSON.stringify(initialCoachView)};
@@ -1355,6 +1356,17 @@ export async function DashboardPageView({
           }
         };
       }
+
+      const applyRoleBasedToggleVisibility = () => {
+        const toggle = document.querySelector(".view-toggle");
+        if (!toggle) return;
+        if (role === "member") {
+          toggle.style.display = "none";
+        } else {
+          toggle.style.display = "flex";
+        }
+      };
+      applyRoleBasedToggleVisibility();
 
       if (typeof setMode === "function") {
         setMode(role);
