@@ -7,6 +7,14 @@ type Body = {
   thread_id?: string;
 };
 
+type AnyRow = Record<string, unknown>;
+
+function asString(value: unknown, fallback = ""): string {
+  if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
 export async function POST(request: Request) {
   try {
     const { context, error } = await getActorContext();
@@ -26,14 +34,20 @@ export async function POST(request: Request) {
       // Allow members to "reply to coach" without picking a recipient manually.
       const staffLookup = await context.supabase
         .from("users")
-        .select("id")
+        .select("id,full_name,role")
         .in("role", ["coach", "admin", "staff"])
         .eq("is_active", true)
-        .limit(1);
-      if (staffLookup.error || !staffLookup.data?.[0]?.id) {
+        .order("full_name", { ascending: true })
+        .limit(50);
+      if (staffLookup.error || !Array.isArray(staffLookup.data) || staffLookup.data.length === 0) {
         throw new Error("No active coach/staff recipient found.");
       }
-      recipientId = String(staffLookup.data[0].id);
+      const staffRows = staffLookup.data as AnyRow[];
+      const preferredCoach =
+        staffRows.find((row) => asString(row.full_name, "").toLowerCase().includes("dustin")) ??
+        staffRows[0];
+      recipientId = asString(preferredCoach.id, "");
+      if (!recipientId) throw new Error("Coach recipient is missing id.");
     }
 
     const senderId = String(context.dbUser.id ?? "");
@@ -44,16 +58,46 @@ export async function POST(request: Request) {
         ? body.thread_id.trim()
         : null;
 
-    const inserted = await context.supabase.from("messages").insert({
+    const insertPayload = {
       sender_id: senderId,
       recipient_id: recipientId,
       body: messageBody,
       thread_id: threadId,
+    };
+
+    let insertedMessage: AnyRow | null = null;
+    const inserted = await context.supabase
+      .from("messages")
+      .insert(insertPayload)
+      .select("id,sender_id,recipient_id,body,thread_id,created_at")
+      .single();
+
+    if (!inserted.error && inserted.data) {
+      insertedMessage = inserted.data as AnyRow;
+    } else if (inserted.error) {
+      const fallbackInsert = await context.supabase.from("messages").insert(insertPayload);
+      if (fallbackInsert.error) throw new Error(fallbackInsert.error.message);
+      insertedMessage = {
+        id: "",
+        sender_id: senderId,
+        recipient_id: recipientId,
+        body: messageBody,
+        thread_id: threadId ?? "",
+        created_at: new Date().toISOString(),
+      };
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: {
+        id: asString(insertedMessage?.id, ""),
+        sender_id: asString(insertedMessage?.sender_id, senderId),
+        recipient_id: asString(insertedMessage?.recipient_id, recipientId),
+        body: asString(insertedMessage?.body, messageBody),
+        thread_id: asString(insertedMessage?.thread_id, ""),
+        created_at: asString(insertedMessage?.created_at, new Date().toISOString()),
+      },
     });
-
-    if (inserted.error) throw new Error(inserted.error.message);
-
-    return NextResponse.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unable to send message.";
     return NextResponse.json({ success: false, error: message }, { status: 500 });

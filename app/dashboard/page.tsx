@@ -918,6 +918,18 @@ export async function DashboardPageView({
         return payload;
       };
 
+      const getJson = async (url) => {
+        const res = await fetch(url, {
+          method: "GET",
+          cache: "no-store",
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok || payload.success === false) {
+          throw new Error(payload.error || "Request failed.");
+        }
+        return payload;
+      };
+
       const memberOptions = Array.isArray(data.memberOptions) && data.memberOptions.length
         ? data.memberOptions
         : Array.isArray(data.coach && data.coach.members)
@@ -1132,26 +1144,223 @@ export async function DashboardPageView({
         });
       };
 
+      const memberMessagesState = {
+        coachId: "",
+        coachName: "Dustin · Coach",
+        supportsReadTracking: false,
+        unreadCount: 0,
+        messages: [],
+        initialized: false,
+      };
+
+      const setMemberUnreadBadge = (count) => {
+        const navBadge = document.querySelector("#member-nav .notif-wrap .nav-badge");
+        if (navBadge) {
+          if (count > 0) {
+            navBadge.textContent = String(count);
+            navBadge.style.display = "inline-flex";
+          } else {
+            navBadge.textContent = "0";
+            navBadge.style.display = "none";
+          }
+        }
+        const topbarDot = document.querySelector(".topbar-right .notif-dot");
+        if (topbarDot) {
+          topbarDot.style.display = count > 0 ? "inline-block" : "none";
+        }
+      };
+
+      const formatMessageTime = (isoValue) => {
+        if (!isoValue) return "";
+        const parsed = new Date(isoValue);
+        if (Number.isNaN(parsed.getTime())) return "";
+        return parsed.toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        });
+      };
+
+      const ensureMemberMessagesDom = () => {
+        const view = document.getElementById("view-messages");
+        if (!view) return null;
+        const card = view.querySelector(".card");
+        if (!card || card.children.length < 2) return null;
+        const inboxCol = card.children[0];
+        const convoCol = card.children[1];
+        if (!inboxCol || !convoCol) return null;
+        if (!document.getElementById("member-messages-inbox-list")) {
+          inboxCol.innerHTML = [
+            '<div style="padding:12px 16px;border-bottom:1px solid var(--border);font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--text3)">Inbox</div>',
+            '<div id="member-messages-inbox-list"></div>',
+          ].join("");
+        }
+        if (!document.getElementById("member-messages-thread")) {
+          convoCol.innerHTML = [
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)">',
+            '  <div class="msg-av" id="member-messages-coach-av" style="width:36px;height:36px;font-size:13px;background:var(--amber-dim);color:var(--amber)">D</div>',
+            '  <div><div id="member-messages-coach-name" style="font-size:13.5px;font-weight:500;color:var(--text)">Dustin</div><div style="font-size:11px;color:var(--text3)">Head Coach · Iso Club</div></div>',
+            "</div>",
+            '<div id="member-messages-thread" style="flex:1;overflow:auto;max-height:360px"></div>',
+            '<div style="margin-top:16px;display:flex;gap:8px;padding-top:14px;border-top:1px solid var(--border)">',
+            '  <input id="member-message-input" type="text" placeholder="Reply to Dustin…" class="form-input" style="flex:1">',
+            '  <button id="member-message-send" class="btn btn-lime">Send</button>',
+            "</div>",
+            '<div id="member-message-status" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>',
+          ].join("");
+        }
+        return {
+          inboxList: document.getElementById("member-messages-inbox-list"),
+          thread: document.getElementById("member-messages-thread"),
+          input: document.getElementById("member-message-input"),
+          send: document.getElementById("member-message-send"),
+          status: document.getElementById("member-message-status"),
+          coachName: document.getElementById("member-messages-coach-name"),
+          coachAv: document.getElementById("member-messages-coach-av"),
+        };
+      };
+
+      const renderMemberMessages = () => {
+        const refs = ensureMemberMessagesDom();
+        if (!refs) return;
+        if (refs.coachName) {
+          refs.coachName.textContent = memberMessagesState.coachName || "Dustin";
+        }
+        if (refs.coachAv) {
+          const initials = (memberMessagesState.coachName || "D")
+            .split(" ")
+            .map((part) => part.trim().charAt(0))
+            .join("")
+            .slice(0, 2)
+            .toUpperCase();
+          refs.coachAv.textContent = initials || "D";
+        }
+
+        if (refs.inboxList) {
+          const latest = memberMessagesState.messages[memberMessagesState.messages.length - 1];
+          const preview = latest && latest.body ? latest.body : "No messages yet";
+          const unread = Number(memberMessagesState.unreadCount || 0);
+          refs.inboxList.innerHTML = [
+            `<div class="msg-thread ${unread > 0 ? "unread" : ""}" style="cursor:default">`,
+            '  <div class="msg-av" style="background:var(--amber-dim);color:var(--amber)">D</div>',
+            '  <div style="flex:1;min-width:0">',
+            `    <div class="msg-from">${memberMessagesState.coachName || "Dustin · Coach"}</div>`,
+            `    <div class="msg-preview">${String(preview).slice(0, 56)}</div>`,
+            "  </div>",
+            `  <div class="msg-time">${latest ? formatMessageTime(latest.created_at) : ""}</div>`,
+            "</div>",
+          ].join("");
+        }
+
+        if (refs.thread) {
+          refs.thread.innerHTML = "";
+          if (!memberMessagesState.messages.length) {
+            const empty = document.createElement("div");
+            empty.style.fontSize = "12px";
+            empty.style.color = "var(--text3)";
+            empty.textContent = "No messages yet. Send Dustin a note to start the thread.";
+            refs.thread.appendChild(empty);
+          } else {
+            memberMessagesState.messages.forEach((message) => {
+              const outbound = String(message.sender_id || "") === String(data.memberId || "");
+              const row = document.createElement("div");
+              row.style.display = "flex";
+              row.style.justifyContent = outbound ? "flex-end" : "flex-start";
+              row.style.marginBottom = "10px";
+
+              const bubble = document.createElement("div");
+              bubble.style.background = outbound ? "rgba(201,240,85,0.12)" : "var(--bg3)";
+              bubble.style.border = `1px solid ${outbound ? "rgba(201,240,85,0.35)" : "var(--border)"}`;
+              bubble.style.borderRadius = "var(--r-sm)";
+              bubble.style.padding = "10px 12px";
+              bubble.style.maxWidth = "460px";
+              bubble.innerHTML = [
+                `<p style="font-size:12.5px;color:${outbound ? "var(--text)" : "var(--text2)"};line-height:1.65;margin:0 0 6px 0">${String(message.body || "")}</p>`,
+                `<div style="font-size:10px;color:var(--text3);text-align:${outbound ? "right" : "left"}">${formatMessageTime(message.created_at)}</div>`,
+              ].join("");
+              row.appendChild(bubble);
+              refs.thread.appendChild(row);
+            });
+            refs.thread.scrollTop = refs.thread.scrollHeight;
+          }
+        }
+
+        setMemberUnreadBadge(Number(memberMessagesState.unreadCount || 0));
+      };
+
+      const loadMemberMessages = async (markRead) => {
+        try {
+          const payload = await getJson(`/api/messages/inbox${markRead ? "?mark_read=1" : ""}`);
+          memberMessagesState.coachId = String(payload.coach?.id || "");
+          memberMessagesState.coachName = String(payload.coach?.full_name || "Dustin");
+          memberMessagesState.unreadCount = Number(payload.unread_count || 0);
+          memberMessagesState.supportsReadTracking = Boolean(payload.supports_read_tracking);
+          memberMessagesState.messages = Array.isArray(payload.messages) ? payload.messages : [];
+          memberMessagesState.initialized = true;
+          renderMemberMessages();
+          if (markRead) {
+            memberMessagesState.unreadCount = 0;
+            setMemberUnreadBadge(0);
+          }
+        } catch (error) {
+          const refs = ensureMemberMessagesDom();
+          if (refs?.status) {
+            refs.status.textContent = error instanceof Error ? error.message : "Unable to load messages.";
+            refs.status.style.color = "var(--coral)";
+          }
+        }
+      };
+
       const wireMemberMessageReply = () => {
-        const submit = document.getElementById("member-message-send");
-        if (!submit) return;
-        submit.addEventListener("click", async () => {
+        const refs = ensureMemberMessagesDom();
+        if (!refs || !refs.send || !refs.input) return;
+        if (refs.send.getAttribute("data-wired") === "true") return;
+        refs.send.setAttribute("data-wired", "true");
+
+        refs.send.addEventListener("click", async () => {
           try {
-            setStatus("member-message-status", "info", "Sending…");
-            submit.setAttribute("disabled", "true");
-            const input = document.getElementById("member-message-input");
-            const bodyText = input && "value" in input ? input.value : "";
-            if (!bodyText.trim()) {
+            const bodyText = "value" in refs.input ? String(refs.input.value || "").trim() : "";
+            if (!bodyText) {
               throw new Error("Message cannot be empty.");
             }
-            await postJson("/api/messages/send", { body: bodyText });
-            setStatus("member-message-status", "success", "Message sent.");
-            if (input && "value" in input) input.value = "";
+            if (refs.status) {
+              refs.status.textContent = "Sending…";
+              refs.status.style.color = "var(--text3)";
+            }
+            refs.send.setAttribute("disabled", "true");
+
+            const latestThreadId =
+              memberMessagesState.messages
+                .map((msg) => String(msg.thread_id || ""))
+                .filter((value) => value.length > 0)
+                .slice(-1)[0] || "";
+
+            const sendPayload = {
+              body: bodyText,
+              recipient_id: memberMessagesState.coachId || undefined,
+              thread_id: latestThreadId || undefined,
+            };
+            const response = await postJson("/api/messages/send", sendPayload);
+            const sentMessage = response && response.message ? response.message : null;
+            if (sentMessage) {
+              memberMessagesState.messages.push(sentMessage);
+            }
+            memberMessagesState.unreadCount = 0;
+            renderMemberMessages();
+            if ("value" in refs.input) refs.input.value = "";
+            if (refs.status) {
+              refs.status.textContent = "Message sent.";
+              refs.status.style.color = "var(--lime)";
+            }
           } catch (error) {
-            const message = error instanceof Error ? error.message : "Could not send message.";
-            setStatus("member-message-status", "error", message);
+            if (refs.status) {
+              refs.status.textContent =
+                error instanceof Error ? error.message : "Could not send message.";
+              refs.status.style.color = "var(--coral)";
+            }
           } finally {
-            submit.removeAttribute("disabled");
+            refs.send.removeAttribute("disabled");
           }
         });
       };
@@ -1340,6 +1549,10 @@ export async function DashboardPageView({
       if (originalShowView) {
         window.showView = (name) => {
           originalShowView(name);
+          if (role === "member" && name === "messages") {
+            wireMemberMessageReply();
+            loadMemberMessages(true);
+          }
           const targetPath = memberPathByView[name] || "/dashboard";
           if (window.location.pathname !== targetPath) {
             window.history.pushState({}, "", targetPath);
@@ -1587,8 +1800,9 @@ export async function DashboardPageView({
         injectMemberUploadDataButton();
         injectMemberSettingsButton();
         injectMemberSettingsSidebarLink();
+        loadMemberMessages(initialMemberView === "messages");
+        wireMemberMessageReply();
       }
-      wireMemberMessageReply();
     })();
   `;
 
