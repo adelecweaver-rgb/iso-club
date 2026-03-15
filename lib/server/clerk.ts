@@ -2,9 +2,21 @@ import "server-only";
 
 import { auth, currentUser } from "@clerk/nextjs/server";
 
+export function getClerkPublishableKey(): string {
+  return (
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ??
+    process.env.CLERK_PUBLISHABLE_KEY ??
+    ""
+  ).trim();
+}
+
+export function getClerkSecretKey(): string {
+  return (process.env.CLERK_SECRET_KEY ?? "").trim();
+}
+
 export function isClerkConfigured(): boolean {
-  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY;
-  const secretKey = process.env.CLERK_SECRET_KEY;
+  const publishableKey = getClerkPublishableKey();
+  const secretKey = getClerkSecretKey();
   return Boolean(publishableKey && secretKey);
 }
 

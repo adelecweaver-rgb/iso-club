@@ -12,6 +12,11 @@ export default function SignInPage() {
             {" "}
             <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code>
             {" "}
+            (or
+            {" "}
+            <code>CLERK_PUBLISHABLE_KEY</code>
+            )
+            {" "}
             and
             {" "}
             <code>CLERK_SECRET_KEY</code>
