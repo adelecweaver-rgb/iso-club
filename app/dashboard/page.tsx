@@ -1,17 +1,10 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { promises as fs } from "fs";
-import path from "path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
 import { getCurrentAuthState, routeForRole } from "@/lib/server/roles";
-
-type PrototypeParts = {
-  styles: string;
-  body: string;
-  script: string;
-};
+import { loadPrototypeFromFiles, type PrototypeParts } from "@/lib/server/prototype";
 
 type DashboardPayload = {
   role: "member" | "coach";
@@ -86,46 +79,7 @@ type DashboardPayload = {
 };
 
 async function loadPrototypeParts(): Promise<PrototypeParts> {
-  try {
-    let html = "";
-    const candidates = ["iso-club-v2.html", "index.html"];
-    for (const candidate of candidates) {
-      try {
-        html = await fs.readFile(path.join(process.cwd(), candidate), "utf8");
-        if (html) break;
-      } catch {
-        // Try the next candidate.
-      }
-    }
-    if (!html) {
-      throw new Error("Could not load v2 prototype file.");
-    }
-
-    const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
-    const bodyMatch = html.match(/<body>([\s\S]*?)<script>/i);
-    const scriptMatch = html.match(/<script>([\s\S]*?)<\/script>\s*<\/body>/i);
-
-    if (!styleMatch || !bodyMatch || !scriptMatch) {
-      throw new Error("Could not parse prototype index.html.");
-    }
-
-    return {
-      styles: styleMatch[1],
-      body: bodyMatch[1],
-      script: scriptMatch[1],
-    };
-  } catch {
-    return {
-      styles: "",
-      body: `
-        <main style="min-height:100vh;padding:24px;background:#1e2b1b;color:#f2e8dd;font-family:Arial,Helvetica,sans-serif;">
-          <h2 style="margin:0 0 8px 0;">Dashboard template missing</h2>
-          <p style="margin:0;">Could not load <code>/index.html</code>.</p>
-        </main>
-      `,
-      script: "",
-    };
-  }
+  return loadPrototypeFromFiles(["iso-club-v2.html"], "Iso Club Dashboard");
 }
 
 function initialsFromName(name: string): string {
