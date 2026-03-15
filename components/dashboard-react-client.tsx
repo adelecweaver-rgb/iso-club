@@ -254,7 +254,15 @@ export function DashboardReactClient({
         setCoachId(String(response.coach?.id || ""));
         setCoachName(String(response.coach?.full_name || "Dustin"));
         setUnreadCount(markRead ? 0 : Number(response.unread_count || 0));
-        setMessages(Array.isArray(response.messages) ? response.messages : []);
+        const normalizedMessages = Array.isArray(response.messages)
+          ? response.messages
+              .slice(-120)
+              .map((message) => ({
+                ...message,
+                body: String(message.body || "").slice(0, 4000),
+              }))
+          : [];
+        setMessages(normalizedMessages);
         setMessagesStatus("");
       } catch (error) {
         setMessagesStatus(error instanceof Error ? error.message : "Unable to load messages.");
@@ -264,8 +272,8 @@ export function DashboardReactClient({
   );
 
   useEffect(() => {
-    if (role !== "member") return;
-    void loadMessages(memberView === "messages");
+    if (role !== "member" || memberView !== "messages") return;
+    void loadMessages(true);
   }, [loadMessages, memberView, role]);
 
   useEffect(() => {
