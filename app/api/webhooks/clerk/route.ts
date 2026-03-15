@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyWebhook } from "@clerk/nextjs/webhooks";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import type { NextRequest } from "next/server";
 
 type ClerkWebhookUser = {
   id: string;
@@ -44,7 +45,7 @@ function getPrimaryEmail(data: ClerkWebhookUser): string {
   return valueAsString(primary?.email_address, "");
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const supabaseAdmin = createSupabaseAdminClient();
   if (!supabaseAdmin) {
     return NextResponse.json(
