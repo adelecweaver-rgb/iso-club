@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { asOptionalNumber, getActorContext } from "@/lib/server/actor";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type Body = {
   full_name?: string;
@@ -32,6 +33,17 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as Body;
+    const supabaseAdmin = createSupabaseAdminClient();
+    if (!supabaseAdmin) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "SUPABASE_SERVICE_ROLE_KEY is required to write onboarding data.",
+        },
+        { status: 500 },
+      );
+    }
 
     const fullName =
       (typeof body.full_name === "string" && body.full_name.trim().length > 0
@@ -68,7 +80,7 @@ export async function POST(request: Request) {
       avatar_url: String(context.dbUser.avatar_url ?? "") || null,
     };
 
-    const upserted = await context.supabase
+    const upserted = await supabaseAdmin
       .from("users")
       .upsert(payload, { onConflict: "clerk_id" })
       .select("id")
