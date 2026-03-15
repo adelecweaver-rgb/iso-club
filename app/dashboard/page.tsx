@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 import { promises as fs } from "fs";
 import path from "path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isClerkConfigured, safeAuth, safeCurrentUser } from "@/lib/server/clerk";
+import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
+import { getCurrentAuthState, routeForRole } from "@/lib/server/roles";
 
 type PrototypeParts = {
   styles: string;
@@ -86,7 +87,19 @@ type DashboardPayload = {
 
 async function loadPrototypeParts(): Promise<PrototypeParts> {
   try {
-    const html = await fs.readFile(path.join(process.cwd(), "index.html"), "utf8");
+    let html = "";
+    const candidates = ["iso-club-v2.html", "index.html"];
+    for (const candidate of candidates) {
+      try {
+        html = await fs.readFile(path.join(process.cwd(), candidate), "utf8");
+        if (html) break;
+      } catch {
+        // Try the next candidate.
+      }
+    }
+    if (!html) {
+      throw new Error("Could not load v2 prototype file.");
+    }
 
     const styleMatch = html.match(/<style>([\s\S]*?)<\/style>/i);
     const bodyMatch = html.match(/<body>([\s\S]*?)<script>/i);
@@ -683,7 +696,6 @@ export async function DashboardPageView({
   route: "dashboard" | "coach";
 }) {
   const clerkConfigured = isClerkConfigured();
-  const { userId } = await safeAuth();
   const prototype = await loadPrototypeParts();
 
   if (!clerkConfigured) {
@@ -710,27 +722,25 @@ export async function DashboardPageView({
     );
   }
 
-  if (!userId) {
-    return (
-      <main className="shell">
-        <div className="card">
-          <h1 className="title">Please sign in</h1>
-          <p className="muted">Sign in to access your dashboard.</p>
-          <Link className="btn" href="/sign-in">
-            Go to sign in
-          </Link>
-        </div>
-      </main>
-    );
+  const authState = await getCurrentAuthState();
+  if (!authState.isAuthenticated || !authState.userId) {
+    redirect("/sign-in");
   }
 
-  const livePayload = await loadDashboardLiveData(userId);
-  if (route === "dashboard" && livePayload.role === "coach") {
-    redirect("/coach");
+  if (route === "dashboard") {
+    if (authState.role !== "member") {
+      redirect(routeForRole(authState.role));
+    }
+    if (!authState.onboardingComplete) {
+      redirect("/onboarding");
+    }
+  } else if (route === "coach") {
+    if (!(authState.role === "coach" || authState.role === "admin")) {
+      redirect(routeForRole(authState.role));
+    }
   }
-  if (route === "coach" && livePayload.role !== "coach") {
-    redirect("/dashboard");
-  }
+
+  const livePayload = await loadDashboardLiveData(authState.userId);
   const payload = JSON.stringify(livePayload).replace(/</g, "\\u003c");
   const bootstrapScript = `
     (() => {

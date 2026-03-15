@@ -1,64 +1,78 @@
 import Link from "next/link";
 import { SignInButton, UserButton } from "@clerk/nextjs";
-import { OnboardingForm } from "@/components/onboarding-form";
-import { isClerkConfigured, safeAuth } from "@/lib/server/clerk";
+import { isClerkConfigured } from "@/lib/server/clerk";
+import { getCurrentAuthState, routeForRole } from "@/lib/server/roles";
+import { loadPrototypeFromFiles } from "@/lib/server/prototype";
 
 export default async function HomePage() {
+  const prototype = await loadPrototypeFromFiles(
+    ["iso-club-landing.html"],
+    "Iso Club Landing",
+  );
   const clerkConfigured = isClerkConfigured();
-  const { userId } = await safeAuth();
+  const authState = clerkConfigured
+    ? await getCurrentAuthState()
+    : { isAuthenticated: false, role: "unknown" as const, onboardingComplete: false };
+  const nextHref = authState.isAuthenticated ? routeForRole(authState.role) : "/sign-in";
 
   return (
-    <main className="shell">
-      <div className="card">
-        <div className="top-strip">
-          <p className="muted" style={{ margin: 0 }}>
-            Iso Club • Member Portal
-          </p>
-          {clerkConfigured && userId ? <UserButton /> : null}
-        </div>
-        <h1 className="title">Your project is fully set up.</h1>
-        <p className="muted">
-          This is now a real Next.js app with Clerk authentication and Supabase
-          integration scaffolding, ready for Vercel deployment.
-        </p>
-        {!clerkConfigured ? (
-          <p className="muted" style={{ color: "#f0b955", marginTop: 8 }}>
-            Authentication is not configured. Set
-            {" "}
-            <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code>
-            {" "}
-            and
-            {" "}
-            <code>CLERK_SECRET_KEY</code>
-            {" "}
-            in Vercel environment variables.
-          </p>
-        ) : null}
-
-        <div className="actions">
-          {clerkConfigured && !userId ? (
+    <>
+      <style dangerouslySetInnerHTML={{ __html: prototype.styles }} />
+      <div
+        style={{
+          position: "fixed",
+          top: 12,
+          right: 12,
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          background: "rgba(11,12,9,0.9)",
+          border: "1px solid rgba(255,255,255,0.18)",
+          borderRadius: 999,
+          padding: "6px 10px",
+          backdropFilter: "blur(2px)",
+        }}
+      >
+        {clerkConfigured ? (
+          authState.isAuthenticated ? (
             <>
+              <Link
+                href={nextHref}
+                style={{ color: "#edeae0", textDecoration: "none", fontSize: 12 }}
+              >
+                Enter app
+              </Link>
+              <div style={{ width: 1, height: 14, background: "rgba(255,255,255,0.2)" }} />
+              <UserButton />
+            </>
+          ) : (
             <SignInButton mode="modal">
-              <button className="btn" type="button">
+              <button
+                type="button"
+                style={{
+                  border: 0,
+                  borderRadius: 999,
+                  padding: "6px 12px",
+                  cursor: "pointer",
+                  background: "#c9f055",
+                  color: "#0b0c09",
+                  fontSize: 12,
+                  fontWeight: 600,
+                }}
+              >
                 Sign in
               </button>
             </SignInButton>
-            <Link className="btn secondary" href="/sign-up">
-              Create account
-            </Link>
-            </>
-          ) : userId ? (
-            <Link className="btn" href="/dashboard">
-              Open member dashboard
-            </Link>
-          ) : (
-            <button className="btn" type="button" disabled>
-              Configure Clerk to continue
-            </button>
-          )}
-        </div>
-        {clerkConfigured && userId ? <OnboardingForm /> : null}
+          )
+        ) : (
+          <span style={{ color: "#f0b955", fontSize: 12 }}>Configure Clerk keys</span>
+        )}
       </div>
-    </main>
+      <div dangerouslySetInnerHTML={{ __html: prototype.body }} />
+      {prototype.script ? (
+        <script dangerouslySetInnerHTML={{ __html: prototype.script }} />
+      ) : null}
+    </>
   );
 }
