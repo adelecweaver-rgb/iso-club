@@ -1034,6 +1034,22 @@ export async function DashboardPageView({
         });
       };
 
+      const injectMemberRecoveryLogLink = () => {
+        const header = document.querySelector("#view-recovery .sec-header");
+        if (!header) return;
+        if (document.getElementById("member-recovery-log-link")) return;
+
+        const link = document.createElement("a");
+        link.id = "member-recovery-log-link";
+        link.href = "/dashboard/recovery";
+        link.textContent = "Log recovery session";
+        link.className = "btn btn-lime btn-sm";
+        link.style.textDecoration = "none";
+        link.style.display = "inline-flex";
+        link.style.alignItems = "center";
+        header.appendChild(link);
+      };
+
       if (typeof setMode === "function") {
         setMode(role);
       }
@@ -1192,6 +1208,9 @@ export async function DashboardPageView({
         wireHealthspanForm();
         wireProtocolForm();
         wireCoachMessageForm();
+      }
+      if (role === "member") {
+        injectMemberRecoveryLogLink();
       }
       wireMemberMessageReply();
     })();
