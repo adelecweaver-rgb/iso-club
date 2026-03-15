@@ -157,10 +157,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    const anthropicKey = process.env.ANTHROPIC_KEY ?? process.env.ANTHROPIC_API_KEY;
     if (!anthropicKey) {
       return NextResponse.json(
-        { success: false, error: "ANTHROPIC_API_KEY is not configured." },
+        { success: false, error: "ANTHROPIC_KEY is not configured." },
         { status: 500 },
       );
     }
