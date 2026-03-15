@@ -5,6 +5,8 @@ type SupportedMachine =
   | "arx"
   | "carol"
   | "fit3d"
+  | "whoop"
+  | "oura"
   | "vasper"
   | "katalyst"
   | "proteus"
@@ -20,6 +22,8 @@ function normalizeMachine(value: string): SupportedMachine | null {
   if (normalized === "arx") return "arx";
   if (normalized === "carol") return "carol";
   if (normalized === "fit3d" || normalized === "fit 3d") return "fit3d";
+  if (normalized === "whoop") return "whoop";
+  if (normalized === "oura") return "oura";
   if (normalized === "vasper") return "vasper";
   if (normalized === "katalyst") return "katalyst";
   if (normalized === "proteus") return "proteus";
@@ -101,6 +105,41 @@ function promptForMachine(machine: SupportedMachine): string {
       '  "thigh_r_in": number|null,',
       '  "calf_l_in": number|null,',
       '  "calf_r_in": number|null',
+      "}",
+      "If a field is not visible, set it to null. Return JSON only.",
+    ].join("\n");
+  }
+
+  if (machine === "whoop") {
+    return [
+      "This image is from a Whoop app or device screen.",
+      "Extract all visible values and return ONLY valid JSON with this exact shape:",
+      "{",
+      '  "recovery_score": number|null,',
+      '  "hrv_ms": number|null,',
+      '  "resting_hr": number|null,',
+      '  "sleep_score": number|null,',
+      '  "sleep_duration_hrs": number|null,',
+      '  "strain_score": number|null,',
+      '  "spo2_pct": number|null',
+      "}",
+      "If a field is not visible, set it to null. Return JSON only.",
+    ].join("\n");
+  }
+
+  if (machine === "oura") {
+    return [
+      "This image is from an Oura app or device screen.",
+      "Extract all visible values and return ONLY valid JSON with this exact shape:",
+      "{",
+      '  "readiness_score": number|null,',
+      '  "sleep_score": number|null,',
+      '  "hrv_ms": number|null,',
+      '  "sleep_duration_hrs": number|null,',
+      '  "deep_sleep_hrs": number|null,',
+      '  "rem_sleep_hrs": number|null,',
+      '  "spo2_pct": number|null,',
+      '  "body_temp_deviation": string|null',
       "}",
       "If a field is not visible, set it to null. Return JSON only.",
     ].join("\n");

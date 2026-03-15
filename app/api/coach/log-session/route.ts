@@ -27,6 +27,8 @@ function normalizeEquipment(input: string) {
   if (normalized === "fit3d" || normalized === "fit 3d") {
     return { kind: "fit3d" as const };
   }
+  if (normalized === "whoop") return { kind: "wearable" as const, device: "whoop" };
+  if (normalized === "oura") return { kind: "wearable" as const, device: "oura" };
 
   const manualMap: Record<string, string> = {
     vasper: "vasper",
@@ -215,6 +217,23 @@ export async function POST(request: Request) {
         posture_hip_forward_in: extractedNumber("posture_hip_forward_in"),
       });
       if (fit3dInsert.error) throw new Error(fit3dInsert.error.message);
+    } else if (equipment.kind === "wearable") {
+      const wearableInsert = await context.supabase.from("wearable_data").insert({
+        member_id: memberId,
+        recorded_date: nowIso,
+        device_type: equipment.device,
+        recovery_score: extractedNumber("recovery_score"),
+        readiness_score: extractedNumber("readiness_score"),
+        hrv_ms: extractedNumber("hrv_ms"),
+        resting_hr: extractedNumber("resting_hr"),
+        sleep_score: extractedNumber("sleep_score"),
+        sleep_duration_hrs: extractedNumber("sleep_duration_hrs"),
+        deep_sleep_hrs: extractedNumber("deep_sleep_hrs"),
+        rem_sleep_hrs: extractedNumber("rem_sleep_hrs"),
+        strain_score: extractedNumber("strain_score"),
+        spo2_pct: extractedNumber("spo2_pct"),
+      });
+      if (wearableInsert.error) throw new Error(wearableInsert.error.message);
     } else if (equipment.kind === "manual") {
       const extractedDuration = extractedNumber("duration_minutes");
       const outputNumbers = extraction.visible_output_numbers;
