@@ -103,7 +103,12 @@ export async function POST(request: Request) {
 
     const incomingPhone = String(payload.phone ?? "").trim();
     if (role === "member" && incomingPhone && !existingPhone) {
-      await sendWelcomeSms(fullName, incomingPhone);
+      await sendWelcomeSms(
+        supabaseAdmin,
+        String(upserted.data.id),
+        fullName,
+        incomingPhone,
+      );
     }
 
     return NextResponse.json({ success: true, user_id: upserted.data.id });

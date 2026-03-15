@@ -1,84 +1,59 @@
 import "server-only";
 
-type SmsTemplateData = Record<string, string | number>;
-
-function renderTemplate(template: string, data: SmsTemplateData): string {
-  return Object.entries(data).reduce((message, [key, value]) => {
-    return message.replaceAll(`{{${key}}}`, String(value));
-  }, template);
-}
-
 function firstName(fullName: string): string {
   const name = fullName.trim();
   if (!name) return "Member";
   return name.split(" ")[0] ?? "Member";
 }
 
-export function buildWelcomeSms(fullName: string): string {
-  const template =
-    process.env.SMS_TEMPLATE_WELCOME ??
-    "Welcome to Iso Club, {{firstName}}! Your account is ready and your Healthspan journey starts now.";
-  return renderTemplate(template, { firstName: firstName(fullName) });
+const DASHBOARD_LINK = "https://iso-club-8qsg.vercel.app";
+
+export function buildWelcomeSmsTemplate(fullName: string): string {
+  return `Hey ${firstName(fullName)} — Dustin here. You're in. Your Iso Club dashboard is live. I'm reviewing your intake now and will have your protocol ready within 48 hours. Log in here: ${DASHBOARD_LINK}`;
 }
 
-export function buildProtocolReadySms(fullName: string, protocolName: string): string {
-  const template =
-    process.env.SMS_TEMPLATE_PROTOCOL_READY ??
-    "Hi {{firstName}} — your protocol \"{{protocolName}}\" is ready in Iso Club. Open your dashboard to view your plan.";
-  return renderTemplate(template, {
-    firstName: firstName(fullName),
-    protocolName: protocolName || "New Protocol",
-  });
-}
-
-export function buildScanResultsSms(fullName: string): string {
-  const template =
-    process.env.SMS_TEMPLATE_SCAN_RESULTS ??
-    "Hi {{firstName}} — your latest scan has been reviewed by Dustin and results are now available in your dashboard.";
-  return renderTemplate(template, { firstName: firstName(fullName) });
-}
-
-export function buildWeeklySummarySms(
+export function buildProtocolReadySmsTemplate(
   fullName: string,
-  recoveryScore: string,
-  nextSession: string,
+  primaryGoal: string,
 ): string {
-  const template =
-    process.env.SMS_TEMPLATE_WEEKLY_SUMMARY ??
-    "Weekly summary for {{firstName}}: recovery {{recoveryScore}}, next session {{nextSession}}. Check your Iso Club dashboard for full details.";
-  return renderTemplate(template, {
-    firstName: firstName(fullName),
-    recoveryScore,
-    nextSession,
-  });
+  const goal = primaryGoal.trim() || "your current goal";
+  return `${firstName(fullName)} — your protocol is ready. I built it around your goal of ${goal}. Log in to see your sessions: ${DASHBOARD_LINK}. Book your first session when you're ready. Questions? Reply here.`;
 }
 
-export function buildSessionReminderSms(
+export function buildScanResultsSmsTemplate(
+  fullName: string,
+  headlineMetricAndChange: string,
+): string {
+  const headline = headlineMetricAndChange.trim() || "new scan insights available";
+  return `${firstName(fullName)} — reviewed your Fit3D scan. Headline: ${headline}. Full results in your dashboard: ${DASHBOARD_LINK}. I've already updated your protocol based on what I see.`;
+}
+
+export function buildWeeklySummarySmsTemplate(
+  fullName: string,
+  sessionsCompleted: number,
+  healthspanScore: string,
+  trend: "up" | "down" | "flat",
+  highlight: string,
+): string {
+  const cleanHighlight = highlight.trim() || "You're building consistency.";
+  const trendLabel = trend === "up" ? "up" : trend === "down" ? "down" : "flat";
+  return `${firstName(fullName)} — week in review: ${sessionsCompleted} sessions completed. Healthspan OS: ${healthspanScore} ${trendLabel}. ${cleanHighlight}. Keep going. Dashboard: ${DASHBOARD_LINK}`;
+}
+
+export function buildSessionReminderSmsTemplate(
   fullName: string,
   sessionName: string,
-  sessionTimeLabel: string,
+  sessionTime: string,
+  keyFocus: string,
 ): string {
-  const template =
-    process.env.SMS_TEMPLATE_SESSION_REMINDER ??
-    "Reminder: you have {{sessionName}} at {{sessionTime}} tomorrow. See you at Iso Club.";
-  return renderTemplate(template, {
-    firstName: firstName(fullName),
-    sessionName: sessionName || "your session",
-    sessionTime: sessionTimeLabel,
-  });
+  const name = sessionName.trim() || "your session";
+  const focus = keyFocus.trim() || "quality movement";
+  return `${firstName(fullName)} — reminder: ${name} tomorrow at ${sessionTime}. Your protocol says ${focus}. See you then. — Dustin`;
 }
 
-export function buildLowRecoverySms(
+export function buildLowRecoverySmsTemplate(
   fullName: string,
-  recoveryScore: string,
-  deviceType: string,
+  recoveryScore: number,
 ): string {
-  const template =
-    process.env.SMS_TEMPLATE_LOW_RECOVERY ??
-    "Hi {{firstName}} — your {{deviceType}} recovery score is {{recoveryScore}} today. Prioritize recovery before your next training session.";
-  return renderTemplate(template, {
-    firstName: firstName(fullName),
-    recoveryScore,
-    deviceType: deviceType || "wearable",
-  });
+  return `${firstName(fullName)} — your recovery score is ${Math.round(recoveryScore)} this morning. I've noted it. Come in but we'll adjust the intensity. Don't push hard on low recovery. — Dustin`;
 }

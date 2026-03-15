@@ -219,7 +219,7 @@ export async function POST(request: Request) {
       });
       if (insertResult.error) throw new Error(insertResult.error.message);
     } else if (equipment.kind === "fit3d") {
-      const fit3dInsert = await context.supabase.from("fit3d_scans").insert({
+      const fit3dPayload = {
         member_id: memberId,
         scan_date: nowIso,
         body_fat_pct: extractedNumber("body_fat_pct"),
@@ -229,10 +229,24 @@ export async function POST(request: Request) {
         posture_head_forward_in: extractedNumber("posture_head_forward_in"),
         posture_shoulder_forward_in: extractedNumber("posture_shoulder_forward_in"),
         posture_hip_forward_in: extractedNumber("posture_hip_forward_in"),
-      });
+        dustin_reviewed: extractedBoolean("dustin_reviewed"),
+      };
+      let fit3dInsert = await context.supabase.from("fit3d_scans").insert(fit3dPayload);
+      if (
+        fit3dInsert.error &&
+        /column ["']?dustin_reviewed["']? .*fit3d_scans.* does not exist|Could not find the 'dustin_reviewed' column/i.test(
+          fit3dInsert.error.message,
+        )
+      ) {
+        const { dustin_reviewed, ...payloadWithoutReviewed } = fit3dPayload;
+        void dustin_reviewed;
+        fit3dInsert = await context.supabase
+          .from("fit3d_scans")
+          .insert(payloadWithoutReviewed);
+      }
       if (fit3dInsert.error) throw new Error(fit3dInsert.error.message);
       if (extractedBoolean("dustin_reviewed")) {
-        await sendScanResultsSmsForMember(context.supabase, memberId);
+        await sendScanResultsSmsForMember(context.supabase, memberId, fit3dPayload);
       }
     } else if (equipment.kind === "wearable") {
       const recoveryScore = extractedNumber("recovery_score");
@@ -257,7 +271,6 @@ export async function POST(request: Request) {
           context.supabase,
           memberId,
           recoveryScore,
-          equipment.device,
         );
       }
     } else if (equipment.kind === "manual") {

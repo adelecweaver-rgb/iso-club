@@ -3,7 +3,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import {
   sendScanResultsSmsForMember,
   sendSessionReminderSmsForMember,
-  sendWeeklySummarySms,
+  sendWeeklySummarySmsForMember,
+  wasSmsSentRecently,
 } from "@/lib/server/sms-notifications";
 
 export const runtime = "nodejs";
@@ -14,15 +15,6 @@ function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return fallback;
-}
-
-function asNumber(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim().length > 0) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
 }
 
 function localTimeParts(now: Date, timezone: string) {
@@ -51,6 +43,23 @@ function formatSessionDateLabel(iso: string, timezone: string): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+async function loadProtocolFocus(
+  supabase: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  memberId: string,
+): Promise<string> {
+  const protocol = await supabase
+    .from("protocols")
+    .select("primary_goal")
+    .eq("member_id", memberId)
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(1);
+  if (protocol.error || !Array.isArray(protocol.data) || protocol.data.length === 0) {
+    return "quality movement and controlled intensity";
+  }
+  return asString(protocol.data[0]?.primary_goal, "quality movement and controlled intensity");
 }
 
 function isCronAuthorized(request: Request): boolean {
@@ -115,14 +124,26 @@ async function runCron(request: Request) {
       summary.sessionReminder.skipped += 1;
       continue;
     }
+    const alreadySent = await wasSmsSentRecently(
+      supabase,
+      memberId,
+      "session_reminder",
+      new Date(now.getTime() - 20 * 60 * 60 * 1000).toISOString(),
+    );
+    if (alreadySent) {
+      summary.sessionReminder.skipped += 1;
+      continue;
+    }
     const sessionName = asString(booking.title, "") || asString(booking.session_type, "Session");
     const scheduledAt = asString(booking.scheduled_at, "");
     const dateLabel = formatSessionDateLabel(scheduledAt, timezone);
+    const keyFocus = await loadProtocolFocus(supabase, memberId);
     const smsResult = await sendSessionReminderSmsForMember(
       supabase,
       memberId,
       sessionName,
       dateLabel,
+      keyFocus,
     );
     if (smsResult.success) {
       summary.sessionReminder.sent += 1;
@@ -136,7 +157,9 @@ async function runCron(request: Request) {
   const scanLookback = new Date(now.getTime() - 65 * 60 * 1000);
   const scansQuery = await supabase
     .from("fit3d_scans")
-    .select("id,member_id,dustin_reviewed,updated_at")
+    .select(
+      "id,member_id,dustin_reviewed,updated_at,scan_date,body_fat_pct,lean_mass_lbs,weight_lbs",
+    )
     .eq("dustin_reviewed", true)
     .gte("updated_at", scanLookback.toISOString())
     .lt("updated_at", now.toISOString())
@@ -145,11 +168,23 @@ async function runCron(request: Request) {
   for (const scan of scansRows) {
     summary.scanResults.scanned += 1;
     const memberId = asString(scan.member_id, "");
+    const updatedAt = asString(scan.updated_at, "");
     if (!memberId) {
       summary.scanResults.skipped += 1;
       continue;
     }
-    const smsResult = await sendScanResultsSmsForMember(supabase, memberId);
+    const dedupeSince = updatedAt || scanLookback.toISOString();
+    const alreadySent = await wasSmsSentRecently(
+      supabase,
+      memberId,
+      "scan_results_ready",
+      dedupeSince,
+    );
+    if (alreadySent) {
+      summary.scanResults.skipped += 1;
+      continue;
+    }
+    const smsResult = await sendScanResultsSmsForMember(supabase, memberId, scan);
     if (smsResult.success) {
       summary.scanResults.sent += 1;
     } else if (smsResult.skipped) {
@@ -160,7 +195,7 @@ async function runCron(request: Request) {
   }
 
   const local = localTimeParts(now, timezone);
-  if (local.weekday === "Sun" && local.hour === 8) {
+  if (local.weekday === "Sun" && local.hour === 8 && local.minute < 30) {
     summary.weeklySummary.ran = true;
     const members = await supabase
       .from("users")
@@ -178,42 +213,22 @@ async function runCron(request: Request) {
         summary.weeklySummary.skipped += 1;
         continue;
       }
-
-      const [wearableRes, bookingRes] = await Promise.all([
-        supabase
-          .from("wearable_data")
-          .select("recovery_score,recorded_date")
-          .eq("member_id", memberId)
-          .order("recorded_date", { ascending: false })
-          .limit(1),
-        supabase
-          .from("bookings")
-          .select("scheduled_at,title,session_type,status")
-          .eq("member_id", memberId)
-          .gte("scheduled_at", now.toISOString())
-          .order("scheduled_at", { ascending: true })
-          .limit(1),
-      ]);
-      const wearableRow =
-        Array.isArray(wearableRes.data) && wearableRes.data.length > 0
-          ? (wearableRes.data[0] as AnyRow)
-          : null;
-      const bookingRow =
-        Array.isArray(bookingRes.data) && bookingRes.data.length > 0
-          ? (bookingRes.data[0] as AnyRow)
-          : null;
-      const recoveryScore = asNumber(wearableRow?.recovery_score);
-      const recoveryLabel =
-        recoveryScore !== null ? Math.round(recoveryScore).toString() : "--";
-      const nextSessionLabel = bookingRow
-        ? formatSessionDateLabel(asString(bookingRow.scheduled_at, ""), timezone)
-        : "none scheduled";
-
-      const smsResult = await sendWeeklySummarySms(
+      const alreadySent = await wasSmsSentRecently(
+        supabase,
+        memberId,
+        "weekly_summary",
+        new Date(now.getTime() - 20 * 60 * 60 * 1000).toISOString(),
+      );
+      if (alreadySent) {
+        summary.weeklySummary.skipped += 1;
+        continue;
+      }
+      const smsResult = await sendWeeklySummarySmsForMember(
+        supabase,
+        memberId,
         fullName,
         phone,
-        recoveryLabel,
-        nextSessionLabel,
+        now,
       );
       if (smsResult.success) {
         summary.weeklySummary.sent += 1;

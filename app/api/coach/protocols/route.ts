@@ -122,7 +122,11 @@ export async function POST(request: Request) {
       }
     }
 
-    await sendProtocolReadySmsForMember(context.supabase, memberId, name);
+    await sendProtocolReadySmsForMember(
+      context.supabase,
+      memberId,
+      primaryGoal ?? "",
+    );
 
     return NextResponse.json({ success: true, protocol_id: protocolInsert.data.id });
   } catch (err) {

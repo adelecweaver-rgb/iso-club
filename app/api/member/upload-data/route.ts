@@ -178,8 +178,12 @@ export async function POST(request: Request) {
         insert = await context.supabase.from("wearable_data").insert(wearablePayloadBase);
       }
       if (insert.error) throw new Error(insert.error.message);
-      if (recoveryScore !== null && recoveryScore < 50) {
-        await sendLowRecoverySmsForMember(context.supabase, memberId, recoveryScore, deviceType);
+      if (
+        recoveryScore !== null &&
+        recoveryScore < 50 &&
+        (deviceType === "whoop" || deviceType === "oura")
+      ) {
+        await sendLowRecoverySmsForMember(context.supabase, memberId, recoveryScore);
       }
     }
 
