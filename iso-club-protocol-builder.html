@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iso Club — Protocol Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Instrument+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg:        #0b0c09;
+  --bg2:       #111209;
+  --bg3:       #181910;
+  --bg4:       #1f2014;
+  --bg5:       #252618;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.13);
+  --border3:   rgba(255,255,255,0.2);
+  --text:      #edeae0;
+  --text2:     #9b9889;
+  --text3:     #585750;
+  --lime:      #c9f055;
+  --lime2:     #a8d038;
+  --lime-dim:  rgba(201,240,85,0.1);
+  --lime-dim2: rgba(201,240,85,0.05);
+  --amber:     #f0b955;
+  --amber-dim: rgba(240,185,85,0.1);
+  --blue:      #55b8f0;
+  --blue-dim:  rgba(85,184,240,0.1);
+  --coral:     #f07055;
+  --coral-dim: rgba(240,112,85,0.1);
+  --teal:      #55e8c8;
+  --teal-dim:  rgba(85,232,200,0.1);
+  --serif:     'Instrument Serif', Georgia, serif;
+  --sans:      'Instrument Sans', sans-serif;
+  --r:         12px;
+  --r-sm:      7px;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg5);border-radius:2px}
+
+.app{display:flex;height:100vh;overflow:hidden}
+
+/* LEFT PANEL — member selector + protocol list */
+.left-panel{width:260px;flex-shrink:0;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+
+.panel-header{padding:20px 18px 16px;border-bottom:1px solid var(--border)}
+.panel-title{font-family:var(--serif);font-size:18px;color:var(--text);margin-bottom:2px}
+.panel-sub{font-size:11px;color:var(--text3)}
+
+.search-wrap{padding:12px 14px;border-bottom:1px solid var(--border)}
+.search-input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r-sm);padding:8px 12px;color:var(--text);font-family:var(--sans);font-size:12.5px;outline:none;transition:border-color .2s}
+.search-input:focus{border-color:var(--lime)}
+.search-input::placeholder{color:var(--text3)}
+
+.member-list{flex:1;overflow-y:auto}
+.member-item{display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;transition:background .15s;border-bottom:1px solid var(--border)}
+.member-item:hover{background:var(--bg3)}
+.member-item.active{background:var(--lime-dim)}
+.member-av{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:12px;flex-shrink:0;border:1px solid var(--border2)}
+.member-info{flex:1;min-width:0}
+.member-name{font-size:12.5px;font-weight:500;color:var(--text);margin-bottom:1px}
+.member-item.active .member-name{color:var(--lime)}
+.member-detail{font-size:10.5px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.member-status{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.status-active{background:var(--lime)}
+.status-pending{background:var(--amber)}
+.status-none{background:var(--text3)}
+
+.left-footer{padding:14px;border-top:1px solid var(--border)}
+.btn-new{width:100%;padding:9px;background:var(--lime);color:var(--bg);border:none;border-radius:var(--r-sm);font-family:var(--sans);font-size:12.5px;font-weight:500;cursor:pointer;transition:background .2s}
+.btn-new:hover{background:var(--lime2)}
+
+/* CENTER PANEL — protocol builder */
+.center-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border)}
+
+.builder-header{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0}
+.builder-member{display:flex;align-items:center;gap:12px}
+.builder-av{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:15px;border:1.5px solid var(--border2);flex-shrink:0}
+.builder-name{font-size:14px;font-weight:500;color:var(--text);margin-bottom:1px}
+.builder-meta{font-size:11px;color:var(--text3)}
+.builder-actions{display:flex;gap:8px;align-items:center}
+
+/* BUTTONS */
+.btn{padding:7px 14px;border-radius:var(--r-sm);border:1px solid var(--border2);background:var(--bg3);color:var(--text2);font-family:var(--sans);font-size:12px;cursor:pointer;transition:all .15s;white-space:nowrap}
+.btn:hover{background:var(--bg4);color:var(--text)}
+.btn-lime{background:var(--lime);color:var(--bg);border-color:var(--lime);font-weight:500}
+.btn-lime:hover{background:var(--lime2);border-color:var(--lime2);color:var(--bg)}
+.btn-amber{background:var(--amber-dim);color:var(--amber);border-color:rgba(240,185,85,0.25)}
+.btn-sm{padding:5px 10px;font-size:11px}
+.btn-icon{width:30px;height:30px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:var(--r-sm)}
+
+/* PROTOCOL META */
+.protocol-meta{padding:16px 24px;border-bottom:1px solid var(--border);display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;flex-shrink:0}
+.meta-field{display:flex;flex-direction:column;gap:4px}
+.meta-label{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)}
+.meta-input,.meta-select{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--sans);font-size:12.5px;outline:none;transition:border-color .2s;width:100%}
+.meta-input:focus,.meta-select:focus{border-color:var(--lime)}
+.meta-input::placeholder{color:var(--text3)}
+
+/* SESSION BUILDER */
+.sessions-area{flex:1;overflow-y:auto;padding:16px 24px}
+
+.sessions-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sessions-title{font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)}
+.sessions-count{font-size:11px;color:var(--text3)}
+
+/* SESSION CARD */
+.session-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden;transition:border-color .2s}
+.session-card:hover{border-color:var(--border2)}
+.session-card.expanded{border-color:var(--border2)}
+.session-card-header{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer}
+.session-drag{color:var(--text3);font-size:14px;cursor:grab;padding:2px;flex-shrink:0}
+.session-num-badge{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0;border:1.5px solid var(--border2);color:var(--text3)}
+.session-card.done .session-num-badge{background:var(--lime-dim);border-color:var(--lime);color:var(--lime)}
+.session-name-wrap{flex:1}
+.session-card-name{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px}
+.session-card-detail{font-size:11px;color:var(--text3)}
+.session-card-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.session-expand-arrow{color:var(--text3);font-size:12px;transition:transform .2s}
+.session-card.expanded .session-expand-arrow{transform:rotate(180deg)}
+
+.session-card-body{display:none;padding:0 16px 14px;border-top:1px solid var(--border)}
+.session-card.expanded .session-card-body{display:block}
+
+.session-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.session-field{display:flex;flex-direction:column;gap:4px}
+.session-label{font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3)}
+.session-input,.session-select{background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:7px 10px;color:var(--text);font-family:var(--sans);font-size:12.5px;outline:none;transition:border-color .2s;width:100%}
+.session-input:focus,.session-select:focus{border-color:var(--lime)}
+.session-input::placeholder{color:var(--text3)}
+.session-notes{grid-column:1/-1}
+.session-textarea{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:8px 10px;color:var(--text);font-family:var(--sans);font-size:12.5px;outline:none;resize:vertical;min-height:60px;transition:border-color .2s}
+.session-textarea:focus{border-color:var(--lime)}
+.session-textarea::placeholder{color:var(--text3)}
+
+.session-card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+.session-delete{font-size:11px;color:var(--coral);cursor:pointer;transition:opacity .15s}
+.session-delete:hover{opacity:0.7}
+
+/* ADD SESSION */
+.add-session-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:1.5px dashed var(--border2);border-radius:var(--r);background:transparent;color:var(--text3);font-family:var(--sans);font-size:12.5px;cursor:pointer;transition:all .2s;margin-bottom:16px}
+.add-session-btn:hover{border-color:var(--lime);color:var(--lime);background:var(--lime-dim2)}
+
+/* EQUIPMENT PICKER */
+.equipment-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:6px}
+.equip-chip{padding:7px 8px;border-radius:var(--r-sm);border:1px solid var(--border);background:var(--bg3);cursor:pointer;transition:all .15s;text-align:center;font-size:11px;color:var(--text3)}
+.equip-chip:hover{border-color:var(--border2);color:var(--text2)}
+.equip-chip.selected{border-color:var(--lime);background:var(--lime-dim);color:var(--lime)}
+
+/* PROTOCOL NOTES */
+.protocol-notes-area{padding:16px 24px;border-top:1px solid var(--border);flex-shrink:0}
+.notes-label{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:6px}
+.notes-textarea{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 14px;color:var(--text);font-family:var(--sans);font-size:13px;outline:none;resize:none;height:72px;transition:border-color .2s}
+.notes-textarea:focus{border-color:var(--lime)}
+.notes-textarea::placeholder{color:var(--text3)}
+
+/* RIGHT PANEL — preview + history */
+.right-panel{width:280px;flex-shrink:0;background:var(--bg2);display:flex;flex-direction:column;overflow:hidden}
+
+.right-header{padding:18px 18px 14px;border-bottom:1px solid var(--border)}
+.right-title{font-size:13px;font-weight:500;color:var(--text);margin-bottom:2px}
+.right-sub{font-size:11px;color:var(--text3)}
+
+/* MEMBER SNAPSHOT */
+.snapshot{padding:14px 16px;border-bottom:1px solid var(--border)}
+.snapshot-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.snapshot-label{font-size:11px;color:var(--text3)}
+.snapshot-val{font-size:12px;font-weight:500;color:var(--text2)}
+.snapshot-scores{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:10px}
+.score-chip{padding:8px 10px;border-radius:var(--r-sm);background:var(--bg3);border:1px solid var(--border)}
+.score-chip-label{font-size:9.5px;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:3px}
+.score-chip-val{font-family:var(--serif);font-size:18px}
+.score-bar{height:2px;border-radius:1px;margin-top:4px;background:var(--bg5)}
+.score-bar-fill{height:100%;border-radius:1px}
+
+/* WEARABLE SNAPSHOT */
+.wearable-snap{padding:14px 16px;border-bottom:1px solid var(--border)}
+.wearable-title{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.wearable-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+.wearable-label{font-size:11px;color:var(--text3)}
+.wearable-val{font-size:12px;font-weight:500}
+
+/* PROTOCOL HISTORY */
+.history-list{flex:1;overflow-y:auto;padding:14px 16px}
+.history-title{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.history-item{padding:10px 12px;border-radius:var(--r-sm);background:var(--bg3);border:1px solid var(--border);margin-bottom:8px;cursor:pointer;transition:all .15s}
+.history-item:hover{border-color:var(--border2)}
+.history-item-name{font-size:12.5px;font-weight:500;color:var(--text);margin-bottom:3px}
+.history-item-meta{font-size:11px;color:var(--text3)}
+.history-item-result{font-size:11px;margin-top:4px}
+
+/* TAG */
+.tag{display:inline-flex;align-items:center;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:20px;font-weight:500;white-space:nowrap}
+.tag-lime{background:var(--lime-dim);color:var(--lime)}
+.tag-amber{background:var(--amber-dim);color:var(--amber)}
+.tag-blue{background:var(--blue-dim);color:var(--blue)}
+.tag-muted{background:var(--bg4);color:var(--text3);border:1px solid var(--border)}
+
+/* SAVE BAR */
+.save-bar{padding:12px 24px;border-top:1px solid var(--border);background:var(--bg);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-shrink:0}
+.save-status{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px}
+.save-dot{width:6px;height:6px;border-radius:50%;background:var(--amber)}
+.save-dot.saved{background:var(--lime)}
+.save-actions{display:flex;gap:8px}
+
+/* TEMPLATE PICKER */
+.template-bar{padding:10px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0;overflow-x:auto}
+.template-label{font-size:10.5px;color:var(--text3);white-space:nowrap;letter-spacing:0.08em;text-transform:uppercase;margin-right:4px}
+.template-chip{padding:5px 12px;border-radius:20px;border:1px solid var(--border2);background:var(--bg3);color:var(--text3);font-size:11.5px;cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.template-chip:hover{border-color:var(--border2);color:var(--text2);background:var(--bg4)}
+.template-chip.active{background:var(--lime-dim);border-color:var(--lime);color:var(--lime)}
+
+/* ANIMATIONS */
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.anim{animation:fadeUp .3s ease both}
+
+/* SUCCESS TOAST */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--bg2);border:1px solid var(--lime);border-radius:var(--r);padding:12px 20px;font-size:13px;color:var(--lime);display:flex;align-items:center;gap:8px;transition:transform .3s ease;z-index:100;white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- LEFT: MEMBER LIST -->
+<div class="left-panel">
+  <div class="panel-header">
+    <div class="panel-title">Protocol Builder</div>
+    <div class="panel-sub">Select a member to prescribe</div>
+  </div>
+  <div class="search-wrap">
+    <input type="text" class="search-input" placeholder="Search members…" oninput="filterMembers(this.value)">
+  </div>
+  <div class="member-list" id="member-list">
+    <div class="member-item active" onclick="selectMember(this,'Mark Reynolds','MR','lime','Premier · Week 7')">
+      <div class="member-av" style="background:var(--lime-dim);color:var(--lime)">MR</div>
+      <div class="member-info"><div class="member-name">Mark Reynolds</div><div class="member-detail">Premier · Strength Fdn W7</div></div>
+      <div class="member-status status-active"></div>
+    </div>
+    <div class="member-item" onclick="selectMember(this,'Sarah Mitchell','SM','coral','Premier · Week 4')">
+      <div class="member-av" style="background:var(--coral-dim);color:var(--coral)">SM</div>
+      <div class="member-info"><div class="member-name">Sarah Mitchell</div><div class="member-detail">Premier · Cardio Focus W4</div></div>
+      <div class="member-status status-active"></div>
+    </div>
+    <div class="member-item" onclick="selectMember(this,'Jeff La Rue','JL','blue','Concierge · Week 6')">
+      <div class="member-av" style="background:var(--blue-dim);color:var(--blue)">JL</div>
+      <div class="member-info"><div class="member-name">Jeff La Rue</div><div class="member-detail">Concierge · Metabolic Reset W6</div></div>
+      <div class="member-status status-active"></div>
+    </div>
+    <div class="member-item" onclick="selectMember(this,'Tom Bradley','TB','amber','Essential · Week 3')">
+      <div class="member-av" style="background:var(--amber-dim);color:var(--amber)">TB</div>
+      <div class="member-info"><div class="member-name">Tom Bradley</div><div class="member-detail">Essential · Strength Fdn W3</div></div>
+      <div class="member-status status-active"></div>
+    </div>
+    <div class="member-item" onclick="selectMember(this,'Karen Walsh','KW','teal','Premier · Week 2')">
+      <div class="member-av" style="background:var(--teal-dim);color:var(--teal)">KW</div>
+      <div class="member-info"><div class="member-name">Karen Walsh</div><div class="member-detail">Premier · Longevity W2</div></div>
+      <div class="member-status status-active"></div>
+    </div>
+    <div class="member-item" onclick="selectMember(this,'David Park','DP','text2','Essential · Pending')">
+      <div class="member-av" style="background:var(--bg3);color:var(--text2)">DP</div>
+      <div class="member-info"><div class="member-name">David Park</div><div class="member-detail">Essential · No protocol yet</div></div>
+      <div class="member-status status-pending"></div>
+    </div>
+    <div class="member-item" onclick="selectMember(this,'Lisa Chen','LC','text2','Premier · Pending')">
+      <div class="member-av" style="background:var(--bg3);color:var(--text2)">LC</div>
+      <div class="member-info"><div class="member-name">Lisa Chen</div><div class="member-detail">Premier · Intake received</div></div>
+      <div class="member-status status-pending"></div>
+    </div>
+  </div>
+  <div class="left-footer">
+    <button class="btn-new" onclick="showToast('New member form coming soon')">+ New member</button>
+  </div>
+</div>
+
+<!-- CENTER: BUILDER -->
+<div class="center-panel">
+
+  <!-- Member header -->
+  <div class="builder-header">
+    <div class="builder-member">
+      <div class="builder-av" id="builder-av" style="background:var(--lime-dim);color:var(--lime)">MR</div>
+      <div>
+        <div class="builder-name" id="builder-name">Mark Reynolds</div>
+        <div class="builder-meta" id="builder-meta">Premier · Goal: Muscle + bone density · Age 47</div>
+      </div>
+    </div>
+    <div class="builder-actions">
+      <button class="btn btn-sm" onclick="showToast('Viewing member intake form')">View intake</button>
+      <button class="btn btn-sm btn-amber" onclick="showToast('Message sent to Mark')">Message member</button>
+      <button class="btn btn-lime btn-sm" onclick="saveProtocol()">Assign protocol →</button>
+    </div>
+  </div>
+
+  <!-- Templates -->
+  <div class="template-bar">
+    <span class="template-label">Templates:</span>
+    <div class="template-chip active" onclick="loadTemplate(this,'strength')">Strength Foundation</div>
+    <div class="template-chip" onclick="loadTemplate(this,'metabolic')">Metabolic Reset</div>
+    <div class="template-chip" onclick="loadTemplate(this,'cardio')">Cardio Focus</div>
+    <div class="template-chip" onclick="loadTemplate(this,'longevity')">Longevity</div>
+    <div class="template-chip" onclick="loadTemplate(this,'recovery')">Recovery Phase</div>
+    <div class="template-chip" onclick="loadTemplate(this,'custom')">+ Custom</div>
+  </div>
+
+  <!-- Protocol meta fields -->
+  <div class="protocol-meta">
+    <div class="meta-field">
+      <div class="meta-label">Protocol name</div>
+      <input type="text" class="meta-input" id="protocol-name" value="Strength Foundation" placeholder="Name this protocol">
+    </div>
+    <div class="meta-field">
+      <div class="meta-label">Primary goal</div>
+      <select class="meta-select" id="protocol-goal">
+        <option selected>Muscle development</option>
+        <option>Bone density</option>
+        <option>Fat loss</option>
+        <option>Cardio fitness</option>
+        <option>Longevity</option>
+        <option>Recovery</option>
+        <option>Custom</option>
+      </select>
+    </div>
+    <div class="meta-field">
+      <div class="meta-label">Duration</div>
+      <select class="meta-select" id="protocol-duration">
+        <option>4 weeks</option>
+        <option>6 weeks</option>
+        <option>8 weeks</option>
+        <option selected>12 weeks</option>
+        <option>16 weeks</option>
+        <option>Ongoing</option>
+      </select>
+    </div>
+    <div class="meta-field">
+      <div class="meta-label">Sessions per week</div>
+      <select class="meta-select" id="protocol-frequency">
+        <option>2x per week</option>
+        <option selected>3x per week</option>
+        <option>4x per week</option>
+        <option>5x per week</option>
+        <option>Daily</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Sessions -->
+  <div class="sessions-area" id="sessions-area">
+    <div class="sessions-header">
+      <div class="sessions-title">Sessions in this protocol</div>
+      <div class="sessions-count" id="sessions-count">5 sessions</div>
+    </div>
+    <div id="session-list">
+      <!-- Sessions injected by JS -->
+    </div>
+    <button class="add-session-btn" onclick="addSession()">
+      <span style="font-size:16px;line-height:1">+</span>
+      Add session
+    </button>
+  </div>
+
+  <!-- Protocol notes -->
+  <div class="protocol-notes-area">
+    <div class="notes-label">Dustin's prescription notes — visible to member</div>
+    <textarea class="notes-textarea" id="protocol-notes" placeholder="Write your rationale, adjustments, and what the member should focus on…">Building lean mass and bone density over 12 weeks. ARX adaptive resistance ensures full effort every rep. CAROL REHIT delivers cardio adaptation in 8 minutes. Week 7: adding eccentric tempo to lower body — same load, more stimulus.</textarea>
+  </div>
+
+  <!-- Save bar -->
+  <div class="save-bar">
+    <div class="save-status">
+      <div class="save-dot" id="save-dot"></div>
+      <span id="save-status-text">Unsaved changes</span>
+    </div>
+    <div class="save-actions">
+      <button class="btn btn-sm" onclick="showToast('Saved as draft')">Save draft</button>
+      <button class="btn btn-sm" onclick="showToast('Protocol duplicated')">Duplicate</button>
+      <button class="btn btn-lime" onclick="saveProtocol()">Assign to Mark →</button>
+    </div>
+  </div>
+
+</div>
+
+<!-- RIGHT: MEMBER SNAPSHOT -->
+<div class="right-panel">
+  <div class="right-header">
+    <div class="right-title" id="right-title">Mark Reynolds</div>
+    <div class="right-sub">Member snapshot · for context</div>
+  </div>
+
+  <!-- Healthspan scores -->
+  <div class="snapshot">
+    <div class="snapshot-row" style="margin-bottom:10px">
+      <span style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3)">Healthspan OS</span>
+      <span class="tag tag-lime">Improving</span>
+    </div>
+    <div class="snapshot-scores" id="snapshot-scores">
+      <div class="score-chip"><div class="score-chip-label">Muscle</div><div class="score-chip-val" style="color:var(--lime)">78</div><div class="score-bar"><div class="score-bar-fill" style="width:78%;background:var(--lime)"></div></div></div>
+      <div class="score-chip"><div class="score-chip-label">Cardio</div><div class="score-chip-val" style="color:var(--blue)">65</div><div class="score-bar"><div class="score-bar-fill" style="width:65%;background:var(--blue)"></div></div></div>
+      <div class="score-chip"><div class="score-chip-label">Metabolic</div><div class="score-chip-val" style="color:var(--amber)">71</div><div class="score-bar"><div class="score-bar-fill" style="width:71%;background:var(--amber)"></div></div></div>
+      <div class="score-chip"><div class="score-chip-label">Structural</div><div class="score-chip-val" style="color:var(--coral)">58</div><div class="score-bar"><div class="score-bar-fill" style="width:58%;background:var(--coral)"></div></div></div>
+      <div class="score-chip" style="grid-column:1/-1"><div class="score-chip-label">Recovery</div><div class="score-chip-val" style="color:var(--teal)">82</div><div class="score-bar"><div class="score-bar-fill" style="width:82%;background:var(--teal)"></div></div></div>
+    </div>
+  </div>
+
+  <!-- Wearable snapshot -->
+  <div class="wearable-snap" id="wearable-snap">
+    <div class="wearable-title">Today · Whoop + Oura</div>
+    <div class="wearable-row"><span class="wearable-label">Recovery</span><span class="wearable-val" style="color:var(--lime)">74 — Good</span></div>
+    <div class="wearable-row"><span class="wearable-label">HRV</span><span class="wearable-val">68ms</span></div>
+    <div class="wearable-row"><span class="wearable-label">Resting HR</span><span class="wearable-val">52 bpm</span></div>
+    <div class="wearable-row"><span class="wearable-label">Sleep</span><span class="wearable-val">7.4 hrs · 82%</span></div>
+    <div class="wearable-row"><span class="wearable-label">Readiness</span><span class="wearable-val" style="color:var(--lime)">81 — Optimal</span></div>
+  </div>
+
+  <!-- Protocol history -->
+  <div class="history-list">
+    <div class="history-title">Protocol history</div>
+    <div class="history-item">
+      <div class="history-item-name">Strength Foundation</div>
+      <div class="history-item-meta">Week 7 of 12 · Active now</div>
+      <div class="history-item-result"><span class="tag tag-lime">In progress</span></div>
+    </div>
+    <div class="history-item">
+      <div class="history-item-name">Intro Protocol</div>
+      <div class="history-item-meta">Oct – Nov 2025 · 6 weeks</div>
+      <div class="history-item-result"><span class="tag tag-muted">Completed</span></div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast">
+  <span style="color:var(--lime)">✓</span>
+  <span id="toast-msg">Protocol assigned</span>
+</div>
+
+<script>
+// DEFAULT SESSIONS
+const defaultSessions = [
+  { name: 'ARX Lower Body', equipment: 'ARX', detail: 'Leg press · Romanian DL · Calf raise · 3-sec eccentric', duration: 20, notes: 'Focus on controlled eccentric. Use Time Trial 5000 for leg press. Log concentric and eccentric max each set.' },
+  { name: 'CAROL REHIT', equipment: 'CAROL', detail: '8-min sprint protocol · 2 x 20-sec all-out sprints', duration: 12, notes: 'Target fitness score above baseline 36.4. Log peak power and max HR.' },
+  { name: 'ARX Upper Body', equipment: 'ARX', detail: 'Chest press · Row · Overhead press · Incline press', duration: 20, notes: 'Reps 6 protocol at 7.5s/7.5s speed. Log output and eccentric max each exercise.' },
+  { name: 'Vasper + Proteus', equipment: 'Vasper', detail: 'Low-load cardio compression · Rotational power development', duration: 30, notes: 'Vasper 20 min zone 2. Follow with Proteus rotational work — log staff notes on form.' },
+  { name: 'Recovery Session', equipment: 'infrared_sauna', detail: 'Infrared sauna · Cold plunge · Compression boots', duration: 45, notes: 'Sauna 30 min, cold plunge 3 min, compression 20 min. Log all three as separate recovery sessions.' }
+];
+
+const equipmentOptions = ['ARX','CAROL','Vasper','Katalyst','Proteus','Quickboard','infrared_sauna','cold_plunge','nxpro','compression'];
+const equipmentLabels = {'ARX':'ARX','CAROL':'CAROL','Vasper':'Vasper','Katalyst':'Katalyst','Proteus':'Proteus','Quickboard':'Quickboard','infrared_sauna':'IR Sauna','cold_plunge':'Cold Plunge','nxpro':'NxPro','compression':'Compression'};
+
+let sessions = [...defaultSessions];
+
+function renderSessions() {
+  const list = document.getElementById('session-list');
+  list.innerHTML = '';
+  sessions.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'session-card anim';
+    card.innerHTML = `
+      <div class="session-card-header" onclick="toggleSession(this.parentElement)">
+        <span class="session-drag">⋮⋮</span>
+        <div class="session-num-badge">${i+1}</div>
+        <div class="session-name-wrap">
+          <div class="session-card-name">${s.name}</div>
+          <div class="session-card-detail">${s.detail}</div>
+        </div>
+        <div class="session-card-right">
+          <span style="font-size:11px;color:var(--text3)">${s.duration} min</span>
+          <span class="tag tag-${getEquipTag(s.equipment)}" style="font-size:9.5px">${equipmentLabels[s.equipment]||s.equipment}</span>
+          <span class="session-expand-arrow">▼</span>
+        </div>
+      </div>
+      <div class="session-card-body">
+        <div class="session-fields">
+          <div class="session-field">
+            <div class="session-label">Session name</div>
+            <input type="text" class="session-input" value="${s.name}" oninput="updateSession(${i},'name',this.value)">
+          </div>
+          <div class="session-field">
+            <div class="session-label">Duration (min)</div>
+            <input type="number" class="session-input" value="${s.duration}" oninput="updateSession(${i},'duration',this.value)">
+          </div>
+          <div class="session-field session-notes">
+            <div class="session-label">Exercises / detail</div>
+            <input type="text" class="session-input" value="${s.detail}" oninput="updateSession(${i},'detail',this.value)">
+          </div>
+          <div class="session-field session-notes">
+            <div class="session-label">Equipment</div>
+            <div class="equipment-grid">
+              ${equipmentOptions.map(e => `<div class="equip-chip${s.equipment===e?' selected':''}" onclick="setEquipment(${i},'${e}',this)">${equipmentLabels[e]}</div>`).join('')}
+            </div>
+          </div>
+          <div class="session-field session-notes">
+            <div class="session-label">Dustin's notes for this session</div>
+            <textarea class="session-textarea" oninput="updateSession(${i},'notes',this.value)">${s.notes}</textarea>
+          </div>
+        </div>
+        <div class="session-card-footer">
+          <span class="session-delete" onclick="deleteSession(${i})">Remove session</span>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-sm" onclick="moveSession(${i},-1)">↑ Move up</button>
+            <button class="btn btn-sm" onclick="moveSession(${i},1)">↓ Move down</button>
+          </div>
+        </div>
+      </div>
+    `;
+    list.appendChild(card);
+  });
+  document.getElementById('sessions-count').textContent = sessions.length + ' sessions';
+  markUnsaved();
+}
+
+function getEquipTag(e) {
+  if(['ARX'].includes(e)) return 'amber';
+  if(['CAROL'].includes(e)) return 'blue';
+  if(['infrared_sauna','cold_plunge','nxpro','compression'].includes(e)) return 'teal';
+  return 'muted';
+}
+
+function toggleSession(card) {
+  card.classList.toggle('expanded');
+}
+
+function updateSession(i, field, val) {
+  sessions[i][field] = val;
+  markUnsaved();
+}
+
+function setEquipment(i, equip, el) {
+  sessions[i].equipment = equip;
+  el.closest('.equipment-grid').querySelectorAll('.equip-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const header = el.closest('.session-card').querySelector('.session-card-right .tag');
+  if(header) {
+    header.textContent = equipmentLabels[equip] || equip;
+    header.className = `tag tag-${getEquipTag(equip)}`;
+    header.style.fontSize = '9.5px';
+  }
+  markUnsaved();
+}
+
+function deleteSession(i) {
+  sessions.splice(i, 1);
+  renderSessions();
+}
+
+function moveSession(i, dir) {
+  const newI = i + dir;
+  if(newI < 0 || newI >= sessions.length) return;
+  [sessions[i], sessions[newI]] = [sessions[newI], sessions[i]];
+  renderSessions();
+}
+
+function addSession() {
+  sessions.push({
+    name: 'New session',
+    equipment: 'ARX',
+    detail: 'Add exercises and detail',
+    duration: 20,
+    notes: ''
+  });
+  renderSessions();
+  setTimeout(() => {
+    const cards = document.querySelectorAll('.session-card');
+    const last = cards[cards.length-1];
+    if(last) {
+      last.classList.add('expanded');
+      last.scrollIntoView({behavior:'smooth',block:'center'});
+    }
+  }, 100);
+}
+
+function markUnsaved() {
+  document.getElementById('save-dot').classList.remove('saved');
+  document.getElementById('save-status-text').textContent = 'Unsaved changes';
+}
+
+function saveProtocol() {
+  document.getElementById('save-dot').classList.add('saved');
+  document.getElementById('save-status-text').textContent = 'Saved · Assigned to member';
+  showToast('Protocol assigned to ' + document.getElementById('builder-name').textContent);
+}
+
+// TEMPLATES
+const templates = {
+  strength: {
+    name: 'Strength Foundation',
+    goal: 'Muscle development',
+    duration: '12 weeks',
+    sessions: [
+      {name:'ARX Lower Body',equipment:'ARX',detail:'Leg press · Romanian DL · Calf raise',duration:20,notes:'Time Trial 5000 for leg press. Log concentric max each session.'},
+      {name:'CAROL REHIT',equipment:'CAROL',detail:'8-min REHIT protocol',duration:12,notes:'Log fitness score and peak power.'},
+      {name:'ARX Upper Body',equipment:'ARX',detail:'Chest press · Row · Overhead press',duration:20,notes:'Reps 6 at 7.5s/7.5s. Log eccentric max.'},
+      {name:'Vasper + Proteus',equipment:'Vasper',detail:'Zone 2 cardio · Rotational power',duration:30,notes:'Log staff notes on form.'},
+      {name:'Recovery',equipment:'infrared_sauna',detail:'Sauna · Cold plunge · Compression',duration:45,notes:'Log all three modalities separately.'}
+    ]
+  },
+  metabolic: {
+    name: 'Metabolic Reset',
+    goal: 'Fat loss',
+    duration: '8 weeks',
+    sessions: [
+      {name:'CAROL Fat Burn',equipment:'CAROL',detail:'Fat Burn protocol · 20–30 min',duration:25,notes:'Log calories and peak power.'},
+      {name:'Katalyst EMS',equipment:'Katalyst',detail:'Full body EMS activation',duration:20,notes:'Log perceived effort and staff notes.'},
+      {name:'ARX Lower Body',equipment:'ARX',detail:'Leg press · Calf raise',duration:15,notes:'Lighter load, higher output focus.'},
+      {name:'Cold Plunge',equipment:'cold_plunge',detail:'3-min cold exposure',duration:5,notes:'Log duration and temperature.'}
+    ]
+  },
+  cardio: {
+    name: 'Cardio Focus',
+    goal: 'Cardio fitness',
+    duration: '6 weeks',
+    sessions: [
+      {name:'CAROL REHIT',equipment:'CAROL',detail:'8-min REHIT · 2x sprints',duration:12,notes:'Track fitness score trend over 6 weeks.'},
+      {name:'CAROL Fat Burn',equipment:'CAROL',detail:'20-min fat burn protocol',duration:22,notes:'Log peak power and max HR.'},
+      {name:'Quickboard',equipment:'Quickboard',detail:'Reactive agility drills',duration:15,notes:'Log drill type and staff observations.'},
+      {name:'Recovery',equipment:'infrared_sauna',detail:'Sauna + cold plunge',duration:35,notes:'Essential for cardio recovery adaptation.'}
+    ]
+  },
+  longevity: {
+    name: 'Longevity Protocol',
+    goal: 'Longevity',
+    duration: 'Ongoing',
+    sessions: [
+      {name:'ARX Strength',equipment:'ARX',detail:'Full body · Lower + upper split',duration:20,notes:'Maintain muscle mass — critical for longevity.'},
+      {name:'CAROL REHIT',equipment:'CAROL',detail:'8-min REHIT',duration:12,notes:'VO₂ max maintenance — weekly.'},
+      {name:'Vasper Zone 2',equipment:'Vasper',detail:'30-min low cortisol cardio',duration:30,notes:'Cortisol reduction. Log HR and perceived effort.'},
+      {name:'NxPro',equipment:'nxpro',detail:'Nervous system recovery session',duration:20,notes:'3x per week minimum.'},
+      {name:'Full Recovery',equipment:'infrared_sauna',detail:'Sauna · Plunge · Compression · NxPro',duration:60,notes:'Longevity recovery stack. Weekly minimum.'}
+    ]
+  },
+  recovery: {
+    name: 'Recovery Phase',
+    goal: 'Recovery',
+    duration: '4 weeks',
+    sessions: [
+      {name:'Infrared Sauna',equipment:'infrared_sauna',detail:'30-min infrared session',duration:30,notes:'Daily if possible. Log duration.'},
+      {name:'Cold Plunge',equipment:'cold_plunge',detail:'3–5 min cold exposure',duration:5,notes:'Post-sauna or standalone. Log temp and duration.'},
+      {name:'NxPro',equipment:'nxpro',detail:'Nervous system recovery session',duration:20,notes:'3x per week minimum.'},
+      {name:'Light CAROL',equipment:'CAROL',detail:'Free ride · Low intensity',duration:15,notes:'Keep HR under 130. No sprints.'}
+    ]
+  }
+};
+
+function loadTemplate(el, key) {
+  document.querySelectorAll('.template-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  if(key === 'custom') {
+    sessions = [{name:'Session 1',equipment:'ARX',detail:'Add exercises',duration:20,notes:''}];
+    document.getElementById('protocol-name').value = 'Custom Protocol';
+  } else {
+    const t = templates[key];
+    sessions = t.sessions.map(s => ({...s}));
+    document.getElementById('protocol-name').value = t.name;
+    document.getElementById('protocol-goal').value = t.goal;
+    document.getElementById('protocol-duration').value = t.duration;
+  }
+  renderSessions();
+  showToast('Template loaded: ' + (key==='custom'?'Custom':templates[key]?.name));
+}
+
+// MEMBER SELECTION
+const memberData = {
+  'Mark Reynolds': {
+    av: 'MR', color: 'lime', tier: 'Premier',
+    meta: 'Premier · Goal: Muscle + bone density · Age 47',
+    scores: {muscle:78,cardio:65,metabolic:71,structural:58,recovery:82},
+    wearable: {recovery:74,hrv:'68ms',rhr:'52 bpm',sleep:'7.4 hrs · 82%',readiness:81},
+    history: ['Strength Foundation · W7 · Active','Intro Protocol · Oct–Nov · Done']
+  },
+  'Sarah Mitchell': {
+    av: 'SM', color: 'coral', tier: 'Premier',
+    meta: 'Premier · Goal: Cardio fitness · Age 52',
+    scores: {muscle:62,cardio:55,metabolic:68,structural:71,recovery:59},
+    wearable: {recovery:31,hrv:'28ms ⚠',rhr:'68 bpm',sleep:'5.1 hrs',readiness:38},
+    history: ['Cardio Focus · W4 · Active','Metabolic Reset · Completed']
+  },
+  'Jeff La Rue': {
+    av: 'JL', color: 'blue', tier: 'Concierge',
+    meta: 'Concierge · Goal: Fat loss + longevity · Age 51',
+    scores: {muscle:69,cardio:61,metabolic:58,structural:55,recovery:74},
+    wearable: {recovery:82,hrv:'71ms',rhr:'54 bpm',sleep:'8.1 hrs · 88%',readiness:79},
+    history: ['Metabolic Reset · W6 · Active','Strength Foundation · Completed']
+  },
+  'Tom Bradley': {
+    av: 'TB', color: 'amber', tier: 'Essential',
+    meta: 'Essential · Goal: Build muscle · Age 38',
+    scores: {muscle:55,cardio:48,metabolic:62,structural:70,recovery:44},
+    wearable: {recovery:44,hrv:'42ms',rhr:'61 bpm',sleep:'4.9 hrs ⚠',readiness:41},
+    history: ['Strength Foundation · W3 · Active']
+  },
+  'Karen Walsh': {
+    av: 'KW', color: 'teal', tier: 'Premier',
+    meta: 'Premier · Goal: Longevity · Age 59',
+    scores: {muscle:61,cardio:72,metabolic:75,structural:68,recovery:81},
+    wearable: {recovery:79,hrv:'72ms',rhr:'56 bpm',sleep:'8.1 hrs',readiness:82},
+    history: ['Longevity Protocol · W2 · Active']
+  }
+};
+
+const scoreColors = {muscle:'lime',cardio:'blue',metabolic:'amber',structural:'coral',recovery:'teal'};
+
+function selectMember(el, name, av, color, detail) {
+  document.querySelectorAll('.member-item').forEach(m => m.classList.remove('active'));
+  el.classList.add('active');
+
+  document.getElementById('builder-av').textContent = av;
+  document.getElementById('builder-av').style.background = `var(--${color}-dim)`;
+  document.getElementById('builder-av').style.color = `var(--${color})`;
+  document.getElementById('builder-name').textContent = name;
+  document.getElementById('right-title').textContent = name;
+
+  const data = memberData[name];
+  if(data) {
+    document.getElementById('builder-meta').textContent = data.meta;
+
+    // Update scores
+    const scoresEl = document.getElementById('snapshot-scores');
+    scoresEl.innerHTML = Object.entries(data.scores).map(([k,v]) =>
+      `<div class="score-chip${k==='recovery'?' style="grid-column:1/-1"':''}">
+        <div class="score-chip-label">${k.charAt(0).toUpperCase()+k.slice(1)}</div>
+        <div class="score-chip-val" style="color:var(--${scoreColors[k]})">${v}</div>
+        <div class="score-bar"><div class="score-bar-fill" style="width:${v}%;background:var(--${scoreColors[k]})"></div></div>
+      </div>`
+    ).join('');
+
+    // Update wearable
+    const w = data.wearable;
+    const recColor = w.recovery >= 70 ? 'lime' : w.recovery >= 50 ? 'amber' : 'coral';
+    document.getElementById('wearable-snap').innerHTML = `
+      <div class="wearable-title">Today · Whoop + Oura</div>
+      <div class="wearable-row"><span class="wearable-label">Recovery</span><span class="wearable-val" style="color:var(--${recColor})">${w.recovery} — ${w.recovery>=70?'Good':w.recovery>=50?'Moderate':'Low ⚠'}</span></div>
+      <div class="wearable-row"><span class="wearable-label">HRV</span><span class="wearable-val">${w.hrv}</span></div>
+      <div class="wearable-row"><span class="wearable-label">Resting HR</span><span class="wearable-val">${w.rhr}</span></div>
+      <div class="wearable-row"><span class="wearable-label">Sleep</span><span class="wearable-val">${w.sleep}</span></div>
+      <div class="wearable-row"><span class="wearable-label">Readiness</span><span class="wearable-val" style="color:var(--${w.readiness>=70?'lime':w.readiness>=50?'amber':'coral'})">${w.readiness}</span></div>
+    `;
+
+    // Update save button
+    document.querySelector('.save-bar .btn-lime').textContent = `Assign to ${name.split(' ')[0]} →`;
+    document.querySelector('.builder-actions .btn-lime').textContent = `Assign to ${name.split(' ')[0]} →`;
+    document.querySelector('.builder-actions .btn-amber').textContent = `Message ${name.split(' ')[0]}`;
+  }
+  markUnsaved();
+}
+
+function filterMembers(val) {
+  document.querySelectorAll('.member-item').forEach(item => {
+    const name = item.querySelector('.member-name').textContent.toLowerCase();
+    item.style.display = name.includes(val.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2800);
+}
+
+// INIT
+renderSessions();
+</script>
+</body>
+</html>
