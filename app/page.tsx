@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SignInButton, UserButton } from "@clerk/nextjs";
+import { UserButton } from "@clerk/nextjs";
 import { auth } from "@clerk/nextjs/server";
 import { OnboardingForm } from "@/components/onboarding-form";
 
@@ -24,14 +24,12 @@ export default async function HomePage() {
         <div className="actions">
           {!userId ? (
             <>
-            <SignInButton mode="modal">
-              <button className="btn" type="button">
-                Sign in
-              </button>
-            </SignInButton>
-            <Link className="btn secondary" href="/sign-up">
-              Create account
-            </Link>
+              <Link className="btn" href="/sign-in">
+                Sign In
+              </Link>
+              <Link className="btn secondary" href="/sign-up">
+                Get Started
+              </Link>
             </>
           ) : (
             <Link className="btn" href="/dashboard">
