@@ -14,12 +14,9 @@ const withClerk = clerkMiddleware(async (auth, req) => {
   }
 });
 
-export default function proxy(request: NextRequest) {
-  if (!isClerkConfigured()) {
-    return NextResponse.next();
-  }
-  return withClerk(request);
-}
+const withoutClerk = (_request: NextRequest) => NextResponse.next();
+
+export default isClerkConfigured() ? withClerk : withoutClerk;
 
 export const config = {
   matcher: [
