@@ -6,6 +6,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
 import { getCurrentAuthState, routeForRole, type AppRole } from "@/lib/server/roles";
 import { loadPrototypeFromFiles, type PrototypeParts } from "@/lib/server/prototype";
+import { DashboardClerkGreeting } from "@/components/dashboard-clerk-greeting";
 
 type DashboardPayload = {
   role: "member" | "coach";
@@ -1130,8 +1131,10 @@ export async function DashboardPageView({
 
         tabButtons.forEach((btn, index) => {
           const key = tabOrder[index] || "rehit";
-          btn.removeAttribute("onclick");
-          btn.addEventListener("click", () => renderCarolTab(key));
+          btn.addEventListener("click", (event) => {
+            event.preventDefault();
+            renderCarolTab(key);
+          });
         });
 
         const firstPopulatedTab =
@@ -1738,7 +1741,7 @@ export async function DashboardPageView({
         carol: "/dashboard/carol",
         arx: "/dashboard/arx",
         scans: "/dashboard/scans",
-        recovery: "/dashboard/recovery-overview",
+        recovery: "/dashboard/recovery",
         wearables: "/dashboard/wearables",
         messages: "/dashboard/messages",
         reports: "/dashboard/reports",
@@ -1855,7 +1858,6 @@ export async function DashboardPageView({
           const target = parser(inline, node);
           if (!target) return;
           node.setAttribute("data-wired-nav", "true");
-          node.removeAttribute("onclick");
           node.addEventListener("click", (event) => {
             event.preventDefault();
             const invoke = parser === parseCoachViewFromOnclick ? window.showCoachView : window.showView;
@@ -1899,7 +1901,6 @@ export async function DashboardPageView({
       document.querySelectorAll(".view-toggle .vt-btn").forEach((button, index) => {
         if (button.getAttribute("data-wired-toggle") === "true") return;
         button.setAttribute("data-wired-toggle", "true");
-        button.removeAttribute("onclick");
         button.addEventListener("click", (event) => {
           event.preventDefault();
           if (typeof window.setMode === "function") {
@@ -2187,6 +2188,7 @@ export async function DashboardPageView({
         />
       ) : null}
       <script dangerouslySetInnerHTML={{ __html: bootstrapScript }} />
+      <DashboardClerkGreeting />
     </>
   );
 }

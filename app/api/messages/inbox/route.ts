@@ -16,6 +16,12 @@ function isMissingReadAtColumnError(message: string): boolean {
   );
 }
 
+function isMissingIsActiveColumnError(message: string): boolean {
+  return /column ["']?is_active["']? .*users.* does not exist|Could not find the 'is_active' column/i.test(
+    message,
+  );
+}
+
 export async function GET(request: Request) {
   try {
     const { context, error } = await getActorContext();
@@ -41,13 +47,35 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const markRead = url.searchParams.get("mark_read") === "1";
 
-    const coachLookup = await db
+    let coachLookup = await db
       .from("users")
       .select("id,full_name,role")
       .in("role", ["coach", "admin", "staff"])
       .eq("is_active", true)
       .order("full_name", { ascending: true })
       .limit(50);
+    if (
+      coachLookup.error &&
+      isMissingIsActiveColumnError(coachLookup.error.message)
+    ) {
+      coachLookup = await db
+        .from("users")
+        .select("id,full_name,role")
+        .in("role", ["coach", "admin", "staff"])
+        .order("full_name", { ascending: true })
+        .limit(50);
+    }
+    if (!coachLookup.error && Array.isArray(coachLookup.data) && coachLookup.data.length === 0) {
+      const fallbackLookup = await db
+        .from("users")
+        .select("id,full_name,role")
+        .in("role", ["coach", "admin", "staff"])
+        .order("full_name", { ascending: true })
+        .limit(50);
+      if (!fallbackLookup.error && Array.isArray(fallbackLookup.data) && fallbackLookup.data.length > 0) {
+        coachLookup = fallbackLookup;
+      }
+    }
     if (coachLookup.error || !Array.isArray(coachLookup.data) || coachLookup.data.length === 0) {
       throw new Error("No active coach/staff account found for inbox.");
     }

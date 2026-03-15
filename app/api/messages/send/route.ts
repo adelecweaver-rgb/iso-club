@@ -16,6 +16,12 @@ function asString(value: unknown, fallback = ""): string {
   return fallback;
 }
 
+function isMissingIsActiveColumnError(message: string): boolean {
+  return /column ["']?is_active["']? .*users.* does not exist|Could not find the 'is_active' column/i.test(
+    message,
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const { context, error } = await getActorContext();
@@ -39,13 +45,35 @@ export async function POST(request: Request) {
 
     if (!recipientId) {
       // Allow members to "reply to coach" without picking a recipient manually.
-      const staffLookup = await db
+      let staffLookup = await db
         .from("users")
         .select("id,full_name,role")
         .in("role", ["coach", "admin", "staff"])
         .eq("is_active", true)
         .order("full_name", { ascending: true })
         .limit(50);
+      if (
+        staffLookup.error &&
+        isMissingIsActiveColumnError(staffLookup.error.message)
+      ) {
+        staffLookup = await db
+          .from("users")
+          .select("id,full_name,role")
+          .in("role", ["coach", "admin", "staff"])
+          .order("full_name", { ascending: true })
+          .limit(50);
+      }
+      if (!staffLookup.error && Array.isArray(staffLookup.data) && staffLookup.data.length === 0) {
+        const fallbackLookup = await db
+          .from("users")
+          .select("id,full_name,role")
+          .in("role", ["coach", "admin", "staff"])
+          .order("full_name", { ascending: true })
+          .limit(50);
+        if (!fallbackLookup.error && Array.isArray(fallbackLookup.data) && fallbackLookup.data.length > 0) {
+          staffLookup = fallbackLookup;
+        }
+      }
       if (staffLookup.error || !Array.isArray(staffLookup.data) || staffLookup.data.length === 0) {
         throw new Error("No active coach/staff recipient found.");
       }
