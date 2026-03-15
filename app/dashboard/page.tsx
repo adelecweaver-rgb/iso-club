@@ -1,9 +1,9 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { promises as fs } from "fs";
 import path from "path";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isClerkConfigured, safeAuth, safeCurrentUser } from "@/lib/server/clerk";
 
 type PrototypeParts = {
   styles: string;
@@ -227,7 +227,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
 }
 
 async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> {
-  const user = await currentUser();
+  const user = await safeCurrentUser();
   const email = user?.primaryEmailAddress?.emailAddress ?? "";
   const clerkName =
     [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
@@ -677,11 +677,46 @@ async function loadDashboardLiveData(userId: string): Promise<DashboardPayload> 
 }
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  const clerkConfigured = isClerkConfigured();
+  const { userId } = await safeAuth();
   const prototype = await loadPrototypeParts();
 
+  if (!clerkConfigured) {
+    return (
+      <main className="shell">
+        <div className="card">
+          <h1 className="title">Authentication not configured</h1>
+          <p className="muted">
+            Set
+            {" "}
+            <code>NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY</code>
+            {" "}
+            and
+            {" "}
+            <code>CLERK_SECRET_KEY</code>
+            {" "}
+            in Vercel, then redeploy.
+          </p>
+          <Link className="btn" href="/">
+            Back to home
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   if (!userId) {
-    return null;
+    return (
+      <main className="shell">
+        <div className="card">
+          <h1 className="title">Please sign in</h1>
+          <p className="muted">Sign in to access your dashboard.</p>
+          <Link className="btn" href="/sign-in">
+            Go to sign in
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   const livePayload = await loadDashboardLiveData(userId);
@@ -1218,7 +1253,7 @@ export default async function DashboardPage() {
           Back
         </Link>
         <div style={{ width: 1, height: 14, background: "rgba(175,189,165,0.25)" }} />
-        <UserButton />
+        {clerkConfigured ? <UserButton /> : null}
       </div>
 
       <div dangerouslySetInnerHTML={{ __html: prototype.body }} />

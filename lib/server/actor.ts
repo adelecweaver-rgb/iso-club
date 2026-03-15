@@ -1,7 +1,7 @@
 import "server-only";
 
-import { auth, currentUser } from "@clerk/nextjs/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { safeAuth, safeCurrentUser } from "@/lib/server/clerk";
 
 type AnyRow = Record<string, unknown>;
 
@@ -30,12 +30,12 @@ export async function getActorContext(): Promise<{
   context: ActorContext | null;
   error: string | null;
 }> {
-  const { userId } = await auth();
+  const { userId } = await safeAuth();
   if (!userId) {
     return { context: null, error: "Not authenticated." };
   }
 
-  const clerkUser = await currentUser();
+  const clerkUser = await safeCurrentUser();
   if (!clerkUser) {
     return { context: null, error: "Unable to resolve Clerk user." };
   }
