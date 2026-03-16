@@ -1,6 +1,7 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { createClient } from "@supabase/supabase-js";
 import { DashboardReactClient } from "@/components/dashboard-react-client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
@@ -222,19 +223,55 @@ function extractMissingColumnName(errorMessage: string): string | null {
   return match?.[1] ?? null;
 }
 
-async function loadCarolRowsWithFallback(
-  supabase: {
-    from: (table: string) => {
-      select: (columns: string) => {
-        eq: (column: string, value: string) => {
-          order: (orderColumn: string, options: { ascending: boolean }) => {
-            limit: (count: number) => PromiseLike<{ data: unknown; error: { message: string } | null }> | unknown;
-          };
+type DashboardQueryClient = {
+  from: (table: string) => {
+    select: (columns: string) => {
+      eq: (column: string, value: string) => {
+        order: (orderColumn: string, options: { ascending: boolean }) => {
+          limit: (count: number) => PromiseLike<{ data: unknown; error: { message: string } | null }> | unknown;
         };
       };
     };
-  },
+  };
+  rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }> | unknown;
+};
+
+function createClerkScopedSupabaseClient(clerkUserId: string): DashboardQueryClient | null {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!url || !anonKey || !clerkUserId) return null;
+  return createClient(url, anonKey, {
+    global: {
+      headers: {
+        "x-clerk-user-id": clerkUserId,
+      },
+    },
+  }) as unknown as DashboardQueryClient;
+}
+
+async function setSupabaseClerkIdContext(
+  supabase: DashboardQueryClient,
+  clerkUserId: string,
+): Promise<void> {
+  // Requested pattern: set app.clerk_id before querying RLS-protected tables.
+  const directResult = (await supabase.rpc("set_config", {
+    setting: "app.clerk_id",
+    value: clerkUserId,
+  })) as { error: { message: string } | null };
+  if (!directResult.error) return;
+
+  // Fallback for implementations expecting the built-in third parameter.
+  await supabase.rpc("set_config", {
+    setting: "app.clerk_id",
+    value: clerkUserId,
+    is_local: true,
+  });
+}
+
+async function loadCarolRowsWithFallback(
+  fallbackSupabase: DashboardQueryClient,
   memberId: string,
+  clerkUserId: string,
 ): Promise<Array<Record<string, unknown>>> {
   const requestedColumns = [
     "session_date",
@@ -252,6 +289,12 @@ async function loadCarolRowsWithFallback(
     "calories",
     "max_hr",
   ];
+
+  const clerkScoped = createClerkScopedSupabaseClient(clerkUserId);
+  const supabase = clerkScoped ?? fallbackSupabase;
+  if (clerkScoped) {
+    await setSupabaseClerkIdContext(clerkScoped, clerkUserId).catch(() => undefined);
+  }
 
   let selectedColumns = [...requestedColumns];
   while (selectedColumns.length >= 3) {
@@ -598,18 +641,9 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   const monthEndIso = monthEnd.toISOString().slice(0, 10);
 
   const carolRows = await loadCarolRowsWithFallback(
-    supabase as unknown as {
-      from: (table: string) => {
-        select: (columns: string) => {
-          eq: (column: string, value: string) => {
-            order: (orderColumn: string, options: { ascending: boolean }) => {
-              limit: (count: number) => PromiseLike<{ data: unknown; error: { message: string } | null }> | unknown;
-            };
-          };
-        };
-      };
-    },
+    supabase as unknown as DashboardQueryClient,
     memberId,
+    userId,
   );
 
   const [arxRes, scanRes, whoopRes, ouraRes, healthspanRes, recoveryRes, manualRes, bookingRes, protocolRes, reportRes] =

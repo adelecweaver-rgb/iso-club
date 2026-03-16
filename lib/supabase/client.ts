@@ -1,6 +1,6 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-export function createSupabaseBrowserClient() {
+export function createSupabaseBrowserClient(clerkUserId?: string) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -10,5 +10,13 @@ export function createSupabaseBrowserClient() {
     );
   }
 
-  return createBrowserClient(url, anonKey);
+  return createBrowserClient(url, anonKey, {
+    global: clerkUserId
+      ? {
+          headers: {
+            "x-clerk-user-id": clerkUserId,
+          },
+        }
+      : undefined,
+  });
 }

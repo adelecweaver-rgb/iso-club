@@ -578,7 +578,18 @@ export function DashboardReactClient({
       setCarolDebugLoading(true);
       setCarolDebugError(null);
       try {
-        const supabase = createSupabaseBrowserClient();
+        const supabase = createSupabaseBrowserClient(user.id);
+        const setConfigResult = await supabase.rpc("set_config", {
+          setting: "app.clerk_id",
+          value: user.id,
+        });
+        if (setConfigResult.error) {
+          await supabase.rpc("set_config", {
+            setting: "app.clerk_id",
+            value: user.id,
+            is_local: true,
+          });
+        }
         const { data, error } = await supabase
           .from("carol_sessions")
           .select("member_id, ride_type, session_date, peak_power_watts, manp, calories_incl_epoc")
