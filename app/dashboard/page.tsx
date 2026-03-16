@@ -323,7 +323,6 @@ async function loadCalculatedHealthspanScore(
     { member_id: memberId },
     { p_member_id: memberId },
     { member_uuid: memberId },
-    { user_id: memberId },
     {},
   ];
 

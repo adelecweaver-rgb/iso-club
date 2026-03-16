@@ -126,8 +126,14 @@ export async function POST(request: Request) {
           const maybeNumber = asOptionalNumber(durationText.replace(/[^\d.]/g, ""));
           return maybeNumber;
         })();
-      const insert = await context.supabase.from("carol_sessions").insert({
+      const externalRideId =
+        extractedString("external_id", "") ||
+        extractedString("ride_id", "") ||
+        extractedString("carol_ride_id", "") ||
+        null;
+      const carolPayload = {
         member_id: memberId,
+        external_id: externalRideId,
         session_date: sessionDate,
         ride_type: rideType,
         duration: durationMinutes !== null ? `${Math.round(durationMinutes)} min` : null,
@@ -142,7 +148,23 @@ export async function POST(request: Request) {
           energy: extractedNumber("energy"),
           notes,
         },
-      });
+      };
+      let insert =
+        externalRideId !== null
+          ? await context.supabase
+              .from("carol_sessions")
+              .upsert(carolPayload, { onConflict: "external_id" })
+          : await context.supabase.from("carol_sessions").insert(carolPayload);
+      if (
+        insert.error &&
+        /no unique or exclusion constraint matching the ON CONFLICT specification|column ["']?external_id["']?.*does not exist|Could not find the 'external_id' column/i.test(
+          insert.error.message,
+        )
+      ) {
+        const fallbackPayload = { ...carolPayload };
+        delete fallbackPayload.external_id;
+        insert = await context.supabase.from("carol_sessions").insert(fallbackPayload);
+      }
       if (insert.error) throw new Error(insert.error.message);
     } else {
       const deviceType =

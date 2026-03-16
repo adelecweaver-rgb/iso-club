@@ -198,8 +198,14 @@ export async function POST(request: Request) {
         extractedString("ride_type") ||
         (typeof body.ride_type === "string" ? body.ride_type : "") ||
         (protocolOrExercise || "REHIT");
-      const insertResult = await context.supabase.from("carol_sessions").insert({
+      const externalRideId =
+        extractedString("external_id") ||
+        extractedString("ride_id") ||
+        extractedString("carol_ride_id") ||
+        null;
+      const carolPayload = {
         member_id: memberId,
+        external_id: externalRideId,
         session_date: nowIso,
         ride_type: normalizeRideType(rideTypeSource),
         duration: durationMinutes > 0 ? `${durationMinutes} min` : null,
@@ -216,7 +222,23 @@ export async function POST(request: Request) {
           resistance_direction: extractedString("resistance_direction") || null,
           energy: extractedNumber("energy"),
         },
-      });
+      };
+      let insertResult =
+        externalRideId !== null
+          ? await context.supabase
+              .from("carol_sessions")
+              .upsert(carolPayload, { onConflict: "external_id" })
+          : await context.supabase.from("carol_sessions").insert(carolPayload);
+      if (
+        insertResult.error &&
+        /no unique or exclusion constraint matching the ON CONFLICT specification|column ["']?external_id["']?.*does not exist|Could not find the 'external_id' column/i.test(
+          insertResult.error.message,
+        )
+      ) {
+        const fallbackPayload = { ...carolPayload };
+        delete fallbackPayload.external_id;
+        insertResult = await context.supabase.from("carol_sessions").insert(fallbackPayload);
+      }
       if (insertResult.error) throw new Error(insertResult.error.message);
     } else if (equipment.kind === "fit3d") {
       const fit3dPayload = {
