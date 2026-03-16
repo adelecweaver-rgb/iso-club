@@ -16,7 +16,6 @@ const CAROL_TYPES = [
   "FAT_BURN_45",
   "FAT_BURN_60",
   "ENERGISER",
-  "NORWEGIAN_4X4",
 ] as const;
 
 type CarolType = (typeof CAROL_TYPES)[number];
@@ -376,8 +375,15 @@ export async function POST(request: Request) {
     }
 
     const ridesByType: Record<string, CarolRide[]> = {};
+    const failedTypes: Record<string, string> = {};
     for (const type of CAROL_TYPES) {
-      ridesByType[type] = await fetchCarolRidesForType({ token, riderId, type });
+      try {
+        ridesByType[type] = await fetchCarolRidesForType({ token, riderId, type });
+      } catch (typeError) {
+        ridesByType[type] = [];
+        failedTypes[type] =
+          typeError instanceof Error ? typeError.message : `Failed to fetch rides for ${type}.`;
+      }
     }
 
     const allRows: Array<Record<string, unknown>> = [];
@@ -434,6 +440,7 @@ export async function POST(request: Request) {
       success: true,
       imported: dedupedRows.length,
       types: typesSummary,
+      failed_types: failedTypes,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unable to sync CAROL rides.";
