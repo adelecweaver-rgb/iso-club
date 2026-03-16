@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useUser } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type MemberSection =
@@ -212,6 +212,7 @@ export function DashboardReactClient({
   initialMemberView: MemberSection;
   initialCoachView: CoachSection;
 }) {
+  const { signOut } = useClerk();
   const { user } = useUser();
   const [mode, setMode] = useState<"member" | "coach">(
     role === "member" ? "member" : route === "coach" ? "coach" : "member",
@@ -399,6 +400,10 @@ export function DashboardReactClient({
     ? Math.max(...carolStatRows.map((row) => Number(row.peakPowerWatts || 0)))
     : 0;
 
+  const handleSignOut = useCallback(async () => {
+    await signOut({ redirectUrl: "/" });
+  }, [signOut]);
+
   return (
     <div className="app">
       <nav className="sidebar">
@@ -513,6 +518,16 @@ export function DashboardReactClient({
               Oura
             </div>
           </div>
+          <button
+            className="btn btn-sm"
+            type="button"
+            style={{ width: "100%", marginTop: 10 }}
+            onClick={() => {
+              void handleSignOut();
+            }}
+          >
+            Sign Out
+          </button>
         </div>
       </nav>
 
