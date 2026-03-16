@@ -23,7 +23,7 @@ type Fit3dPreparedRow = {
   scan_date: string;
   height_in: number | null;
   weight_lbs: number | null;
-  body_shape_rating: string | null;
+  body_shape_rating: number | null;
   body_fat_pct: number | null;
   lean_mass_lbs: number | null;
   fat_mass_lbs: number | null;
@@ -271,7 +271,7 @@ function calculateBmr(params: {
   const weightKg = weightLbs * 0.45359237;
   const heightCm = heightIn * 2.54;
   const base = 10 * weightKg + 6.25 * heightCm - 5 * effectiveAge;
-  return Math.round(base + (female ? -161 : 5));
+  return Number((base + (female ? -161 : 5)).toFixed(1));
 }
 
 function toMeasurementValue(value: string): unknown {
@@ -412,7 +412,7 @@ function prepareRows(
       scan_date: scanDateIso,
       height_in: heightIn,
       weight_lbs: weightLbs,
-      body_shape_rating: record["Body Shape Rating"] || null,
+      body_shape_rating: asNumber(record["Body Shape Rating"]),
       body_fat_pct: asNumber(record["Body Fat Percent"]),
       lean_mass_lbs: asNumber(record["Lean Mass"]),
       fat_mass_lbs: asNumber(record["Fat Mass"]),
