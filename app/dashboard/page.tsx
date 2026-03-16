@@ -22,6 +22,27 @@ type MemberSection =
 
 type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 
+type RecoveryModality = "cold_plunge" | "infrared_sauna" | "compression_therapy" | "nxpro";
+
+type RecoveryGoals = {
+  cold_plunge: number;
+  infrared_sauna: number;
+  compression_therapy: number;
+  nxpro: number;
+};
+
+type RecoveryMonthSummary = {
+  month: string;
+  monthLabel: string;
+  protocolName: string;
+  goals: RecoveryGoals;
+  counts: RecoveryGoals;
+  days: Array<{
+    date: string;
+    modalities: RecoveryModality[];
+  }>;
+};
+
 type DashboardPayload = {
   role: "member" | "coach";
   memberId: string | null;
@@ -71,6 +92,7 @@ type DashboardPayload = {
     proteus: string;
     quickboard: string;
   };
+  recoverySummary: RecoveryMonthSummary;
   wearables: {
     whoopRecovery: string;
     ouraReadiness: string;
@@ -101,6 +123,52 @@ type DashboardPayload = {
       session: string;
     }>;
   };
+};
+
+const DEFAULT_RECOVERY_GOALS: RecoveryGoals = {
+  cold_plunge: 6,
+  infrared_sauna: 8,
+  compression_therapy: 4,
+  nxpro: 4,
+};
+
+const RECOVERY_GOAL_PRESETS: Record<string, RecoveryGoals> = {
+  "strength foundation": {
+    cold_plunge: 6,
+    infrared_sauna: 8,
+    compression_therapy: 4,
+    nxpro: 4,
+  },
+  "metabolic reset": {
+    cold_plunge: 8,
+    infrared_sauna: 8,
+    compression_therapy: 6,
+    nxpro: 4,
+  },
+  "cardio focus": {
+    cold_plunge: 6,
+    infrared_sauna: 8,
+    compression_therapy: 6,
+    nxpro: 4,
+  },
+  "longevity protocol": {
+    cold_plunge: 8,
+    infrared_sauna: 12,
+    compression_therapy: 8,
+    nxpro: 6,
+  },
+  "recovery phase": {
+    cold_plunge: 4,
+    infrared_sauna: 12,
+    compression_therapy: 8,
+    nxpro: 8,
+  },
+  "exercise performance": {
+    cold_plunge: 8,
+    infrared_sauna: 8,
+    compression_therapy: 8,
+    nxpro: 4,
+  },
 };
 
 function initialsFromName(name: string): string {
@@ -139,6 +207,72 @@ function formatDateForLabel(value: unknown): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function monthKeyFromDate(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+function monthLabelFromDate(date: Date): string {
+  return date.toLocaleDateString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+
+function normalizeRecoveryModality(value: unknown): RecoveryModality | null {
+  const key = stringOr(value, "").toLowerCase();
+  if (!key) return null;
+  if (key === "cold_plunge" || key === "cold plunge") return "cold_plunge";
+  if (key === "infrared_sauna" || key === "infrared sauna" || key === "sauna") return "infrared_sauna";
+  if (key === "compression_therapy" || key === "compression therapy" || key === "compression") return "compression_therapy";
+  if (key === "nxpro") return "nxpro";
+  return null;
+}
+
+function normalizeRecoveryGoals(value: unknown): RecoveryGoals | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+
+  const coldPlunge = numberOr(
+    row.cold_plunge ?? row.coldPlunge ?? row["cold plunge"] ?? row["cold-plunge"],
+    Number.NaN,
+  );
+  const infraredSauna = numberOr(
+    row.infrared_sauna ?? row.infraredSauna ?? row.sauna ?? row["infrared sauna"],
+    Number.NaN,
+  );
+  const compression = numberOr(
+    row.compression_therapy ?? row.compressionTherapy ?? row.compression ?? row["compression boots"],
+    Number.NaN,
+  );
+  const nxpro = numberOr(row.nxpro ?? row.nxPro, Number.NaN);
+
+  if (
+    !Number.isFinite(coldPlunge) ||
+    !Number.isFinite(infraredSauna) ||
+    !Number.isFinite(compression) ||
+    !Number.isFinite(nxpro)
+  ) {
+    return null;
+  }
+
+  return {
+    cold_plunge: Math.max(0, Math.round(coldPlunge)),
+    infrared_sauna: Math.max(0, Math.round(infraredSauna)),
+    compression_therapy: Math.max(0, Math.round(compression)),
+    nxpro: Math.max(0, Math.round(nxpro)),
+  };
+}
+
+function goalsForProtocol(protocolName: string, overrideGoals: unknown): RecoveryGoals {
+  const override = normalizeRecoveryGoals(overrideGoals);
+  if (override) return override;
+
+  const normalizedName = protocolName.trim().toLowerCase();
+  if (normalizedName && RECOVERY_GOAL_PRESETS[normalizedName]) {
+    return RECOVERY_GOAL_PRESETS[normalizedName];
+  }
+  return DEFAULT_RECOVERY_GOALS;
+}
+
 function normalizeMemberSection(input: string | undefined): MemberSection {
   const value = String(input || "").trim().toLowerCase();
   if (
@@ -173,6 +307,9 @@ function normalizeCoachSection(input: string | undefined): CoachSection {
 }
 
 function makeDefaultPayload(clerkName: string): DashboardPayload {
+  const monthDate = new Date();
+  const month = monthKeyFromDate(monthDate);
+  const monthLabel = monthLabelFromDate(monthDate);
   return {
     role: "member",
     memberId: null,
@@ -213,6 +350,19 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       katalyst: "0",
       proteus: "0",
       quickboard: "0",
+    },
+    recoverySummary: {
+      month,
+      monthLabel,
+      protocolName: "",
+      goals: { ...DEFAULT_RECOVERY_GOALS },
+      counts: {
+        cold_plunge: 0,
+        infrared_sauna: 0,
+        compression_therapy: 0,
+        nxpro: 0,
+      },
+      days: [],
     },
     wearables: {
       whoopRecovery: "--",
@@ -345,7 +495,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       .limit(1),
     supabase
       .from("recovery_sessions")
-      .select("modality")
+      .select("modality,session_date")
       .eq("member_id", memberId)
       .gte("session_date", monthStartIso)
       .lt("session_date", monthEndIso),
@@ -364,7 +514,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       .limit(5),
     supabase
       .from("protocols")
-      .select("id,name,week_current,week_total")
+      .select("id,name,week_current,week_total,recovery_goals")
       .eq("member_id", memberId)
       .eq("is_active", true)
       .order("updated_at", { ascending: false })
@@ -442,11 +592,25 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       scanRow && hasValue(scanRow.posture_hip_forward_in) ? numberOr(scanRow.posture_hip_forward_in, 0).toFixed(1) : "--",
   };
 
-  const modalityCounts: Record<string, number> = {};
+  const modalityCounts: Record<RecoveryModality, number> = {
+    cold_plunge: 0,
+    infrared_sauna: 0,
+    compression_therapy: 0,
+    nxpro: 0,
+  };
+  const dayModalitiesMap = new Map<string, RecoveryModality[]>();
   for (const row of recoveryRows) {
-    const key = stringOr(row.modality, "").toLowerCase();
+    const key = normalizeRecoveryModality(row.modality);
     if (!key) continue;
     modalityCounts[key] = (modalityCounts[key] ?? 0) + 1;
+
+    const rawDate = stringOr(row.session_date, "");
+    const parsed = rawDate ? new Date(rawDate) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) continue;
+    const dayKey = parsed.toISOString().slice(0, 10);
+    const existing = dayModalitiesMap.get(dayKey) ?? [];
+    existing.push(key);
+    dayModalitiesMap.set(dayKey, existing);
   }
   const equipmentCounts: Record<string, number> = {};
   for (const row of manualRows) {
@@ -455,14 +619,31 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     equipmentCounts[key] = (equipmentCounts[key] ?? 0) + 1;
   }
   payload.recoveryCounts = {
-    infraredSauna: String((modalityCounts.infrared_sauna ?? 0) + (modalityCounts["infrared sauna"] ?? 0)),
-    coldPlunge: String((modalityCounts.cold_plunge ?? 0) + (modalityCounts["cold plunge"] ?? 0)),
+    infraredSauna: String(modalityCounts.infrared_sauna ?? 0),
+    coldPlunge: String(modalityCounts.cold_plunge ?? 0),
     nxpro: String(modalityCounts.nxpro ?? 0),
-    compression: String((modalityCounts.compression_therapy ?? 0) + (modalityCounts.compression ?? 0)),
+    compression: String(modalityCounts.compression_therapy ?? 0),
     vasper: String(equipmentCounts.vasper ?? 0),
     katalyst: String(equipmentCounts.katalyst ?? 0),
     proteus: String(equipmentCounts.proteus ?? 0),
     quickboard: String(equipmentCounts.quickboard ?? 0),
+  };
+  const protocolName = stringOr(protocolRow?.name, "");
+  const recoveryGoals = goalsForProtocol(protocolName, protocolRow?.recovery_goals);
+  payload.recoverySummary = {
+    month: monthStartIso.slice(0, 7),
+    monthLabel: monthLabelFromDate(monthStart),
+    protocolName,
+    goals: recoveryGoals,
+    counts: {
+      cold_plunge: modalityCounts.cold_plunge ?? 0,
+      infrared_sauna: modalityCounts.infrared_sauna ?? 0,
+      compression_therapy: modalityCounts.compression_therapy ?? 0,
+      nxpro: modalityCounts.nxpro ?? 0,
+    },
+    days: Array.from(dayModalitiesMap.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, modalities]) => ({ date, modalities })),
   };
 
   payload.wearables = {

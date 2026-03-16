@@ -21,8 +21,33 @@ type Body = {
   week_total?: number | string;
   dustin_notes?: string;
   is_active?: boolean;
+  recovery_goals?: {
+    cold_plunge?: number | string;
+    infrared_sauna?: number | string;
+    compression_therapy?: number | string;
+    nxpro?: number | string;
+  } | null;
   sessions?: ProtocolSessionInput[];
 };
+
+function normalizeRecoveryGoals(
+  value: Body["recovery_goals"],
+): { cold_plunge: number; infrared_sauna: number; compression_therapy: number; nxpro: number } | null {
+  if (!value || typeof value !== "object") return null;
+  const coldPlunge = asOptionalNumber(value.cold_plunge);
+  const infraredSauna = asOptionalNumber(value.infrared_sauna);
+  const compressionTherapy = asOptionalNumber(value.compression_therapy);
+  const nxpro = asOptionalNumber(value.nxpro);
+  if (coldPlunge === null || infraredSauna === null || compressionTherapy === null || nxpro === null) {
+    return null;
+  }
+  return {
+    cold_plunge: Math.max(0, Math.round(coldPlunge)),
+    infrared_sauna: Math.max(0, Math.round(infraredSauna)),
+    compression_therapy: Math.max(0, Math.round(compressionTherapy)),
+    nxpro: Math.max(0, Math.round(nxpro)),
+  };
+}
 
 function normalizeEquipment(equipment: string): "arx" | "carol" | "vasper" | "katalyst" | "proteus" | "quickboard" | "recovery" | "other" {
   const normalized = equipment.trim().toLowerCase();
@@ -73,20 +98,26 @@ export async function POST(request: Request) {
     const weekTotal = Math.max(1, Math.round(asOptionalNumber(body.week_total) ?? 1));
     const dustinNotes = typeof body.dustin_notes === "string" ? body.dustin_notes.trim() : null;
     const isActive = body.is_active ?? true;
+    const recoveryGoals = normalizeRecoveryGoals(body.recovery_goals);
+
+    const protocolInsertPayload: Record<string, unknown> = {
+      member_id: memberId,
+      name,
+      description,
+      primary_goal: primaryGoal,
+      secondary_goal: secondaryGoal,
+      week_current: weekCurrent,
+      week_total: weekTotal,
+      dustin_notes: dustinNotes,
+      is_active: isActive,
+    };
+    if (recoveryGoals) {
+      protocolInsertPayload.recovery_goals = recoveryGoals;
+    }
 
     const protocolInsert = await context.supabase
       .from("protocols")
-      .insert({
-        member_id: memberId,
-        name,
-        description,
-        primary_goal: primaryGoal,
-        secondary_goal: secondaryGoal,
-        week_current: weekCurrent,
-        week_total: weekTotal,
-        dustin_notes: dustinNotes,
-        is_active: isActive,
-      })
+      .insert(protocolInsertPayload)
       .select("id")
       .single();
 

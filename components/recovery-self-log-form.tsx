@@ -56,6 +56,15 @@ export function RecoverySelfLogForm({ memberName }: Props) {
       }
 
       setStatus({ kind: "success", message: "Recovery session logged successfully." });
+      if (typeof window !== "undefined") {
+        const timestamp = new Date().toISOString();
+        window.localStorage.setItem("iso_club_recovery_updated_at", timestamp);
+        window.dispatchEvent(
+          new CustomEvent("iso-club:recovery-logged", {
+            detail: { at: timestamp, session_date: sessionDate, modality },
+          }),
+        );
+      }
       setNotes("");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save recovery session.";

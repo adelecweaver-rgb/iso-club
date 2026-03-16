@@ -28,6 +28,24 @@ type CarolSession = {
   maxHr: string;
 };
 
+type RecoveryModality = "cold_plunge" | "infrared_sauna" | "compression_therapy" | "nxpro";
+
+type RecoveryGoals = {
+  cold_plunge: number;
+  infrared_sauna: number;
+  compression_therapy: number;
+  nxpro: number;
+};
+
+type RecoverySummary = {
+  month: string;
+  monthLabel: string;
+  protocolName: string;
+  goals: RecoveryGoals;
+  counts: RecoveryGoals;
+  days: Array<{ date: string; modalities: RecoveryModality[] }>;
+};
+
 type DashboardPayload = {
   role: "member" | "coach";
   memberId: string | null;
@@ -69,6 +87,7 @@ type DashboardPayload = {
     proteus: string;
     quickboard: string;
   };
+  recoverySummary: RecoverySummary;
   wearables: {
     whoopRecovery: string;
     ouraReadiness: string;
@@ -110,6 +129,24 @@ type MessageItem = {
   thread_id: string;
   read_at: string | null;
 };
+
+const DEFAULT_RECOVERY_GOALS: RecoveryGoals = {
+  cold_plunge: 6,
+  infrared_sauna: 8,
+  compression_therapy: 4,
+  nxpro: 4,
+};
+
+const RECOVERY_MODALITY_CONFIG: Array<{
+  key: RecoveryModality;
+  label: string;
+  cssColor: string;
+}> = [
+  { key: "cold_plunge", label: "Cold Plunge", cssColor: "var(--blue)" },
+  { key: "infrared_sauna", label: "Infrared Sauna", cssColor: "var(--amber)" },
+  { key: "compression_therapy", label: "Compression Boots", cssColor: "var(--purple)" },
+  { key: "nxpro", label: "NxPro", cssColor: "var(--teal)" },
+];
 
 function firstNameFromName(name: string): string {
   const first = String(name || "").trim().split(" ")[0];
@@ -168,6 +205,163 @@ function todayDateLabel(): string {
   });
 }
 
+function monthKeyFromDate(date: Date): string {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabelFromKey(monthKey: string): string {
+  const [rawYear, rawMonth] = monthKey.split("-");
+  const year = Number(rawYear);
+  const month = Number(rawMonth);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) {
+    return monthKey;
+  }
+  return new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+function shiftMonth(monthKey: string, delta: number): string {
+  const [rawYear, rawMonth] = monthKey.split("-");
+  const year = Number(rawYear);
+  const month = Number(rawMonth);
+  if (!Number.isFinite(year) || !Number.isFinite(month)) return monthKeyFromDate(new Date());
+  const next = new Date(Date.UTC(year, month - 1 + delta, 1));
+  return monthKeyFromDate(next);
+}
+
+function normalizeRecoveryModality(value: unknown): RecoveryModality | null {
+  const key = String(value ?? "").trim().toLowerCase();
+  if (!key) return null;
+  if (key === "cold_plunge" || key === "cold plunge") return "cold_plunge";
+  if (key === "infrared_sauna" || key === "infrared sauna" || key === "sauna") return "infrared_sauna";
+  if (key === "compression_therapy" || key === "compression therapy" || key === "compression") return "compression_therapy";
+  if (key === "nxpro") return "nxpro";
+  return null;
+}
+
+function numberOrZero(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, Math.round(value));
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return Math.max(0, Math.round(parsed));
+  }
+  return 0;
+}
+
+function parseRecoveryGoals(raw: unknown): RecoveryGoals {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ...DEFAULT_RECOVERY_GOALS };
+  }
+  const row = raw as Record<string, unknown>;
+  const coldPlunge = numberOrZero(row.cold_plunge ?? row.coldPlunge ?? row["cold plunge"]);
+  const infraredSauna = numberOrZero(row.infrared_sauna ?? row.infraredSauna ?? row.sauna ?? row["infrared sauna"]);
+  const compression = numberOrZero(row.compression_therapy ?? row.compressionTherapy ?? row.compression);
+  const nxpro = numberOrZero(row.nxpro ?? row.nxPro);
+  if (!coldPlunge || !infraredSauna || !compression || !nxpro) {
+    return { ...DEFAULT_RECOVERY_GOALS };
+  }
+  return {
+    cold_plunge: coldPlunge,
+    infrared_sauna: infraredSauna,
+    compression_therapy: compression,
+    nxpro,
+  };
+}
+
+function normalizeRecoverySummary(summary: unknown, fallbackMonth: string): RecoverySummary | null {
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) return null;
+  const row = summary as Record<string, unknown>;
+  const countsRaw = row.counts;
+  const countsRecord = countsRaw && typeof countsRaw === "object" ? (countsRaw as Record<string, unknown>) : {};
+  const daysRaw = Array.isArray(row.days) ? row.days : [];
+  return {
+    month: typeof row.month === "string" && /^\d{4}-\d{2}$/.test(row.month) ? row.month : fallbackMonth,
+    monthLabel:
+      typeof row.monthLabel === "string" && row.monthLabel.trim().length > 0
+        ? row.monthLabel
+        : typeof row.month_label === "string" && row.month_label.trim().length > 0
+          ? row.month_label
+          : monthLabelFromKey(fallbackMonth),
+    protocolName:
+      typeof row.protocolName === "string"
+        ? row.protocolName
+        : typeof row.protocol_name === "string"
+          ? row.protocol_name
+          : "",
+    goals: parseRecoveryGoals(row.goals),
+    counts: {
+      cold_plunge: numberOrZero(countsRecord.cold_plunge),
+      infrared_sauna: numberOrZero(countsRecord.infrared_sauna),
+      compression_therapy: numberOrZero(countsRecord.compression_therapy),
+      nxpro: numberOrZero(countsRecord.nxpro),
+    },
+    days: daysRaw
+      .map((day) => {
+        if (!day || typeof day !== "object" || Array.isArray(day)) return null;
+        const item = day as Record<string, unknown>;
+        const date = typeof item.date === "string" ? item.date : "";
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+        const modalities = Array.isArray(item.modalities)
+          ? item.modalities
+              .map((modality) => normalizeRecoveryModality(modality))
+              .filter((modality): modality is RecoveryModality => Boolean(modality))
+          : [];
+        return { date, modalities };
+      })
+      .filter((day): day is { date: string; modalities: RecoveryModality[] } => Boolean(day)),
+  };
+}
+
+function buildInitialRecoverySummary(payload: DashboardPayload, monthKey: string): RecoverySummary {
+  const existing = normalizeRecoverySummary(payload.recoverySummary, monthKey);
+  if (existing) return existing;
+  return {
+    month: monthKey,
+    monthLabel: monthLabelFromKey(monthKey),
+    protocolName: payload.protocol.name || "",
+    goals: { ...DEFAULT_RECOVERY_GOALS },
+    counts: {
+      cold_plunge: numberOrZero(payload.recoveryCounts.coldPlunge),
+      infrared_sauna: numberOrZero(payload.recoveryCounts.infraredSauna),
+      compression_therapy: numberOrZero(payload.recoveryCounts.compression),
+      nxpro: numberOrZero(payload.recoveryCounts.nxpro),
+    },
+    days: [],
+  };
+}
+
+function buildRecoveryCalendarCells(
+  monthKey: string,
+  dayRows: Array<{ date: string; modalities: RecoveryModality[] }>,
+): Array<{ date: string | null; day: number | null; modalities: RecoveryModality[] }> {
+  const [rawYear, rawMonth] = monthKey.split("-");
+  const year = Number(rawYear);
+  const month = Number(rawMonth);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || month < 1 || month > 12) return [];
+
+  const firstDay = new Date(Date.UTC(year, month - 1, 1));
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const weekdayOffset = firstDay.getUTCDay();
+  const dayMap = new Map(dayRows.map((day) => [day.date, day.modalities]));
+  const cells: Array<{ date: string | null; day: number | null; modalities: RecoveryModality[] }> = [];
+
+  for (let i = 0; i < weekdayOffset; i += 1) {
+    cells.push({ date: null, day: null, modalities: [] });
+  }
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = `${monthKey}-${String(day).padStart(2, "0")}`;
+    cells.push({ date, day, modalities: dayMap.get(date) ?? [] });
+  }
+  while (cells.length % 7 !== 0) {
+    cells.push({ date: null, day: null, modalities: [] });
+  }
+
+  return cells;
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { method: "GET", cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
@@ -223,6 +417,16 @@ export function DashboardReactClient({
   const [messageDraft, setMessageDraft] = useState("");
   const [sendingMessage, setSendingMessage] = useState(false);
   const threadRef = useRef<HTMLDivElement | null>(null);
+  const currentRecoveryMonth = useMemo(() => monthKeyFromDate(new Date()), []);
+  const initialRecoverySummary = useMemo(
+    () => buildInitialRecoverySummary(payload, currentRecoveryMonth),
+    [currentRecoveryMonth, payload],
+  );
+  const [recoveryMonth, setRecoveryMonth] = useState(initialRecoverySummary.month);
+  const [recoverySummary, setRecoverySummary] = useState<RecoverySummary>(initialRecoverySummary);
+  const [recoveryStatus, setRecoveryStatus] = useState("");
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
+  const [selectedRecoveryDate, setSelectedRecoveryDate] = useState<string>("");
 
   const displayName = useMemo(
     () => displayNameFromClerk(user, payload.displayName || "Member"),
@@ -298,6 +502,28 @@ export function DashboardReactClient({
     [],
   );
 
+  const loadRecoverySummary = useCallback(
+    async (monthKey: string, silent = false) => {
+      if (!silent) setRecoveryLoading(true);
+      try {
+        const encodedMonth = encodeURIComponent(monthKey);
+        const response = await getJson<{ summary?: unknown }>(`/api/recovery/summary?month=${encodedMonth}`);
+        const normalized = normalizeRecoverySummary(response.summary, monthKey);
+        if (!normalized) {
+          throw new Error("Recovery summary was empty.");
+        }
+        setRecoverySummary(normalized);
+        setRecoveryMonth(normalized.month);
+        setRecoveryStatus("");
+      } catch (error) {
+        setRecoveryStatus(error instanceof Error ? error.message : "Unable to load recovery summary.");
+      } finally {
+        if (!silent) setRecoveryLoading(false);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (role !== "member" || memberView !== "messages") return;
     void loadMessages(true);
@@ -309,6 +535,38 @@ export function DashboardReactClient({
     if (!targetPeerId) return;
     void loadMessages(true, targetPeerId);
   }, [coachMessageRecipients, coachView, isCoachAccount, loadMessages, mode, selectedCoachRecipientId]);
+
+  useEffect(() => {
+    if (role !== "member" || mode !== "member" || memberView !== "recovery") return;
+    void loadRecoverySummary(recoveryMonth, true);
+  }, [loadRecoverySummary, memberView, mode, recoveryMonth, role]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const refreshRecovery = () => {
+      if (role === "member" && mode === "member" && memberView === "recovery") {
+        void loadRecoverySummary(recoveryMonth, true);
+      }
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== "iso_club_recovery_updated_at") return;
+      refreshRecovery();
+    };
+    const onLogged = () => {
+      refreshRecovery();
+    };
+
+    window.addEventListener("focus", refreshRecovery);
+    window.addEventListener("pageshow", refreshRecovery);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("iso-club:recovery-logged", onLogged as EventListener);
+    return () => {
+      window.removeEventListener("focus", refreshRecovery);
+      window.removeEventListener("pageshow", refreshRecovery);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("iso-club:recovery-logged", onLogged as EventListener);
+    };
+  }, [loadRecoverySummary, memberView, mode, recoveryMonth, role]);
 
   useEffect(() => {
     if (!threadRef.current) return;
@@ -366,6 +624,56 @@ export function DashboardReactClient({
   const peakPower = carolStatRows.length
     ? Math.max(...carolStatRows.map((row) => Number(row.peakPowerWatts || 0)))
     : 0;
+  const recoveryCards = useMemo(
+    () =>
+      RECOVERY_MODALITY_CONFIG.map((item) => {
+        const count = recoverySummary.counts[item.key] ?? 0;
+        const goal = recoverySummary.goals[item.key] ?? 0;
+        return {
+          ...item,
+          count,
+          goal,
+          reachedGoal: goal > 0 && count >= goal,
+        };
+      }),
+    [recoverySummary],
+  );
+  const reachedGoals = useMemo(
+    () => recoveryCards.filter((item) => item.reachedGoal),
+    [recoveryCards],
+  );
+  const recoveryCalendarCells = useMemo(
+    () => buildRecoveryCalendarCells(recoverySummary.month, recoverySummary.days),
+    [recoverySummary.days, recoverySummary.month],
+  );
+  const selectedRecoveryDay = useMemo(() => {
+    if (!selectedRecoveryDate) return null;
+    return recoverySummary.days.find((row) => row.date === selectedRecoveryDate) ?? null;
+  }, [recoverySummary.days, selectedRecoveryDate]);
+
+  useEffect(() => {
+    if (!recoverySummary.days.length) {
+      if (selectedRecoveryDate) setSelectedRecoveryDate("");
+      return;
+    }
+    const hasSelected = recoverySummary.days.some((row) => row.date === selectedRecoveryDate);
+    if (!hasSelected) {
+      setSelectedRecoveryDate(recoverySummary.days[recoverySummary.days.length - 1]?.date ?? "");
+    }
+  }, [recoverySummary.days, selectedRecoveryDate]);
+
+  const goToPreviousRecoveryMonth = () => {
+    const previous = shiftMonth(recoveryMonth, -1);
+    setRecoveryMonth(previous);
+    void loadRecoverySummary(previous);
+  };
+
+  const goToNextRecoveryMonth = () => {
+    const next = shiftMonth(recoveryMonth, 1);
+    if (next > currentRecoveryMonth) return;
+    setRecoveryMonth(next);
+    void loadRecoverySummary(next);
+  };
 
   return (
     <div className="app">
@@ -711,14 +1019,135 @@ export function DashboardReactClient({
           </div>
           <div className="grid-2">
             <div className="card">
-              <div className="card-header"><div className="card-title">Recovery sessions</div></div>
+              <div className="card-header">
+                <div>
+                  <div className="card-title">Recovery sessions — {recoverySummary.monthLabel}</div>
+                  <div className="card-sub">
+                    {recoverySummary.protocolName
+                      ? `${recoverySummary.protocolName} goals`
+                      : "Default monthly goals"}
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button className="btn btn-sm" type="button" onClick={goToPreviousRecoveryMonth} aria-label="Previous month">
+                    ←
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    type="button"
+                    onClick={goToNextRecoveryMonth}
+                    aria-label="Next month"
+                    disabled={recoveryMonth >= currentRecoveryMonth}
+                  >
+                    →
+                  </button>
+                </div>
+              </div>
               <div className="recovery-grid">
-                <div className="rec-item"><div className="rec-count">{payload.recoveryCounts.infraredSauna}</div><div className="rec-label">Infrared sauna</div></div>
-                <div className="rec-item"><div className="rec-count">{payload.recoveryCounts.coldPlunge}</div><div className="rec-label">Cold plunge</div></div>
-                <div className="rec-item"><div className="rec-count">{payload.recoveryCounts.nxpro}</div><div className="rec-label">NxPro</div></div>
-                <div className="rec-item"><div className="rec-count">{payload.recoveryCounts.compression}</div><div className="rec-label">Compression</div></div>
+                {recoveryCards.map((item) => (
+                  <div className="rec-item" key={item.key}>
+                    <div className="rec-count" style={{ color: item.cssColor }}>
+                      {item.count}
+                    </div>
+                    <div className="rec-label">{item.label}</div>
+                    <div className="rec-goal" style={{ color: item.reachedGoal ? "var(--lime)" : "var(--text3)" }}>
+                      {item.count} of {item.goal} this month{item.reachedGoal ? " ✓" : ""}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {reachedGoals.length ? (
+                <div
+                  style={{
+                    margin: "0 18px 14px 18px",
+                    padding: "10px 12px",
+                    borderRadius: "var(--r-sm)",
+                    border: "1px solid rgba(201,240,85,0.35)",
+                    background: "rgba(201,240,85,0.08)",
+                    fontSize: 12,
+                    color: "var(--lime)",
+                  }}
+                >
+                  Congratulations — goal hit for{" "}
+                  {reachedGoals.map((item) => item.label).join(", ")}.
+                </div>
+              ) : null}
+            </div>
+            <div className="card">
+              <div className="card-header"><div className="card-title">Recovery calendar</div></div>
+              <div style={{ padding: "6px 18px 0 18px", display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6, fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                    <div key={day} style={{ textAlign: "center" }}>{day}</div>
+                  ))}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 6 }}>
+                  {recoveryCalendarCells.map((cell, index) => (
+                    <button
+                      key={cell.date ? `${cell.date}-${index}` : `blank-${index}`}
+                      type="button"
+                      disabled={!cell.date}
+                      onClick={() => {
+                        if (!cell.date) return;
+                        setSelectedRecoveryDate(cell.date);
+                      }}
+                      style={{
+                        minHeight: 46,
+                        borderRadius: 8,
+                        border:
+                          cell.date && selectedRecoveryDate === cell.date
+                            ? "1px solid rgba(201,240,85,0.55)"
+                            : "1px solid var(--border)",
+                        background: "var(--bg3)",
+                        color: "var(--text2)",
+                        cursor: cell.date ? "pointer" : "default",
+                        opacity: cell.date ? 1 : 0.35,
+                        padding: "6px 4px",
+                      }}
+                    >
+                      {cell.day ? <div style={{ fontSize: 11 }}>{cell.day}</div> : <div style={{ fontSize: 11 }}>&nbsp;</div>}
+                      <div style={{ marginTop: 5, display: "flex", gap: 3, justifyContent: "center", flexWrap: "wrap" }}>
+                        {cell.modalities.map((modality, dotIndex) => {
+                          const config = RECOVERY_MODALITY_CONFIG.find((item) => item.key === modality);
+                          return (
+                            <span
+                              key={`${cell.date ?? "blank"}-${modality}-${dotIndex}`}
+                              style={{
+                                width: 6,
+                                height: 6,
+                                borderRadius: "50%",
+                                background: config?.cssColor ?? "var(--text3)",
+                                display: "inline-block",
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{ padding: "12px 18px 0 18px", fontSize: 12, color: "var(--text2)" }}>
+                {selectedRecoveryDay ? (
+                  <>
+                    <span style={{ color: "var(--text3)" }}>
+                      {new Date(selectedRecoveryDay.date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                      :
+                    </span>{" "}
+                    {selectedRecoveryDay.modalities
+                      .map((modality) => RECOVERY_MODALITY_CONFIG.find((item) => item.key === modality)?.label ?? modality)
+                      .join(", ")}
+                  </>
+                ) : (
+                  "Tap a day to see logged modalities."
+                )}
               </div>
             </div>
+          </div>
+          <div className="grid-2" style={{ marginTop: 12 }}>
             <div className="card">
               <div className="card-header"><div className="card-title">Other sessions</div></div>
               <div className="recovery-grid">
@@ -726,6 +1155,15 @@ export function DashboardReactClient({
                 <div className="rec-item"><div className="rec-count">{payload.recoveryCounts.katalyst}</div><div className="rec-label">Katalyst</div></div>
                 <div className="rec-item"><div className="rec-count">{payload.recoveryCounts.proteus}</div><div className="rec-label">Proteus</div></div>
                 <div className="rec-item"><div className="rec-count">{payload.recoveryCounts.quickboard}</div><div className="rec-label">Quickboard</div></div>
+              </div>
+            </div>
+            <div className="card">
+              <div className="card-header"><div className="card-title">Status</div></div>
+              <div className="card-body" style={{ fontSize: 12, color: "var(--text3)" }}>
+                {recoveryLoading ? "Refreshing recovery data..." : "Recovery data is up to date."}
+                {recoveryStatus ? (
+                  <div style={{ marginTop: 8, color: "var(--coral)" }}>{recoveryStatus}</div>
+                ) : null}
               </div>
             </div>
           </div>
