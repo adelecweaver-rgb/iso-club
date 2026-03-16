@@ -203,10 +203,16 @@ async function upsertCarolRowsWithFallback(
           "manp",
           "heart_rate_max",
           "heart_rate_avg",
+          "hr_percent_age_limit",
           "calories_incl_epoc",
+          "calories_active",
+          "avg_power_watts",
           "resistance_absolute",
           "sequential_number",
           "octane_score",
+          "distance_meters",
+          "rpm_max",
+          "sprint_duration_seconds",
         ] as const;
         for (const field of numericFields) {
           const value = next[field];
@@ -394,9 +400,9 @@ export async function POST(request: Request) {
         if (!externalId) continue;
         const sessionDateIso = parseUnixToIso(ride.start);
         if (!sessionDateIso) continue;
-        allRows.push({
-          member_id: targetUserId,
-          external_id: externalId,
+        const mappedRide: Record<string, unknown> = {
+          external_id: asString(ride.id, ""),
+          user_id: targetUserId,
           ride_type: mapRideType(ride.type),
           session_date: sessionDateIso,
           duration_seconds: asNumber(ride.duration),
@@ -405,11 +411,21 @@ export async function POST(request: Request) {
           manp: asNumber(ride.manp),
           heart_rate_max: asNumber(ride.heartRateMax),
           heart_rate_avg: asNumber(ride.heartRateAverage),
+          hr_percent_age_limit: asNumber(ride.heartRatePercentOfAgeLimit),
           calories_incl_epoc: asNumber(ride.caloriesInclEpoc),
+          calories_active: asNumber(ride.calories),
+          avg_power_watts: asNumber(ride.averagePower),
           resistance_absolute: asNumber(ride.resistanceAbsolute),
           sequential_number: asNumber(ride.sequential),
           is_valid: asBoolean(ride.valid),
           octane_score: asNumber(ride.octaneScore),
+          distance_meters: asNumber(ride.distance),
+          rpm_max: asNumber(ride.rpmMax),
+          sprint_duration_seconds: asNumber(ride.sprintDuration),
+        };
+        allRows.push({
+          member_id: targetUserId,
+          ...mappedRide,
           raw_data: {
             source: "carol_api_sync",
             rider_id: riderId,
