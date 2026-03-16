@@ -47,6 +47,91 @@ export default async function OnboardingPage() {
 
   const onboardingBootstrapScript = `
     (() => {
+      let currentScreen = 1;
+      const totalScreens = 7;
+      const progressMap = {
+        1: 14,
+        2: 28,
+        3: 42,
+        4: 56,
+        5: 70,
+        6: 85,
+        7: 100,
+      };
+
+      const showScreen = (screenNumber) => {
+        const target = Number(screenNumber);
+        if (!Number.isFinite(target) || target < 1 || target > totalScreens) return;
+        document.querySelectorAll(".screen").forEach((screen) => screen.classList.remove("active"));
+        const activeScreen = document.getElementById("screen-" + target);
+        if (activeScreen) {
+          activeScreen.classList.add("active");
+          window.scrollTo(0, 0);
+        }
+        const progressEl = document.getElementById("progress-fill");
+        if (progressEl) {
+          progressEl.style.width = (progressMap[target] || progressMap[1]) + "%";
+        }
+        const stepEl = document.getElementById("step-indicator");
+        if (stepEl) {
+          stepEl.textContent = target < totalScreens ? "Step " + target + " of 7" : "Complete";
+        }
+        currentScreen = target;
+      };
+
+      const nextScreen = () => {
+        if (currentScreen < totalScreens) showScreen(currentScreen + 1);
+      };
+
+      const prevScreen = () => {
+        if (currentScreen > 1) showScreen(currentScreen - 1);
+      };
+
+      const selectOption = (element) => {
+        const root = element?.closest?.(".option-grid");
+        if (root) {
+          root.querySelectorAll(".option-card").forEach((card) => card.classList.remove("selected"));
+        }
+        if (element?.classList) {
+          element.classList.add("selected");
+        }
+      };
+
+      const selectDevice = (element) => {
+        document.querySelectorAll(".device-card").forEach((card) => card.classList.remove("selected"));
+        if (element?.classList) {
+          element.classList.add("selected");
+        }
+        const prompt = document.getElementById("connect-prompt");
+        if (!prompt) return;
+        if (element?.id === "no-device") {
+          prompt.style.display = "none";
+          return;
+        }
+        prompt.style.display = "block";
+      };
+
+      const selectTier = (element) => {
+        document.querySelectorAll(".tier-card").forEach((card) => card.classList.remove("selected"));
+        if (element?.classList) {
+          element.classList.add("selected");
+        }
+      };
+
+      const toggleCheck = (element) => {
+        if (element?.classList) {
+          element.classList.toggle("checked");
+        }
+      };
+
+      window.showScreen = showScreen;
+      window.nextScreen = nextScreen;
+      window.prevScreen = prevScreen;
+      window.selectOption = selectOption;
+      window.selectDevice = selectDevice;
+      window.selectTier = selectTier;
+      window.toggleCheck = toggleCheck;
+
       const normalizeTier = (input) => {
         const value = String(input || "").trim().toLowerCase();
         if (value.includes("concierge")) return "concierge";
