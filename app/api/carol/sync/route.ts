@@ -47,10 +47,7 @@ function asBoolean(value: unknown): boolean | null {
 }
 
 function parseUnixToIso(value: unknown): string | null {
-  const timestamp = asNumber(value);
-  if (timestamp === null) return null;
-  const ms = timestamp > 1_000_000_000_000 ? timestamp : timestamp * 1000;
-  const parsed = new Date(ms);
+  const parsed = new Date(value as string | number | Date);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toISOString();
 }
@@ -205,6 +202,7 @@ async function upsertCarolRowsWithFallback(
           "avg_sprint_power",
           "manp",
           "heart_rate_max",
+          "heart_rate_avg",
           "calories_incl_epoc",
           "resistance_absolute",
           "sequential_number",
@@ -406,6 +404,7 @@ export async function POST(request: Request) {
           avg_sprint_power: asNumber(ride.averageSprintPower),
           manp: asNumber(ride.manp),
           heart_rate_max: asNumber(ride.heartRateMax),
+          heart_rate_avg: asNumber(ride.heartRateAverage),
           calories_incl_epoc: asNumber(ride.caloriesInclEpoc),
           resistance_absolute: asNumber(ride.resistanceAbsolute),
           sequential_number: asNumber(ride.sequential),
