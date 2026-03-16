@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type MemberSection =
   | "dashboard"
@@ -525,6 +526,9 @@ export function DashboardReactClient({
   const [recoveryStatus, setRecoveryStatus] = useState("");
   const [recoveryLoading, setRecoveryLoading] = useState(false);
   const [selectedRecoveryDate, setSelectedRecoveryDate] = useState<string>("");
+  const [carolDebugData, setCarolDebugData] = useState<Array<Record<string, unknown>>>([]);
+  const [carolDebugError, setCarolDebugError] = useState<string | null>(null);
+  const [carolDebugLoading, setCarolDebugLoading] = useState(false);
 
   const displayName = useMemo(
     () => displayNameFromClerk(user, payload.displayName || "Member"),
@@ -556,6 +560,49 @@ export function DashboardReactClient({
       setMode("member");
     }
   }, [role]);
+
+  useEffect(() => {
+    if (role !== "member" || mode !== "member" || memberView !== "carol") return;
+    if (!user?.id) {
+      setCarolDebugData([]);
+      setCarolDebugError("Clerk user ID is unavailable.");
+      return;
+    }
+
+    let cancelled = false;
+    const runCarolDebugQuery = async () => {
+      setCarolDebugLoading(true);
+      setCarolDebugError(null);
+      try {
+        const supabase = createSupabaseBrowserClient();
+        const { data, error } = await supabase
+          .from("carol_sessions")
+          .select("member_id, ride_type, session_date, peak_power_watts, manp, calories_incl_epoc")
+          .eq("member_id", user.id)
+          .limit(5);
+
+        // Temporary debug logs requested by user.
+        console.log("CAROL data:", data);
+        console.log("CAROL error:", error);
+        console.log("User ID:", user.id);
+
+        if (cancelled) return;
+        setCarolDebugData(Array.isArray(data) ? (data as Array<Record<string, unknown>>) : []);
+        setCarolDebugError(error ? error.message : null);
+      } catch (error) {
+        if (cancelled) return;
+        setCarolDebugData([]);
+        setCarolDebugError(error instanceof Error ? error.message : "CAROL debug query failed.");
+      } finally {
+        if (!cancelled) setCarolDebugLoading(false);
+      }
+    };
+
+    void runCarolDebugQuery();
+    return () => {
+      cancelled = true;
+    };
+  }, [memberView, mode, role, user?.id]);
 
   const allCarolRows = useMemo(() => (Array.isArray(payload.carolSessions) ? payload.carolSessions : []), [payload.carolSessions]);
   const rehitCarolRows = useMemo(
@@ -1172,6 +1219,39 @@ export function DashboardReactClient({
             ) : (
               <div className="card-body"><p style={{ color: "var(--text3)" }}>No rides logged yet.</p></div>
             )}
+          </div>
+          <div className="card" style={{ marginTop: 14 }}>
+            <div className="card-header"><div className="card-title">Temporary CAROL Debug</div></div>
+            <div className="card-body" style={{ display: "grid", gap: 10 }}>
+              <div style={{ fontSize: 12, color: "var(--text2)" }}>
+                <b>User ID:</b> {user?.id || "(missing)"}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text2)" }}>
+                <b>Payload memberId:</b> {payload.memberId || "(missing)"}
+              </div>
+              <div style={{ fontSize: 12, color: carolDebugError ? "var(--coral)" : "var(--text2)" }}>
+                <b>CAROL error:</b> {carolDebugError || "null"}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text2)" }}>
+                <b>CAROL data ({carolDebugData.length}):</b>
+              </div>
+              <pre
+                style={{
+                  margin: 0,
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  color: "var(--text2)",
+                  background: "var(--bg3)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: 12,
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {carolDebugLoading ? "Loading..." : JSON.stringify(carolDebugData, null, 2)}
+              </pre>
+            </div>
           </div>
         </div>
 
