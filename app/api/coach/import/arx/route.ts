@@ -409,9 +409,30 @@ async function insertRowsWithMissingColumnFallback(
 ) {
   let workingRows = rows.map((row) => ({ ...row }));
   const removedColumns = new Set<string>();
+  let coercedIntegerMetrics = false;
   while (true) {
     const result = await supabase.from("arx_sessions").insert(workingRows);
     if (!result.error) return;
+
+    const integerSyntaxError =
+      /invalid input syntax for type integer|out of range for type integer/i.test(result.error.message);
+    if (integerSyntaxError && !coercedIntegerMetrics) {
+      // Some schemas store ARX metrics as integer columns; retry with rounded values.
+      workingRows = workingRows.map((row) => {
+        const next = { ...row };
+        const numericFields = ["concentric_max", "eccentric_max", "intensity", "output"] as const;
+        for (const field of numericFields) {
+          const value = next[field];
+          if (typeof value === "number" && Number.isFinite(value)) {
+            next[field] = Math.round(value);
+          }
+        }
+        return next;
+      });
+      coercedIntegerMetrics = true;
+      continue;
+    }
+
     const missing = extractMissingColumnName(result.error.message);
     if (!missing || removedColumns.has(missing)) {
       throw new Error(result.error.message);
