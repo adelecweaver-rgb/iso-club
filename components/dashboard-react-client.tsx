@@ -381,6 +381,19 @@ function asNumericMetric(value: string): number | null {
   return parsed;
 }
 
+function pickLatestMetric(
+  rows: CarolSession[],
+  pickers: Array<(row: CarolSession) => string>,
+): string {
+  for (const row of rows) {
+    for (const picker of pickers) {
+      const value = picker(row);
+      if (asNumericMetric(value) !== null) return value;
+    }
+  }
+  return "--";
+}
+
 function formatCarolDateLabel(value: string): string {
   if (!value) return "Recent";
   const parsed = new Date(value);
@@ -739,8 +752,26 @@ export function DashboardReactClient({
     setMemberView(view);
   };
 
-  const latestCarol = allCarolRows[0];
-  const latestRehit = rehitCarolRows[0];
+  const latestRehitPeakPower = useMemo(
+    () => pickLatestMetric(rehitCarolRows, [(row) => row.peakPowerWatts]),
+    [rehitCarolRows],
+  );
+  const latestRehitSprintPower = useMemo(
+    () => pickLatestMetric(rehitCarolRows, [(row) => row.avgSprintPower]),
+    [rehitCarolRows],
+  );
+  const latestRehitManp = useMemo(
+    () => pickLatestMetric(rehitCarolRows, [(row) => row.manp]),
+    [rehitCarolRows],
+  );
+  const latestCaloriesInclEpoc = useMemo(
+    () => pickLatestMetric(allCarolRows, [(row) => row.caloriesInclEpoc, (row) => row.caloriesActive, (row) => row.calories]),
+    [allCarolRows],
+  );
+  const latestMaxHr = useMemo(
+    () => pickLatestMetric(allCarolRows, [(row) => row.heartRateMax, (row) => row.maxHr, (row) => row.heartRateAvg]),
+    [allCarolRows],
+  );
   const recoveryCards = useMemo(
     () =>
       RECOVERY_MODALITY_CONFIG.map((item) => {
@@ -1074,13 +1105,13 @@ export function DashboardReactClient({
         <div id="view-carol" className="content" style={{ display: mode === "member" && memberView === "carol" ? "block" : "none" }}>
           <div className="sec-header"><div className="sec-title">CAROL Rides</div></div>
           <div className="grid-4" style={{ marginBottom: 16 }}>
-            <div className="stat-card"><div className="stat-label">Peak Power (REHIT)</div><div className="stat-val">{latestRehit?.peakPowerWatts || "--"}</div></div>
-            <div className="stat-card amber"><div className="stat-label">Sprint Power (REHIT)</div><div className="stat-val">{latestRehit?.avgSprintPower || "--"}</div></div>
-            <div className="stat-card blue"><div className="stat-label">MANP (REHIT)</div><div className="stat-val">{latestRehit?.manp || "--"}</div></div>
-            <div className="stat-card teal"><div className="stat-label">Calories incl EPOC</div><div className="stat-val">{latestCarol?.caloriesInclEpoc || "--"}</div></div>
+            <div className="stat-card"><div className="stat-label">Peak Power (REHIT)</div><div className="stat-val">{latestRehitPeakPower}</div></div>
+            <div className="stat-card amber"><div className="stat-label">Sprint Power (REHIT)</div><div className="stat-val">{latestRehitSprintPower}</div></div>
+            <div className="stat-card blue"><div className="stat-label">MANP (REHIT)</div><div className="stat-val">{latestRehitManp}</div></div>
+            <div className="stat-card teal"><div className="stat-label">Calories incl EPOC</div><div className="stat-val">{latestCaloriesInclEpoc}</div></div>
           </div>
           <div className="grid-2" style={{ marginBottom: 16 }}>
-            <div className="stat-card"><div className="stat-label">Max HR</div><div className="stat-val">{latestCarol?.heartRateMax || "--"}</div></div>
+            <div className="stat-card"><div className="stat-label">Max HR</div><div className="stat-val">{latestMaxHr}</div></div>
             <div className="stat-card blue"><div className="stat-label">Ride count</div><div className="stat-val">{allCarolRows.length}</div></div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 16 }}>
