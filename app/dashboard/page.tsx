@@ -62,6 +62,7 @@ type DashboardPayload = {
     metabolic: string;
     structural: string;
     recovery: string;
+    overall: string;
   };
   carolHistory: Array<{ label: string; value: string }>;
   carolSessions: Array<{
@@ -70,6 +71,13 @@ type DashboardPayload = {
     rideType: string;
     fitnessScore: string;
     peakPowerWatts: string;
+    avgSprintPower: string;
+    manp: string;
+    caloriesInclEpoc: string;
+    caloriesActive: string;
+    heartRateMax: string;
+    heartRateAvg: string;
+    durationSeconds: string;
     calories: string;
     maxHr: string;
   }>;
@@ -273,6 +281,66 @@ function goalsForProtocol(protocolName: string, overrideGoals: unknown): Recover
   return DEFAULT_RECOVERY_GOALS;
 }
 
+function formatMetricValue(value: unknown, decimals = 0): string {
+  if (!hasValue(value)) return "--";
+  const numeric = numberOr(value, Number.NaN);
+  if (!Number.isFinite(numeric)) return "--";
+  if (decimals > 0) return numeric.toFixed(decimals);
+  return Math.round(numeric).toString();
+}
+
+function extractHealthspanScoreValue(data: unknown): number | null {
+  if (typeof data === "number" && Number.isFinite(data)) return data;
+  if (typeof data === "string") {
+    const parsed = Number(data);
+    if (Number.isFinite(parsed)) return parsed;
+    return null;
+  }
+  if (Array.isArray(data)) {
+    for (const item of data) {
+      const nested = extractHealthspanScoreValue(item);
+      if (nested !== null) return nested;
+    }
+    return null;
+  }
+  if (data && typeof data === "object") {
+    const row = data as Record<string, unknown>;
+    for (const key of ["calculate_healthspan_score", "healthspan_score", "overall_score", "score", "value"]) {
+      const nested = extractHealthspanScoreValue(row[key]);
+      if (nested !== null) return nested;
+    }
+  }
+  return null;
+}
+
+async function loadCalculatedHealthspanScore(
+  supabase: {
+    rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }> | unknown;
+  },
+  memberId: string,
+): Promise<string | null> {
+  const argVariants: Array<Record<string, unknown>> = [
+    { member_id: memberId },
+    { p_member_id: memberId },
+    { member_uuid: memberId },
+    { user_id: memberId },
+    {},
+  ];
+
+  for (const args of argVariants) {
+    const result = (await supabase.rpc("calculate_healthspan_score", args)) as {
+      data: unknown;
+      error: { message: string } | null;
+    };
+    if (result.error) continue;
+    const score = extractHealthspanScoreValue(result.data);
+    if (score !== null) {
+      return Number.isInteger(score) ? `${score}` : score.toFixed(1);
+    }
+  }
+  return null;
+}
+
 function normalizeMemberSection(input: string | undefined): MemberSection {
   const value = String(input || "").trim().toLowerCase();
   if (
@@ -329,6 +397,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       metabolic: "--",
       structural: "--",
       recovery: "--",
+      overall: "--",
     },
     carolHistory: [],
     carolSessions: [],
@@ -442,25 +511,32 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   monthEnd.setMonth(monthEnd.getMonth() + 1);
   const monthEndIso = monthEnd.toISOString().slice(0, 10);
 
-  const [
-    carolRes,
-    arxRes,
-    scanRes,
-    whoopRes,
-    ouraRes,
-    healthspanRes,
-    recoveryRes,
-    manualRes,
-    bookingRes,
-    protocolRes,
-    reportRes,
-  ] = await Promise.all([
-    supabase
+  const carolPrimarySelect =
+    "session_date,ride_number,ride_type,fitness_score,peak_power_watts,avg_sprint_power,manp,calories_incl_epoc,calories_active,heart_rate_max,heart_rate_avg,duration_seconds,calories,max_hr";
+  const carolFallbackSelect = "session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr";
+  let carolRes = (await supabase
+    .from("carol_sessions")
+    .select(carolPrimarySelect)
+    .eq("member_id", memberId)
+    .order("session_date", { ascending: false })
+    .limit(300)) as unknown as {
+    data: unknown;
+    error: { message: string } | null;
+  };
+  if (carolRes.error && /column .* does not exist/i.test(carolRes.error.message || "")) {
+    carolRes = (await supabase
       .from("carol_sessions")
-      .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr")
+      .select(carolFallbackSelect)
       .eq("member_id", memberId)
       .order("session_date", { ascending: false })
-      .limit(60),
+      .limit(300)) as unknown as {
+      data: unknown;
+      error: { message: string } | null;
+    };
+  }
+
+  const [arxRes, scanRes, whoopRes, ouraRes, healthspanRes, recoveryRes, manualRes, bookingRes, protocolRes, reportRes] =
+    await Promise.all([
     supabase
       .from("arx_sessions")
       .select("session_date,exercise,output,concentric_max,eccentric_max")
@@ -560,7 +636,19 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       healthRow && hasValue(healthRow.structural_score) ? Math.round(numberOr(healthRow.structural_score, 0)).toString() : "--",
     recovery:
       healthRow && hasValue(healthRow.recovery_score) ? Math.round(numberOr(healthRow.recovery_score, 0)).toString() : "--",
+    overall: "--",
   };
+  if (payload.memberId) {
+    const calculatedHealthspanScore = await loadCalculatedHealthspanScore(
+      supabase as unknown as {
+        rpc: (fn: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }> | unknown;
+      },
+      payload.memberId,
+    );
+    if (calculatedHealthspanScore) {
+      payload.healthspan.overall = calculatedHealthspanScore;
+    }
+  }
 
   payload.carolHistory = carolRows.slice(0, 3).map((row) => ({
     label: `${formatDateForLabel(row.session_date)} · Ride #${stringOr(row.ride_number, "—")}`,
@@ -571,9 +659,16 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     rideNumber: stringOr(row.ride_number, "—"),
     rideType: stringOr(row.ride_type, "REHIT"),
     fitnessScore: hasValue(row.fitness_score) ? numberOr(row.fitness_score, 0).toFixed(1) : "--",
-    peakPowerWatts: hasValue(row.peak_power_watts) ? Math.round(numberOr(row.peak_power_watts, 0)).toString() : "--",
-    calories: hasValue(row.calories) ? Math.round(numberOr(row.calories, 0)).toString() : "--",
-    maxHr: hasValue(row.max_hr) ? Math.round(numberOr(row.max_hr, 0)).toString() : "--",
+    peakPowerWatts: formatMetricValue(row.peak_power_watts),
+    avgSprintPower: formatMetricValue(row.avg_sprint_power),
+    manp: formatMetricValue(row.manp),
+    caloriesInclEpoc: hasValue(row.calories_incl_epoc) ? formatMetricValue(row.calories_incl_epoc, 1) : "--",
+    caloriesActive: hasValue(row.calories_active) ? formatMetricValue(row.calories_active) : formatMetricValue(row.calories),
+    heartRateMax: hasValue(row.heart_rate_max) ? formatMetricValue(row.heart_rate_max) : formatMetricValue(row.max_hr),
+    heartRateAvg: formatMetricValue(row.heart_rate_avg),
+    durationSeconds: formatMetricValue(row.duration_seconds),
+    calories: hasValue(row.calories) ? formatMetricValue(row.calories) : formatMetricValue(row.calories_active),
+    maxHr: hasValue(row.max_hr) ? formatMetricValue(row.max_hr) : formatMetricValue(row.heart_rate_max),
   }));
   payload.arxHistory = arxRows.slice(0, 6).map((row) => ({
     label: `${formatDateForLabel(row.session_date)} · ${stringOr(row.exercise, "ARX exercise")}`,

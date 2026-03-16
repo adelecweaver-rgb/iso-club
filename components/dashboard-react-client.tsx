@@ -24,6 +24,13 @@ type CarolSession = {
   rideType: string;
   fitnessScore: string;
   peakPowerWatts: string;
+  avgSprintPower: string;
+  manp: string;
+  caloriesInclEpoc: string;
+  caloriesActive: string;
+  heartRateMax: string;
+  heartRateAvg: string;
+  durationSeconds: string;
   calories: string;
   maxHr: string;
 };
@@ -65,6 +72,7 @@ type DashboardPayload = {
     metabolic: string;
     structural: string;
     recovery: string;
+    overall: string;
   };
   carolHistory: Array<{ label: string; value: string }>;
   carolSessions: CarolSession[];
@@ -147,6 +155,11 @@ const RECOVERY_MODALITY_CONFIG: Array<{
   { key: "compression_therapy", label: "Compression Boots", cssColor: "var(--purple)" },
   { key: "nxpro", label: "NxPro", cssColor: "var(--teal)" },
 ];
+
+type TrendPoint = {
+  label: string;
+  value: number;
+};
 
 function firstNameFromName(name: string): string {
   const first = String(name || "").trim().split(" ")[0];
@@ -362,6 +375,80 @@ function buildRecoveryCalendarCells(
   return cells;
 }
 
+function asNumericMetric(value: string): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return parsed;
+}
+
+function formatCarolDateLabel(value: string): string {
+  if (!value) return "Recent";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "Recent";
+  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function buildTrendPath(points: TrendPoint[], width: number, height: number, padding: number): string {
+  if (points.length < 2) return "";
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const innerWidth = width - padding * 2;
+  const innerHeight = height - padding * 2;
+  return points
+    .map((point, index) => {
+      const x = padding + (index / (points.length - 1)) * innerWidth;
+      const y = padding + ((max - point.value) / range) * innerHeight;
+      return `${x},${y}`;
+    })
+    .join(" ");
+}
+
+function CarolTrendChart({
+  title,
+  points,
+  lineColor,
+  unit,
+}: {
+  title: string;
+  points: TrendPoint[];
+  lineColor: string;
+  unit: string;
+}) {
+  const width = 560;
+  const height = 170;
+  const padding = 16;
+  const path = buildTrendPath(points, width, height, padding);
+  const latest = points.length ? points[points.length - 1] : null;
+  const first = points.length ? points[0] : null;
+
+  return (
+    <div className="card">
+      <div className="card-header">
+        <div className="card-title">{title}</div>
+        <div className="card-sub">{latest ? `${Math.round(latest.value)}${unit} latest` : "No data yet"}</div>
+      </div>
+      {points.length >= 2 ? (
+        <>
+          <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: 190 }}>
+            <polyline fill="none" stroke="rgba(175,189,165,0.2)" strokeWidth="1" points={`${padding},${height - padding} ${width - padding},${height - padding}`} />
+            <polyline fill="none" stroke={lineColor} strokeWidth="2.2" points={path} />
+          </svg>
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: -6, fontSize: 11, color: "var(--text3)" }}>
+            <span>{first?.label || ""}</span>
+            <span>{latest?.label || ""}</span>
+          </div>
+        </>
+      ) : (
+        <div className="card-body">
+          <p style={{ color: "var(--text3)" }}>Not enough sessions to render a trend line yet.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { method: "GET", cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
@@ -404,9 +491,6 @@ export function DashboardReactClient({
   );
   const [memberView, setMemberView] = useState<MemberSection>(initialMemberView);
   const [coachView, setCoachView] = useState<CoachSection>(initialCoachView);
-  const [carolTab, setCarolTab] = useState<"rehit" | "fat_burn" | "free_custom" | "fitness_tests">(
-    "rehit",
-  );
   const [peerName, setPeerName] = useState("Dustin");
   const [peerId, setPeerId] = useState(payload.coachId ?? "");
   const [selectedCoachRecipientId, setSelectedCoachRecipientId] = useState(
@@ -460,14 +544,48 @@ export function DashboardReactClient({
     }
   }, [role]);
 
-  const memberCarolRows = useMemo(() => {
-    const allRows = Array.isArray(payload.carolSessions) ? payload.carolSessions : [];
-    return allRows.filter((row) => normalizeCarolTabKey(row.rideType) === carolTab);
-  }, [carolTab, payload.carolSessions]);
-
-  const carolStatRows = useMemo(() => {
-    return memberCarolRows.length ? memberCarolRows : payload.carolSessions;
-  }, [memberCarolRows, payload.carolSessions]);
+  const allCarolRows = useMemo(() => (Array.isArray(payload.carolSessions) ? payload.carolSessions : []), [payload.carolSessions]);
+  const rehitCarolRows = useMemo(
+    () => allCarolRows.filter((row) => normalizeCarolTabKey(row.rideType) === "rehit"),
+    [allCarolRows],
+  );
+  const fatBurnCarolRows = useMemo(
+    () => allCarolRows.filter((row) => normalizeCarolTabKey(row.rideType) === "fat_burn"),
+    [allCarolRows],
+  );
+  const peakPowerTrend = useMemo(() => {
+    return rehitCarolRows
+      .slice()
+      .reverse()
+      .map((row) => {
+        const value = asNumericMetric(row.peakPowerWatts);
+        if (value === null) return null;
+        return { label: formatCarolDateLabel(row.sessionDate), value };
+      })
+      .filter((point): point is TrendPoint => Boolean(point));
+  }, [rehitCarolRows]);
+  const manpTrend = useMemo(() => {
+    return rehitCarolRows
+      .slice()
+      .reverse()
+      .map((row) => {
+        const value = asNumericMetric(row.manp);
+        if (value === null) return null;
+        return { label: formatCarolDateLabel(row.sessionDate), value };
+      })
+      .filter((point): point is TrendPoint => Boolean(point));
+  }, [rehitCarolRows]);
+  const caloriesTrend = useMemo(() => {
+    return allCarolRows
+      .slice()
+      .reverse()
+      .map((row) => {
+        const value = asNumericMetric(row.caloriesInclEpoc) ?? asNumericMetric(row.caloriesActive);
+        if (value === null) return null;
+        return { label: formatCarolDateLabel(row.sessionDate), value };
+      })
+      .filter((point): point is TrendPoint => Boolean(point));
+  }, [allCarolRows]);
 
   const loadMessages = useCallback(
     async (markRead: boolean, targetPeerId?: string) => {
@@ -621,10 +739,8 @@ export function DashboardReactClient({
     setMemberView(view);
   };
 
-  const latestCarol = carolStatRows[0];
-  const peakPower = carolStatRows.length
-    ? Math.max(...carolStatRows.map((row) => Number(row.peakPowerWatts || 0)))
-    : 0;
+  const latestCarol = allCarolRows[0];
+  const latestRehit = rehitCarolRows[0];
   const recoveryCards = useMemo(
     () =>
       RECOVERY_MODALITY_CONFIG.map((item) => {
@@ -898,6 +1014,7 @@ export function DashboardReactClient({
                 <div className="card-header">
                   <div>
                     <div className="card-title">Healthspan OS</div>
+                    <div className="card-sub">Calculated score: {payload.healthspan.overall}</div>
                   </div>
                 </div>
                 <div className="os-grid">
@@ -956,36 +1073,73 @@ export function DashboardReactClient({
 
         <div id="view-carol" className="content" style={{ display: mode === "member" && memberView === "carol" ? "block" : "none" }}>
           <div className="sec-header"><div className="sec-title">CAROL Rides</div></div>
-          <div className="tabs">
-            <button className={`tab ${carolTab === "rehit" ? "active" : ""}`} onClick={() => setCarolTab("rehit")} type="button">REHIT</button>
-            <button className={`tab ${carolTab === "fat_burn" ? "active" : ""}`} onClick={() => setCarolTab("fat_burn")} type="button">Fat Burn</button>
-            <button className={`tab ${carolTab === "free_custom" ? "active" : ""}`} onClick={() => setCarolTab("free_custom")} type="button">Free &amp; Custom</button>
-            <button className={`tab ${carolTab === "fitness_tests" ? "active" : ""}`} onClick={() => setCarolTab("fitness_tests")} type="button">Fitness Tests</button>
-          </div>
           <div className="grid-4" style={{ marginBottom: 16 }}>
-            <div className="stat-card"><div className="stat-label">Fitness score</div><div className="stat-val">{latestCarol?.fitnessScore || "--"}</div></div>
-            <div className="stat-card amber"><div className="stat-label">Peak power</div><div className="stat-val">{peakPower > 0 ? Math.round(peakPower) : "--"}</div></div>
-            <div className="stat-card blue"><div className="stat-label">Total rides</div><div className="stat-val">{memberCarolRows.length}</div></div>
-            <div className="stat-card"><div className="stat-label">Last max HR</div><div className="stat-val">{latestCarol?.maxHr || "--"}</div></div>
+            <div className="stat-card"><div className="stat-label">Peak Power (REHIT)</div><div className="stat-val">{latestRehit?.peakPowerWatts || "--"}</div></div>
+            <div className="stat-card amber"><div className="stat-label">Sprint Power (REHIT)</div><div className="stat-val">{latestRehit?.avgSprintPower || "--"}</div></div>
+            <div className="stat-card blue"><div className="stat-label">MANP (REHIT)</div><div className="stat-val">{latestRehit?.manp || "--"}</div></div>
+            <div className="stat-card teal"><div className="stat-label">Calories incl EPOC</div><div className="stat-val">{latestCarol?.caloriesInclEpoc || "--"}</div></div>
           </div>
-          <div className="card">
-            <div className="card-header"><div className="card-title">Ride history</div></div>
-            {memberCarolRows.length ? (
-              memberCarolRows.slice(0, 25).map((row) => (
-                <div className="metric-row" key={`${row.sessionDate}-${row.rideNumber}`}>
-                  <div className="metric-label">
-                    {row.sessionDate || "Recent"} · Ride #{row.rideNumber}
+          <div className="grid-2" style={{ marginBottom: 16 }}>
+            <div className="stat-card"><div className="stat-label">Max HR</div><div className="stat-val">{latestCarol?.heartRateMax || "--"}</div></div>
+            <div className="stat-card blue"><div className="stat-label">Ride count</div><div className="stat-val">{allCarolRows.length}</div></div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 16 }}>
+            <CarolTrendChart title="Peak power over time (REHIT)" points={peakPowerTrend} lineColor="var(--lime)" unit="W" />
+            <CarolTrendChart title="MANP over time (REHIT)" points={manpTrend} lineColor="var(--blue)" unit="" />
+            <CarolTrendChart title="Calories incl EPOC over time" points={caloriesTrend} lineColor="var(--amber)" unit="" />
+          </div>
+          <div className="grid-2">
+            <div className="card">
+              <div className="card-header"><div className="card-title">REHIT rides</div></div>
+              {rehitCarolRows.length ? (
+                rehitCarolRows.slice(0, 24).map((row) => (
+                  <div className="metric-row" key={`rehit-${row.sessionDate}-${row.rideNumber}`}>
+                    <div className="metric-label">{formatCarolDateLabel(row.sessionDate)}</div>
+                    <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>Peak <b style={{ color: "var(--text)" }}>{row.peakPowerWatts}</b></span>
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>Sprint <b style={{ color: "var(--text)" }}>{row.avgSprintPower}</b></span>
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>MANP <b style={{ color: "var(--text)" }}>{row.manp}</b></span>
+                    </div>
                   </div>
-                  <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Score <b style={{ color: "var(--text)" }}>{row.fitnessScore}</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Peak <b style={{ color: "var(--text)" }}>{row.peakPowerWatts}W</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Cal <b style={{ color: "var(--text)" }}>{row.calories}</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Max HR <b style={{ color: "var(--text)" }}>{row.maxHr}</b></span>
+                ))
+              ) : (
+                <div className="card-body"><p style={{ color: "var(--text3)" }}>No REHIT sessions yet.</p></div>
+              )}
+            </div>
+            <div className="card">
+              <div className="card-header"><div className="card-title">Fat Burn rides</div></div>
+              {fatBurnCarolRows.length ? (
+                fatBurnCarolRows.slice(0, 24).map((row) => (
+                  <div className="metric-row" key={`fat-${row.sessionDate}-${row.rideNumber}`}>
+                    <div className="metric-label">{formatCarolDateLabel(row.sessionDate)}</div>
+                    <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>Duration <b style={{ color: "var(--text)" }}>{row.durationSeconds}</b>s</span>
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>Calories <b style={{ color: "var(--text)" }}>{row.caloriesActive}</b></span>
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>Avg HR <b style={{ color: "var(--text)" }}>{row.heartRateAvg}</b></span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="card-body"><p style={{ color: "var(--text3)" }}>No Fat Burn sessions yet.</p></div>
+              )}
+            </div>
+          </div>
+          <div className="card" style={{ marginTop: 14 }}>
+            <div className="card-header"><div className="card-title">All ride history</div></div>
+            {allCarolRows.length ? (
+              allCarolRows.slice(0, 30).map((row) => (
+                <div className="metric-row" key={`all-${row.sessionDate}-${row.rideNumber}`}>
+                  <div className="metric-label">{formatCarolDateLabel(row.sessionDate)} · {row.rideType}</div>
+                  <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Peak <b style={{ color: "var(--text)" }}>{row.peakPowerWatts}</b></span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>MANP <b style={{ color: "var(--text)" }}>{row.manp}</b></span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>EPOC cal <b style={{ color: "var(--text)" }}>{row.caloriesInclEpoc}</b></span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Max HR <b style={{ color: "var(--text)" }}>{row.heartRateMax}</b></span>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="card-body"><p style={{ color: "var(--text3)" }}>No rides logged for this tab yet.</p></div>
+              <div className="card-body"><p style={{ color: "var(--text3)" }}>No rides logged yet.</p></div>
             )}
           </div>
         </div>
