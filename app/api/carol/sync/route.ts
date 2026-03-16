@@ -20,6 +20,15 @@ const CAROL_TYPES = [
 
 type CarolType = (typeof CAROL_TYPES)[number];
 
+class CarolApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string" && value.trim().length > 0) return value.trim();
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -155,7 +164,8 @@ async function fetchCarolRidesForType(params: {
     );
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
     if (!response.ok) {
-      throw new Error(
+      throw new CarolApiError(
+        response.status,
         asString(payload.message, "") ||
           asString(payload.error, "") ||
           `CAROL ride fetch failed for ${type} (page ${page}).`,
@@ -286,6 +296,107 @@ async function upsertCarolRowsWithFallback(
   }
 }
 
+async function loginToCarol(params: {
+  carolUsername: string;
+  carolPassword: string;
+}): Promise<{ token: string; riderId: string }> {
+  const { carolUsername, carolPassword } = params;
+  const loginResponse = await fetch("https://i.carolbike.com/rider-api/auth/login?v=3.4.27", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      username: carolUsername,
+      password: carolPassword,
+    }),
+    cache: "no-store",
+  });
+  const loginPayload = (await loginResponse.json().catch(() => ({}))) as Record<string, unknown>;
+  if (!loginResponse.ok) {
+    throw new CarolApiError(
+      401,
+      asString(loginPayload.message, "") ||
+        asString(loginPayload.error, "") ||
+        "CAROL authentication failed.",
+    );
+  }
+
+  const token = extractToken(loginPayload);
+  const riderId = extractRiderId(loginPayload);
+  if (!token || !riderId) {
+    throw new CarolApiError(502, "CAROL login response missing token or rider ID.");
+  }
+
+  return { token, riderId };
+}
+
+async function collectCarolRides(params: {
+  token: string;
+  riderId: string;
+}) {
+  const { token, riderId } = params;
+  const ridesByType: Record<string, CarolRide[]> = {};
+  const failedTypes: Record<string, string> = {};
+  let unauthorizedFailures = 0;
+  let successfulTypes = 0;
+
+  for (const type of CAROL_TYPES) {
+    try {
+      ridesByType[type] = await fetchCarolRidesForType({ token, riderId, type });
+      successfulTypes += 1;
+    } catch (typeError) {
+      ridesByType[type] = [];
+      if (
+        typeError instanceof CarolApiError &&
+        (typeError.status === 401 || typeError.status === 403)
+      ) {
+        unauthorizedFailures += 1;
+      }
+      failedTypes[type] =
+        typeError instanceof Error ? typeError.message : `Failed to fetch rides for ${type}.`;
+    }
+  }
+
+  return {
+    ridesByType,
+    failedTypes,
+    unauthorizedFailures,
+    successfulTypes,
+  };
+}
+
+async function updateUserCarolAuthWithFallback(
+  supabase: NonNullable<ReturnType<typeof createSupabaseAdminClient>>,
+  userId: string,
+  payload: {
+    carol_token?: string;
+    carol_rider_id?: string;
+    carol_username?: string;
+  },
+) {
+  const updatePayload: Record<string, unknown> = {};
+  if (payload.carol_token) updatePayload.carol_token = payload.carol_token;
+  if (payload.carol_rider_id) updatePayload.carol_rider_id = payload.carol_rider_id;
+  if (payload.carol_username) updatePayload.carol_username = payload.carol_username;
+  if (!Object.keys(updatePayload).length) return;
+
+  const removedColumns = new Set<string>();
+  while (true) {
+    const updateResult = await supabase
+      .from("users")
+      .update(updatePayload)
+      .eq("id", userId);
+    if (!updateResult.error) return;
+
+    const missingColumn = extractMissingColumnName(updateResult.error.message);
+    if (!missingColumn || removedColumns.has(missingColumn)) {
+      throw new Error(updateResult.error.message);
+    }
+    removedColumns.add(missingColumn);
+    delete updatePayload[missingColumn];
+    if (!Object.keys(updatePayload).length) return;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const { context, error } = await getActorContext();
@@ -294,16 +405,10 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json()) as Body;
-    const carolUsername = asString(body.carolUsername, "");
-    const carolPassword = asString(body.carolPassword, "");
+    const providedCarolUsername = asString(body.carolUsername, "");
+    const providedCarolPassword = asString(body.carolPassword, "");
     const requestedUserId = asString(body.userId, "");
     const actorUserId = asString(context.dbUser.id, "");
-    if (!carolUsername || !carolPassword) {
-      return NextResponse.json(
-        { success: false, error: "carolUsername and carolPassword are required." },
-        { status: 400 },
-      );
-    }
     if (!actorUserId) {
       return NextResponse.json(
         { success: false, error: "Authenticated user record is missing id." },
@@ -331,7 +436,7 @@ export async function POST(request: Request) {
 
     const targetUserRes = await supabaseAdmin
       .from("users")
-      .select("id,role")
+      .select("*")
       .eq("id", targetUserId)
       .limit(1);
     if (targetUserRes.error) throw new Error(targetUserRes.error.message);
@@ -345,50 +450,95 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    const targetUser = targetUserRes.data[0] as Record<string, unknown>;
+    const storedCarolToken = asString(targetUser.carol_token, "");
+    const storedCarolRiderId = asString(targetUser.carol_rider_id, "");
+    const storedCarolUsername = asString(targetUser.carol_username, "");
 
-    const loginResponse = await fetch("https://i.carolbike.com/rider-api/auth/login?v=3.4.27", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify({
-        username: carolUsername,
-        password: carolPassword,
-      }),
-      cache: "no-store",
-    });
-    const loginPayload = (await loginResponse.json().catch(() => ({}))) as Record<string, unknown>;
-    if (!loginResponse.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            asString(loginPayload.message, "") ||
-            asString(loginPayload.error, "") ||
-            "CAROL authentication failed.",
-        },
-        { status: 401 },
-      );
-    }
+    let activeToken = storedCarolToken;
+    let activeRiderId = storedCarolRiderId;
+    let activeCarolUsername = providedCarolUsername || storedCarolUsername;
+    let collection:
+      | Awaited<ReturnType<typeof collectCarolRides>>
+      | null = null;
 
-    const token = extractToken(loginPayload);
-    const riderId = extractRiderId(loginPayload);
-    if (!token || !riderId) {
-      return NextResponse.json(
-        { success: false, error: "CAROL login response missing token or rider ID." },
-        { status: 502 },
-      );
-    }
-
-    const ridesByType: Record<string, CarolRide[]> = {};
-    const failedTypes: Record<string, string> = {};
-    for (const type of CAROL_TYPES) {
-      try {
-        ridesByType[type] = await fetchCarolRidesForType({ token, riderId, type });
-      } catch (typeError) {
-        ridesByType[type] = [];
-        failedTypes[type] =
-          typeError instanceof Error ? typeError.message : `Failed to fetch rides for ${type}.`;
+    if (activeToken && activeRiderId) {
+      collection = await collectCarolRides({
+        token: activeToken,
+        riderId: activeRiderId,
+      });
+      const tokenLikelyExpired =
+        collection.successfulTypes === 0 && collection.unauthorizedFailures > 0;
+      if (tokenLikelyExpired) {
+        if (!providedCarolPassword) {
+          return NextResponse.json(
+            {
+              success: false,
+              needs_reauth: true,
+              error: "Stored CAROL token expired. Please re-enter your CAROL password.",
+            },
+            { status: 401 },
+          );
+        }
+        if (!activeCarolUsername) {
+          return NextResponse.json(
+            { success: false, error: "CAROL username is required to refresh your connection." },
+            { status: 400 },
+          );
+        }
+        const login = await loginToCarol({
+          carolUsername: activeCarolUsername,
+          carolPassword: providedCarolPassword,
+        });
+        activeToken = login.token;
+        activeRiderId = login.riderId;
+        await updateUserCarolAuthWithFallback(supabaseAdmin, targetUserId, {
+          carol_token: activeToken,
+          carol_rider_id: activeRiderId,
+          carol_username: activeCarolUsername,
+        });
+        collection = await collectCarolRides({
+          token: activeToken,
+          riderId: activeRiderId,
+        });
+      } else if (providedCarolUsername && providedCarolUsername !== storedCarolUsername) {
+        await updateUserCarolAuthWithFallback(supabaseAdmin, targetUserId, {
+          carol_username: providedCarolUsername,
+        });
       }
+    } else {
+      if (!activeCarolUsername || !providedCarolPassword) {
+        return NextResponse.json(
+          {
+            success: false,
+            error:
+              "CAROL username and password are required for first-time connection.",
+          },
+          { status: 400 },
+        );
+      }
+      const login = await loginToCarol({
+        carolUsername: activeCarolUsername,
+        carolPassword: providedCarolPassword,
+      });
+      activeToken = login.token;
+      activeRiderId = login.riderId;
+      await updateUserCarolAuthWithFallback(supabaseAdmin, targetUserId, {
+        carol_token: activeToken,
+        carol_rider_id: activeRiderId,
+        carol_username: activeCarolUsername,
+      });
+      collection = await collectCarolRides({
+        token: activeToken,
+        riderId: activeRiderId,
+      });
     }
+
+    if (!collection) {
+      throw new Error("Unable to collect CAROL rides.");
+    }
+    const ridesByType = collection.ridesByType;
+    const failedTypes = collection.failedTypes;
 
     const allRows: Array<Record<string, unknown>> = [];
     const typesSummary: Record<string, number> = {};
@@ -428,8 +578,8 @@ export async function POST(request: Request) {
           ...mappedRide,
           raw_data: {
             source: "carol_api_sync",
-            rider_id: riderId,
-            username: carolUsername,
+            rider_id: activeRiderId,
+            username: activeCarolUsername || null,
             ride,
           },
         });

@@ -48,6 +48,20 @@ export default async function MemberConnectCarolPage() {
     [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ").trim() ||
     clerkUser?.username ||
     "Member";
+  const savedCarolUsername =
+    typeof context.dbUser.carol_username === "string"
+      ? context.dbUser.carol_username
+      : "";
+  const hasStoredCarolToken =
+    typeof context.dbUser.carol_token === "string" &&
+    context.dbUser.carol_token.trim().length > 0;
 
-  return <MemberConnectCarolForm userId={memberId} memberName={memberName} />;
+  return (
+    <MemberConnectCarolForm
+      userId={memberId}
+      memberName={memberName}
+      savedCarolUsername={savedCarolUsername}
+      hasStoredCarolToken={hasStoredCarolToken}
+    />
+  );
 }

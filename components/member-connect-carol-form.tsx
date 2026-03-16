@@ -11,15 +11,23 @@ type SyncResult = {
 type Props = {
   userId: string;
   memberName: string;
+  savedCarolUsername: string;
+  hasStoredCarolToken: boolean;
 };
 
-export function MemberConnectCarolForm({ userId, memberName }: Props) {
-  const [carolUsername, setCarolUsername] = useState("");
+export function MemberConnectCarolForm({
+  userId,
+  memberName,
+  savedCarolUsername,
+  hasStoredCarolToken,
+}: Props) {
+  const [carolUsername, setCarolUsername] = useState(savedCarolUsername);
   const [carolPassword, setCarolPassword] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
   const [result, setResult] = useState<SyncResult | null>(null);
+  const [requiresPassword, setRequiresPassword] = useState(false);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,7 +35,11 @@ export function MemberConnectCarolForm({ userId, memberName }: Props) {
     setResult(null);
     setIsSyncing(true);
     try {
-      setProgress("Connecting to CAROL…");
+      setProgress(
+        carolPassword
+          ? "Connecting to CAROL…"
+          : "Syncing with saved CAROL session…",
+      );
       const response = await fetch("/api/carol/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -39,9 +51,13 @@ export function MemberConnectCarolForm({ userId, memberName }: Props) {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload.success === false) {
+        if (payload.needs_reauth) {
+          setRequiresPassword(true);
+        }
         throw new Error(payload.error || "Unable to sync CAROL data.");
       }
       setProgress("Import complete.");
+      setRequiresPassword(false);
       setResult({
         imported: Number(payload.imported || 0),
         types: (payload.types && typeof payload.types === "object" ? payload.types : {}) as Record<string, number>,
@@ -83,7 +99,7 @@ export function MemberConnectCarolForm({ userId, memberName }: Props) {
                 type="text"
                 value={carolUsername}
                 onChange={(event) => setCarolUsername(event.target.value)}
-                required
+                required={!hasStoredCarolToken}
                 autoComplete="username"
                 style={{
                   background: "#181910",
@@ -95,12 +111,14 @@ export function MemberConnectCarolForm({ userId, memberName }: Props) {
               />
             </label>
             <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 12, color: "#9b9889" }}>CAROL password</span>
+              <span style={{ fontSize: 12, color: "#9b9889" }}>
+                CAROL password {hasStoredCarolToken ? "(only needed if token expired)" : ""}
+              </span>
               <input
                 type="password"
                 value={carolPassword}
                 onChange={(event) => setCarolPassword(event.target.value)}
-                required
+                required={!hasStoredCarolToken || requiresPassword}
                 autoComplete="current-password"
                 style={{
                   background: "#181910",
@@ -111,6 +129,11 @@ export function MemberConnectCarolForm({ userId, memberName }: Props) {
                 }}
               />
             </label>
+            {hasStoredCarolToken ? (
+              <div style={{ fontSize: 12, color: "#afbda5" }}>
+                Saved CAROL connection found. You can re-sync without entering password unless CAROL requires re-authentication.
+              </div>
+            ) : null}
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button
