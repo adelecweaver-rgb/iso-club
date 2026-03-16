@@ -323,7 +323,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       .select("session_date,exercise,output,concentric_max,eccentric_max")
       .eq("member_id", memberId)
       .order("session_date", { ascending: false })
-      .limit(10),
+      .limit(1200),
     supabase
       .from("fit3d_scans")
       .select("scan_date,body_fat_pct,weight_lbs,lean_mass_lbs,posture_head_forward_in,posture_shoulder_forward_in,posture_hip_forward_in")
@@ -433,7 +433,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     calories: hasValue(row.calories) ? Math.round(numberOr(row.calories, 0)).toString() : "--",
     maxHr: hasValue(row.max_hr) ? Math.round(numberOr(row.max_hr, 0)).toString() : "--",
   }));
-  payload.arxHistory = arxRows.slice(0, 6).map((row) => ({
+  payload.arxHistory = arxRows.map((row) => ({
     label: `${formatDateForLabel(row.session_date)} · ${stringOr(row.exercise, "ARX exercise")}`,
     value: Math.round(numberOr(row.concentric_max, numberOr(row.output, 0))).toString(),
   }));

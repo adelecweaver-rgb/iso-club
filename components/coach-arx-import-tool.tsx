@@ -9,54 +9,81 @@ type MemberOption = {
 };
 
 type PreviewRow = {
-  scan_date: string;
-  weight_lbs: number | null;
-  body_fat_pct: number | null;
-  lean_mass_lbs: number | null;
+  external_id: string;
+  session_date: string;
+  exercise: string;
+  machine_type: string | null;
+  concentric_max: number | null;
+  eccentric_max: number | null;
+  output: number | null;
+};
+
+type Summary = {
+  total_sets: number;
+  exercise_count: number;
+  date_start: string;
+  date_end: string;
 };
 
 type ApiResponse = {
   success?: boolean;
   error?: string;
   members?: MemberOption[];
+  member?: MemberOption;
   row_count?: number;
   preview_rows?: PreviewRow[];
-  member?: MemberOption;
+  summary?: Summary;
   imported_count?: number;
+  skipped_duplicates?: number;
+  exercise_count?: number;
+  missing_columns?: string[];
 };
 
-function formatScanDate(isoValue: string): string {
+function formatDate(isoValue: string): string {
   const parsed = new Date(isoValue);
   if (Number.isNaN(parsed.getTime())) return isoValue;
-  return parsed.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return parsed.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
-function formatMaybeNumber(value: number | null, digits = 1): string {
+function formatNumber(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "—";
-  return value.toFixed(digits);
+  return String(value);
 }
 
-export function CoachFit3dImportTool({ initialMembers }: { initialMembers: MemberOption[] }) {
+export function CoachArxImportTool({ initialMembers }: { initialMembers: MemberOption[] }) {
   const [members] = useState<MemberOption[]>(initialMembers);
   const [selectedMemberId, setSelectedMemberId] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [csvText, setCsvText] = useState("");
   const [previewRows, setPreviewRows] = useState<PreviewRow[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
   const [status, setStatus] = useState<{ kind: "idle" | "info" | "error" | "success"; message: string }>({
     kind: "idle",
     message: "",
   });
+  const [missingColumns, setMissingColumns] = useState<string[]>([]);
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [previewCount, setPreviewCount] = useState(0);
   const [hasSuccessfulImport, setHasSuccessfulImport] = useState(false);
   const [fileInputKey, setFileInputKey] = useState(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const selectedMember = useMemo(
-    () => members.find((member) => member.id === selectedMemberId) ?? null,
-    [members, selectedMemberId],
-  );
+  const groupedPreview = useMemo(() => {
+    const group = new Map<string, PreviewRow[]>();
+    for (const row of previewRows) {
+      const key = row.exercise || "ARX Session";
+      const existing = group.get(key) ?? [];
+      existing.push(row);
+      group.set(key, existing);
+    }
+    return Array.from(group.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [previewRows]);
 
   async function readCsvText(): Promise<string> {
     if (csvText.trim()) return csvText;
@@ -68,13 +95,11 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
 
   async function previewCsv() {
     try {
-      if (!selectedMemberId) {
-        throw new Error("Select a member before previewing.");
-      }
+      if (!selectedMemberId) throw new Error("Select a member before previewing.");
       setIsPreviewing(true);
-      setStatus({ kind: "info", message: "Parsing CSV preview…" });
+      setStatus({ kind: "info", message: "Parsing ARX CSV preview…" });
       const text = await readCsvText();
-      const response = await fetch("/api/coach/import/fit3d", {
+      const response = await fetch("/api/coach/import/arx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -85,21 +110,22 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
       });
       const payload = (await response.json().catch(() => ({}))) as ApiResponse;
       if (!response.ok || payload.success === false) {
-        throw new Error(payload.error || "Unable to preview CSV.");
+        throw new Error(payload.error || "Unable to preview ARX CSV.");
       }
       setPreviewRows(Array.isArray(payload.preview_rows) ? payload.preview_rows : []);
-      setPreviewCount(Number(payload.row_count || 0));
+      setSummary(payload.summary ?? null);
+      setMissingColumns(Array.isArray(payload.missing_columns) ? payload.missing_columns : []);
       setStatus({
         kind: "success",
-        message: `Preview ready — ${Number(payload.row_count || 0)} scans detected.`,
+        message: `Preview ready — ${Number(payload.row_count || 0)} sets detected.`,
       });
       setHasSuccessfulImport(false);
     } catch (error) {
       setPreviewRows([]);
-      setPreviewCount(0);
+      setSummary(null);
       setStatus({
         kind: "error",
-        message: error instanceof Error ? error.message : "Unable to preview CSV.",
+        message: error instanceof Error ? error.message : "Unable to preview ARX CSV.",
       });
       setHasSuccessfulImport(false);
     } finally {
@@ -109,16 +135,13 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
 
   async function importCsv() {
     try {
-      if (!selectedMemberId) {
-        throw new Error("Select a member before importing.");
-      }
+      if (!selectedMemberId) throw new Error("Select a member before importing.");
       const text = await readCsvText();
-      if (!text.trim()) {
-        throw new Error("CSV file is empty.");
-      }
+      if (!text.trim()) throw new Error("CSV file is empty.");
+
       setIsImporting(true);
-      setStatus({ kind: "info", message: "Importing scans into Supabase…" });
-      const response = await fetch("/api/coach/import/fit3d", {
+      setStatus({ kind: "info", message: "Importing ARX sets into Supabase…" });
+      const response = await fetch("/api/coach/import/arx", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -129,19 +152,24 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
       });
       const payload = (await response.json().catch(() => ({}))) as ApiResponse;
       if (!response.ok || payload.success === false) {
-        throw new Error(payload.error || "Unable to import CSV.");
+        throw new Error(payload.error || "Unable to import ARX CSV.");
       }
+
       const importedCount = Number(payload.imported_count || 0);
-      const memberName = payload.member?.full_name || selectedMember?.full_name || "member";
+      const exerciseCount = Number(payload.exercise_count || 0);
+      const duplicateCount = Number(payload.skipped_duplicates || 0);
+      setMissingColumns(Array.isArray(payload.missing_columns) ? payload.missing_columns : []);
       setStatus({
         kind: "success",
-        message: `${importedCount} scans imported for ${memberName}.`,
+        message:
+          `${importedCount} sets imported across ${exerciseCount} exercises` +
+          (duplicateCount > 0 ? ` (${duplicateCount} duplicates skipped).` : "."),
       });
       setHasSuccessfulImport(true);
     } catch (error) {
       setStatus({
         kind: "error",
-        message: error instanceof Error ? error.message : "Unable to import CSV.",
+        message: error instanceof Error ? error.message : "Unable to import ARX CSV.",
       });
       setHasSuccessfulImport(false);
     } finally {
@@ -154,31 +182,32 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
     setSelectedFile(null);
     setCsvText("");
     setPreviewRows([]);
-    setPreviewCount(0);
+    setSummary(null);
     setStatus({ kind: "idle", message: "" });
+    setMissingColumns([]);
     setHasSuccessfulImport(false);
     setFileInputKey((previous) => previous + 1);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
   return (
     <main style={{ minHeight: "100vh", background: "#0b0c09", color: "#edeae0", padding: 24 }}>
-      <div style={{ maxWidth: 1100, margin: "0 auto", display: "grid", gap: 16 }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: 34, fontFamily: "Georgia, serif" }}>Fit3D Historical Import</h1>
-          <p style={{ marginTop: 8, color: "#9b9889" }}>
-            One-time CSV import for historical Fit3D scans.
-          </p>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <Link href="/coach/import/fit3d" className="btn btn-sm btn-lime">
-            Fit3D Import
-          </Link>
-          <Link href="/coach/import/arx" className="btn btn-sm">
-            ARX Import
-          </Link>
+      <div style={{ maxWidth: 1180, margin: "0 auto", display: "grid", gap: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 34, fontFamily: "Georgia, serif" }}>ARX Historical Import</h1>
+            <p style={{ marginTop: 8, color: "#9b9889" }}>
+              One-time CSV import for historical ARX sets.
+            </p>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <Link href="/coach/import/fit3d" className="btn btn-sm">
+              Fit3D Import
+            </Link>
+            <Link href="/coach/import/arx" className="btn btn-sm btn-lime">
+              ARX Import
+            </Link>
+          </div>
         </div>
 
         <div
@@ -217,7 +246,7 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
           </div>
 
           <div style={{ display: "grid", gap: 6 }}>
-            <label style={{ fontSize: 12, color: "#9b9889" }}>Fit3D CSV file</label>
+            <label style={{ fontSize: 12, color: "#9b9889" }}>ARX CSV file</label>
             <input
               key={fileInputKey}
               ref={fileInputRef}
@@ -228,7 +257,7 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
                 setSelectedFile(file);
                 setCsvText("");
                 setPreviewRows([]);
-                setPreviewCount(0);
+                setSummary(null);
                 setStatus({ kind: "idle", message: "" });
                 setHasSuccessfulImport(false);
               }}
@@ -344,6 +373,21 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
               ) : null}
             </div>
           ) : null}
+
+          {missingColumns.length ? (
+            <div
+              style={{
+                fontSize: 12,
+                color: "#f0b955",
+                border: "1px solid rgba(240,185,85,0.4)",
+                background: "rgba(240,185,85,0.08)",
+                borderRadius: 8,
+                padding: "10px 12px",
+              }}
+            >
+              Missing recommended columns in arx_sessions: {missingColumns.join(", ")}. Import will still run with fallback, but dedupe and mapped fields work best after applying schema update.
+            </div>
+          ) : null}
         </div>
 
         <div
@@ -353,51 +397,57 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
             borderRadius: 12,
             padding: 16,
             overflowX: "auto",
+            display: "grid",
+            gap: 12,
           }}
         >
-          <div style={{ fontSize: 12, color: "#9b9889", marginBottom: 10 }}>
-            Preview ({previewCount} rows): date, weight, body fat %, lean mass
-          </div>
-          {previewRows.length ? (
-            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 620 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.14)", padding: "8px 6px" }}>
-                    Scan date
-                  </th>
-                  <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.14)", padding: "8px 6px" }}>
-                    Weight (lbs)
-                  </th>
-                  <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.14)", padding: "8px 6px" }}>
-                    Body fat %
-                  </th>
-                  <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.14)", padding: "8px 6px" }}>
-                    Lean mass (lbs)
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {previewRows.map((row, index) => (
-                  <tr key={`${row.scan_date}-${index}`}>
-                    <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>
-                      {formatScanDate(row.scan_date)}
-                    </td>
-                    <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>
-                      {formatMaybeNumber(row.weight_lbs)}
-                    </td>
-                    <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>
-                      {formatMaybeNumber(row.body_fat_pct, 2)}
-                    </td>
-                    <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>
-                      {formatMaybeNumber(row.lean_mass_lbs)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          {summary ? (
+            <div style={{ fontSize: 12, color: "#afbda5" }}>
+              {summary.total_sets} total sets across {summary.exercise_count} exercises from{" "}
+              {summary.date_start ? formatDate(summary.date_start) : "—"} to{" "}
+              {summary.date_end ? formatDate(summary.date_end) : "—"}.
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: "#9b9889" }}>
+              Preview will show grouped ARX sets and date range summary.
+            </div>
+          )}
+
+          {groupedPreview.length ? (
+            groupedPreview.map(([exercise, rows]) => (
+              <div key={exercise} style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, overflow: "hidden" }}>
+                <div style={{ background: "rgba(255,255,255,0.04)", padding: "8px 10px", fontSize: 12, fontWeight: 600 }}>
+                  {exercise} ({rows.length})
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 860 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.12)", padding: "8px 6px" }}>Date</th>
+                      <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.12)", padding: "8px 6px" }}>Machine</th>
+                      <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.12)", padding: "8px 6px" }}>Concentric max</th>
+                      <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.12)", padding: "8px 6px" }}>Eccentric max</th>
+                      <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.12)", padding: "8px 6px" }}>Output</th>
+                      <th style={{ textAlign: "left", fontSize: 11, color: "#9b9889", borderBottom: "1px solid rgba(255,255,255,0.12)", padding: "8px 6px" }}>External ID</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row) => (
+                      <tr key={row.external_id}>
+                        <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>{formatDate(row.session_date)}</td>
+                        <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>{row.machine_type || "—"}</td>
+                        <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>{formatNumber(row.concentric_max)}</td>
+                        <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>{formatNumber(row.eccentric_max)}</td>
+                        <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 13 }}>{formatNumber(row.output)}</td>
+                        <td style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "8px 6px", fontSize: 12, color: "#9b9889" }}>{row.external_id}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))
           ) : (
             <div style={{ fontSize: 13, color: "#9b9889" }}>
-              Upload CSV and click Preview CSV to inspect all rows before import.
+              Upload CSV and click Preview CSV to inspect grouped ARX sets before import.
             </div>
           )}
         </div>

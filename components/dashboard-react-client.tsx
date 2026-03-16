@@ -508,9 +508,14 @@ export function DashboardReactClient({
               Protocols
             </button>
             {canSeeCoachImportData ? (
-              <Link className="nav-item" href="/coach/import/fit3d">
-                Import Data
-              </Link>
+              <>
+                <Link className="nav-item" href="/coach/import/fit3d">
+                  Import Data
+                </Link>
+                <Link className="nav-item" href="/coach/import/arx">
+                  Import ARX
+                </Link>
+              </>
             ) : null}
           </div>
         </div>
@@ -563,9 +568,14 @@ export function DashboardReactClient({
                 </Link>
               </>
             ) : canSeeCoachImportData ? (
-              <Link className="btn btn-sm" href="/coach/import/fit3d">
-                Import Fit3D
-              </Link>
+              <>
+                <Link className="btn btn-sm" href="/coach/import/fit3d">
+                  Import Fit3D
+                </Link>
+                <Link className="btn btn-sm" href="/coach/import/arx">
+                  Import ARX
+                </Link>
+              </>
             ) : null}
             <button
               className="btn notif-wrap btn-sm"
