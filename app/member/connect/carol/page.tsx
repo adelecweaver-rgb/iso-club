@@ -1,0 +1,53 @@
+import { redirect } from "next/navigation";
+import { MemberConnectCarolForm } from "@/components/member-connect-carol-form";
+import { getCurrentAuthState, routeForRole } from "@/lib/server/roles";
+import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
+import { getActorContext } from "@/lib/server/actor";
+
+export default async function MemberConnectCarolPage() {
+  if (!isClerkConfigured()) {
+    return (
+      <main className="shell">
+        <div className="card">
+          <h1 className="title">Authentication not configured</h1>
+          <p className="muted">Set Clerk environment variables in Vercel.</p>
+        </div>
+      </main>
+    );
+  }
+
+  const authState = await getCurrentAuthState();
+  if (!authState.isAuthenticated) {
+    redirect("/sign-in");
+  }
+  if (authState.role !== "member") {
+    redirect(routeForRole(authState.role));
+  }
+  if (!authState.onboardingComplete) {
+    redirect("/onboarding");
+  }
+
+  const { context } = await getActorContext();
+  if (!context) {
+    redirect("/sign-in");
+  }
+  const memberId = String(context.dbUser.id || "").trim();
+  if (!memberId) {
+    return (
+      <main className="shell">
+        <div className="card">
+          <h1 className="title">Unable to load member profile</h1>
+          <p className="muted">Could not resolve your user ID for CAROL sync.</p>
+        </div>
+      </main>
+    );
+  }
+
+  const clerkUser = await safeCurrentUser();
+  const memberName =
+    [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ").trim() ||
+    clerkUser?.username ||
+    "Member";
+
+  return <MemberConnectCarolForm userId={memberId} memberName={memberName} />;
+}
