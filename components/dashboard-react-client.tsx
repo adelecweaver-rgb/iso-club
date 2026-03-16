@@ -17,6 +17,7 @@ type MemberSection =
   | "schedule";
 
 type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
+type ActorRole = "member" | "coach" | "admin" | "staff" | "unknown";
 
 type CarolSession = {
   sessionDate: string;
@@ -208,12 +209,14 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 export function DashboardReactClient({
   payload,
   role,
+  actorRole,
   route,
   initialMemberView,
   initialCoachView,
 }: {
   payload: DashboardPayload;
   role: "member" | "coach";
+  actorRole: ActorRole;
   route: "dashboard" | "coach";
   initialMemberView: MemberSection;
   initialCoachView: CoachSection;
@@ -392,6 +395,7 @@ export function DashboardReactClient({
   }, [messageDraft, messages, mode, peerId, selectedCoachRecipientId, sendingMessage]);
 
   const messageBadge = unreadCount > 0 ? unreadCount : undefined;
+  const canSeeCoachImportData = actorRole === "coach" || actorRole === "admin";
 
   const activeMemberView = (view: MemberSection): string => (memberView === view ? "nav-item active" : "nav-item");
   const activeCoachView = (view: CoachSection): string => (coachView === view ? "nav-item active" : "nav-item");
@@ -503,6 +507,11 @@ export function DashboardReactClient({
             <button className={activeCoachView("protocols")} onClick={() => setCoachView("protocols")} type="button">
               Protocols
             </button>
+            {canSeeCoachImportData ? (
+              <Link className="nav-item" href="/coach/import/fit3d">
+                Import Data
+              </Link>
+            ) : null}
           </div>
         </div>
 
@@ -553,11 +562,11 @@ export function DashboardReactClient({
                   Upload Data
                 </Link>
               </>
-            ) : (
+            ) : canSeeCoachImportData ? (
               <Link className="btn btn-sm" href="/coach/import/fit3d">
                 Import Fit3D
               </Link>
-            )}
+            ) : null}
             <button
               className="btn notif-wrap btn-sm"
               onClick={() => {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getActorContext, isCoachRole } from "@/lib/server/actor";
+import { getActorContext } from "@/lib/server/actor";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 type ImportAction = "preview" | "import";
@@ -42,6 +42,11 @@ type Fit3dPreparedRow = {
   bmr: number | null;
   measurements_raw: Record<string, unknown>;
 };
+
+function isCoachOrAdminRole(role: string): boolean {
+  const normalized = String(role || "").trim().toLowerCase();
+  return normalized === "coach" || normalized === "admin";
+}
 
 const FIT3D_HEADERS = [
   "Scan Date",
@@ -445,9 +450,9 @@ export async function GET() {
     if (!context) {
       return NextResponse.json({ success: false, error: error ?? "Unauthorized." }, { status: 401 });
     }
-    if (!isCoachRole(context.role)) {
+    if (!isCoachOrAdminRole(context.role)) {
       return NextResponse.json(
-        { success: false, error: "Only coach/admin/staff can import Fit3D data." },
+        { success: false, error: "Only coach/admin accounts can import Fit3D data." },
         { status: 403 },
       );
     }
@@ -487,9 +492,9 @@ export async function POST(request: Request) {
     if (!context) {
       return NextResponse.json({ success: false, error: error ?? "Unauthorized." }, { status: 401 });
     }
-    if (!isCoachRole(context.role)) {
+    if (!isCoachOrAdminRole(context.role)) {
       return NextResponse.json(
-        { success: false, error: "Only coach/admin/staff can import Fit3D data." },
+        { success: false, error: "Only coach/admin accounts can import Fit3D data." },
         { status: 403 },
       );
     }

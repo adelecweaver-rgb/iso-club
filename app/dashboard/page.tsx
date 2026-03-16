@@ -672,6 +672,7 @@ export async function DashboardPageView({
       <DashboardReactClient
         payload={payload}
         role={uiRole}
+        actorRole={authState.role}
         route={route}
         initialMemberView={initialMemberView}
         initialCoachView={initialCoachView}

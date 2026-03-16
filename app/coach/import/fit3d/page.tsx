@@ -44,7 +44,7 @@ export default async function CoachFit3dImportPage() {
   if (!authState.isAuthenticated) {
     redirect("/sign-in");
   }
-  if (authState.role === "member" || authState.role === "unknown") {
+  if (!(authState.role === "coach" || authState.role === "admin")) {
     redirect(routeForRole(authState.role));
   }
 
