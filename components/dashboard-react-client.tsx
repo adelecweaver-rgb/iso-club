@@ -59,6 +59,12 @@ type DashboardPayload = {
     shoulderForwardIn: string;
     hipForwardIn: string;
   };
+  scanHistory: Array<{
+    scanDate: string;
+    bodyFatPct: string;
+    weightLbs: string;
+    leanMassLbs: string;
+  }>;
   recoveryCounts: {
     infraredSauna: string;
     coldPlunge: string;
@@ -547,7 +553,11 @@ export function DashboardReactClient({
                   Upload Data
                 </Link>
               </>
-            ) : null}
+            ) : (
+              <Link className="btn btn-sm" href="/coach/import/fit3d">
+                Import Fit3D
+              </Link>
+            )}
             <button
               className="btn notif-wrap btn-sm"
               onClick={() => {
@@ -746,6 +756,29 @@ export function DashboardReactClient({
               <div className="metric-row"><div className="metric-label">Shoulder forward</div><div className="metric-val">{payload.scan.shoulderForwardIn}&quot;</div></div>
               <div className="metric-row"><div className="metric-label">Hip forward</div><div className="metric-val">{payload.scan.hipForwardIn}&quot;</div></div>
             </div>
+          </div>
+          <div className="card" style={{ marginTop: 14 }}>
+            <div className="card-header"><div className="card-title">Historical scans</div></div>
+            {payload.scanHistory.length ? (
+              payload.scanHistory.map((row, index) => (
+                <div className="metric-row" key={`${row.scanDate}-${index}`}>
+                  <div className="metric-label">{row.scanDate || "Recent scan"}</div>
+                  <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                      Weight <b style={{ color: "var(--text)" }}>{row.weightLbs}</b>
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                      Body fat <b style={{ color: "var(--text)" }}>{row.bodyFatPct}%</b>
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                      Lean mass <b style={{ color: "var(--text)" }}>{row.leanMassLbs}</b>
+                    </span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="card-body"><p style={{ color: "var(--text3)" }}>No historical scans yet.</p></div>
+            )}
           </div>
         </div>
 

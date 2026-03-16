@@ -61,6 +61,12 @@ type DashboardPayload = {
     shoulderForwardIn: string;
     hipForwardIn: string;
   };
+  scanHistory: Array<{
+    scanDate: string;
+    bodyFatPct: string;
+    weightLbs: string;
+    leanMassLbs: string;
+  }>;
   recoveryCounts: {
     infraredSauna: string;
     coldPlunge: string;
@@ -204,6 +210,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       shoulderForwardIn: "--",
       hipForwardIn: "--",
     },
+    scanHistory: [],
     recoveryCounts: {
       infraredSauna: "0",
       coldPlunge: "0",
@@ -319,10 +326,10 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       .limit(10),
     supabase
       .from("fit3d_scans")
-      .select("body_fat_pct,weight_lbs,lean_mass_lbs,posture_head_forward_in,posture_shoulder_forward_in,posture_hip_forward_in")
+      .select("scan_date,body_fat_pct,weight_lbs,lean_mass_lbs,posture_head_forward_in,posture_shoulder_forward_in,posture_hip_forward_in")
       .eq("member_id", memberId)
       .order("scan_date", { ascending: false })
-      .limit(1),
+      .limit(120),
     supabase
       .from("wearable_data")
       .select("recovery_score,hrv_ms,sleep_duration_hrs")
@@ -374,7 +381,8 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
 
   const carolRows = Array.isArray(carolRes.data) ? (carolRes.data as Array<Record<string, unknown>>) : [];
   const arxRows = Array.isArray(arxRes.data) ? (arxRes.data as Array<Record<string, unknown>>) : [];
-  const scanRow = Array.isArray(scanRes.data) && scanRes.data.length ? (scanRes.data[0] as Record<string, unknown>) : null;
+  const scanRows = Array.isArray(scanRes.data) ? (scanRes.data as Array<Record<string, unknown>>) : [];
+  const scanRow = scanRows.length ? (scanRows[0] as Record<string, unknown>) : null;
   const whoopRow = Array.isArray(whoopRes.data) && whoopRes.data.length ? (whoopRes.data[0] as Record<string, unknown>) : null;
   const ouraRow = Array.isArray(ouraRes.data) && ouraRes.data.length ? (ouraRes.data[0] as Record<string, unknown>) : null;
   const healthRow =
@@ -441,6 +449,12 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     hipForwardIn:
       scanRow && hasValue(scanRow.posture_hip_forward_in) ? numberOr(scanRow.posture_hip_forward_in, 0).toFixed(1) : "--",
   };
+  payload.scanHistory = scanRows.map((row) => ({
+    scanDate: formatDateForLabel(row.scan_date),
+    bodyFatPct: hasValue(row.body_fat_pct) ? numberOr(row.body_fat_pct, 0).toFixed(2) : "--",
+    weightLbs: hasValue(row.weight_lbs) ? numberOr(row.weight_lbs, 0).toFixed(1) : "--",
+    leanMassLbs: hasValue(row.lean_mass_lbs) ? numberOr(row.lean_mass_lbs, 0).toFixed(1) : "--",
+  }));
 
   const modalityCounts: Record<string, number> = {};
   for (const row of recoveryRows) {
