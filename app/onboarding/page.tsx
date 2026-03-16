@@ -118,9 +118,50 @@ export default async function OnboardingPage() {
         }
       };
 
+      const setOtherLimitationsVisibility = (isVisible) => {
+        if (!limitationsOtherWrap) return;
+        limitationsOtherWrap.style.display = isVisible ? "block" : "none";
+        if (!isVisible && limitationsOtherInput && "value" in limitationsOtherInput) {
+          limitationsOtherInput.value = "";
+        }
+      };
+
       const toggleCheck = (element) => {
-        if (element?.classList) {
-          element.classList.toggle("checked");
+        if (!element?.classList) return;
+        const option = String(element.getAttribute("data-limitations-option") || "").toLowerCase();
+        const screenRoot = document.getElementById("screen-4");
+        const allItems = Array.from(screenRoot?.querySelectorAll(".checkbox-item") || []);
+
+        element.classList.toggle("checked");
+        const isChecked = element.classList.contains("checked");
+
+        if (option === "none" && isChecked) {
+          allItems.forEach((item) => {
+            if (item !== element) item.classList.remove("checked");
+          });
+          setOtherLimitationsVisibility(false);
+          return;
+        }
+
+        if (option === "other") {
+          if (isChecked) {
+            allItems.forEach((item) => {
+              if (item === element) return;
+              if (String(item.getAttribute("data-limitations-option") || "").toLowerCase() === "none") {
+                item.classList.remove("checked");
+              }
+            });
+          }
+          setOtherLimitationsVisibility(isChecked);
+          return;
+        }
+
+        if (isChecked) {
+          allItems.forEach((item) => {
+            if (String(item.getAttribute("data-limitations-option") || "").toLowerCase() === "none") {
+              item.classList.remove("checked");
+            }
+          });
         }
       };
 
@@ -167,6 +208,8 @@ export default async function OnboardingPage() {
       const heightInput = healthInputs[0] || null;
       const phoneInput = healthInputs[2] || null;
       const notesInput = findInScreen("screen-4", "textarea");
+      const limitationsOtherWrap = findInScreen("screen-4", "#limitations-other-wrap");
+      const limitationsOtherInput = findInScreen("screen-4", "#limitations-other-input");
       const deviceCards = () => Array.from(document.querySelectorAll("#screen-5 .device-card.selected"));
 
       const notifCard = document.querySelector(".notif-card");
@@ -221,6 +264,11 @@ export default async function OnboardingPage() {
           })
           .filter(Boolean);
 
+      const selectedLimitations = () =>
+        Array.from(document.querySelectorAll("#screen-4 .checkbox-item.checked .checkbox-label"))
+          .map((label) => String(label.textContent || "").trim())
+          .filter(Boolean);
+
       window.goToDashboard = async () => {
         try {
           const firstName =
@@ -236,10 +284,24 @@ export default async function OnboardingPage() {
             genderSelect && "value" in genderSelect ? String(genderSelect.value || "").trim() : "";
           const notes =
             notesInput && "value" in notesInput ? String(notesInput.value || "").trim() : "";
+          const selectedLimitationItems = selectedLimitations();
+          const limitationsOther =
+            limitationsOtherInput && "value" in limitationsOtherInput
+              ? String(limitationsOtherInput.value || "").trim()
+              : "";
           const heightRaw =
             heightInput && "value" in heightInput ? String(heightInput.value || "").trim() : "";
           const heightInches = parseHeightInches(heightRaw);
           const devices = selectedDeviceNames();
+          const limitationsSummary = selectedLimitationItems.length
+            ? "Physical limitations: " + selectedLimitationItems.join(", ")
+            : "";
+          const limitationsOtherSummary = limitationsOther
+            ? "Other limitation detail: " + limitationsOther
+            : "";
+          const combinedNotes = [notes, limitationsSummary, limitationsOtherSummary]
+            .filter(Boolean)
+            .join("\\n");
 
           if (!phone) {
             setStatus("Phone number is required for SMS notifications.", "error");
@@ -257,7 +319,7 @@ export default async function OnboardingPage() {
               gender: gender || null,
               height_inches: heightInches,
               membership_tier: normalizeTier(selectedTierName()),
-              notes: notes || null,
+              notes: combinedNotes || null,
               whoop_connected: devices.some((name) => name.includes("whoop")),
               oura_connected: devices.some((name) => name.includes("oura")),
               notification_preferences: {

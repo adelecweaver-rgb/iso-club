@@ -34,6 +34,14 @@ function normalizeMembershipTier(value: string | undefined): "essential" | "prem
   return "essential";
 }
 
+function isMissingNotificationPreferencesTable(message: string): boolean {
+  const normalized = String(message || "");
+  return (
+    /member_notification_preferences/i.test(normalized) &&
+    /(does not exist|could not find the table|schema cache)/i.test(normalized)
+  );
+}
+
 export async function POST(request: Request) {
   try {
     const { context, error } = await getActorContext();
@@ -132,12 +140,7 @@ export async function POST(request: Request) {
         },
         { onConflict: "member_id" },
       );
-    if (
-      upsertPrefs.error &&
-      !/relation ["']?member_notification_preferences["']? does not exist|Could not find the table ["']?member_notification_preferences["']?/i.test(
-        upsertPrefs.error.message,
-      )
-    ) {
+    if (upsertPrefs.error && !isMissingNotificationPreferencesTable(upsertPrefs.error.message)) {
       throw new Error(upsertPrefs.error.message);
     }
 

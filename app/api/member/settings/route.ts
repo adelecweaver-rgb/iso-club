@@ -47,6 +47,14 @@ function normalizePrefs(input: NotificationPreferences | undefined) {
   };
 }
 
+function isMissingNotificationPreferencesTable(message: string): boolean {
+  const normalized = String(message || "");
+  return (
+    /member_notification_preferences/i.test(normalized) &&
+    /(does not exist|could not find the table|schema cache)/i.test(normalized)
+  );
+}
+
 export async function GET() {
   try {
     const { context, error } = await getActorContext();
@@ -175,12 +183,7 @@ export async function POST(request: Request) {
     ]);
 
     if (updateUserRes.error) throw new Error(updateUserRes.error.message);
-    if (
-      upsertPrefsRes.error &&
-      !/relation ["']?member_notification_preferences["']? does not exist|Could not find the table ["']?member_notification_preferences["']?/i.test(
-        upsertPrefsRes.error.message,
-      )
-    ) {
+    if (upsertPrefsRes.error && !isMissingNotificationPreferencesTable(upsertPrefsRes.error.message)) {
       throw new Error(upsertPrefsRes.error.message);
     }
 

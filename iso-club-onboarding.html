@@ -346,12 +346,22 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="form-group">
       <label class="form-label">Any injuries or physical limitations?</label>
       <div class="checkbox-grid">
-        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Lower back</span></div>
-        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Knees</span></div>
-        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Shoulders</span></div>
-        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Hips</span></div>
-        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Neck</span></div>
-        <div class="checkbox-item" onclick="toggleCheck(this)"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">None</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="lower-back"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Lower back</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="knees"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Knees</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="shoulders"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Shoulders</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="hips"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Hips</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="neck"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Neck</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="pelvic-floor"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Pelvic floor</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="none"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">None</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="other"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Other</span></div>
+      </div>
+      <div id="limitations-other-wrap" style="display:none;margin-top:10px">
+        <input
+          id="limitations-other-input"
+          type="text"
+          class="form-input"
+          placeholder="Please describe other physical limitations"
+        >
       </div>
     </div>
 
@@ -483,7 +493,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     </div>
 
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:24px;font-size:12.5px;color:var(--text3);text-align:center">
-      Not sure? Start with Essential. You can upgrade anytime from your dashboard — upsells are available for individual services like scan analysis ($99) and 1:1 sessions ($149).
+      Not sure? Start with Essential. You can upgrade anytime from your dashboard. Additional services are available, such as 1:1 consultations.
     </div>
 
     <div class="btn-row">
