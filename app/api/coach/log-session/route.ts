@@ -235,8 +235,8 @@ export async function POST(request: Request) {
           insertResult.error.message,
         )
       ) {
-        const fallbackPayload = { ...carolPayload };
-        delete fallbackPayload.external_id;
+        const { external_id: _externalId, ...fallbackPayload } = carolPayload;
+        void _externalId;
         insertResult = await context.supabase.from("carol_sessions").insert(fallbackPayload);
       }
       if (insertResult.error) throw new Error(insertResult.error.message);
