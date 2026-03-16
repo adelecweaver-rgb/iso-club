@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useMemo, useRef, useState } from "react";
 
 type MemberOption = {
   id: string;
@@ -48,6 +49,9 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
   const [isPreviewing, setIsPreviewing] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [previewCount, setPreviewCount] = useState(0);
+  const [hasSuccessfulImport, setHasSuccessfulImport] = useState(false);
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedMember = useMemo(
     () => members.find((member) => member.id === selectedMemberId) ?? null,
@@ -89,6 +93,7 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
         kind: "success",
         message: `Preview ready — ${Number(payload.row_count || 0)} scans detected.`,
       });
+      setHasSuccessfulImport(false);
     } catch (error) {
       setPreviewRows([]);
       setPreviewCount(0);
@@ -96,6 +101,7 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
         kind: "error",
         message: error instanceof Error ? error.message : "Unable to preview CSV.",
       });
+      setHasSuccessfulImport(false);
     } finally {
       setIsPreviewing(false);
     }
@@ -131,13 +137,29 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
         kind: "success",
         message: `${importedCount} scans imported for ${memberName}.`,
       });
+      setHasSuccessfulImport(true);
     } catch (error) {
       setStatus({
         kind: "error",
         message: error instanceof Error ? error.message : "Unable to import CSV.",
       });
+      setHasSuccessfulImport(false);
     } finally {
       setIsImporting(false);
+    }
+  }
+
+  function resetForm() {
+    setSelectedMemberId("");
+    setSelectedFile(null);
+    setCsvText("");
+    setPreviewRows([]);
+    setPreviewCount(0);
+    setStatus({ kind: "idle", message: "" });
+    setHasSuccessfulImport(false);
+    setFileInputKey((previous) => previous + 1);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
     }
   }
 
@@ -189,6 +211,8 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
           <div style={{ display: "grid", gap: 6 }}>
             <label style={{ fontSize: 12, color: "#9b9889" }}>Fit3D CSV file</label>
             <input
+              key={fileInputKey}
+              ref={fileInputRef}
               type="file"
               accept=".csv,text/csv"
               onChange={(event) => {
@@ -198,6 +222,7 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
                 setPreviewRows([]);
                 setPreviewCount(0);
                 setStatus({ kind: "idle", message: "" });
+                setHasSuccessfulImport(false);
               }}
               style={{
                 background: "#181910",
@@ -247,32 +272,68 @@ export function CoachFit3dImportTool({ initialMembers }: { initialMembers: Membe
           </div>
 
           {status.message ? (
-            <div
-              style={{
-                fontSize: 13,
-                borderRadius: 8,
-                padding: "10px 12px",
-                border:
-                  status.kind === "error"
-                    ? "1px solid rgba(240,112,85,0.35)"
-                    : status.kind === "success"
-                      ? "1px solid rgba(201,240,85,0.35)"
-                      : "1px solid rgba(255,255,255,0.16)",
-                color:
-                  status.kind === "error"
-                    ? "#f07055"
-                    : status.kind === "success"
-                      ? "#c9f055"
-                      : "#afbda5",
-                background:
-                  status.kind === "error"
-                    ? "rgba(240,112,85,0.08)"
-                    : status.kind === "success"
-                      ? "rgba(201,240,85,0.08)"
-                      : "rgba(255,255,255,0.04)",
-              }}
-            >
-              {status.message}
+            <div style={{ display: "grid", gap: 10 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  border:
+                    status.kind === "error"
+                      ? "1px solid rgba(240,112,85,0.35)"
+                      : status.kind === "success"
+                        ? "1px solid rgba(201,240,85,0.35)"
+                        : "1px solid rgba(255,255,255,0.16)",
+                  color:
+                    status.kind === "error"
+                      ? "#f07055"
+                      : status.kind === "success"
+                        ? "#c9f055"
+                        : "#afbda5",
+                  background:
+                    status.kind === "error"
+                      ? "rgba(240,112,85,0.08)"
+                      : status.kind === "success"
+                        ? "rgba(201,240,85,0.08)"
+                        : "rgba(255,255,255,0.04)",
+                }}
+              >
+                {status.message}
+              </div>
+              {hasSuccessfulImport ? (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="btn btn-sm"
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(255,255,255,0.22)",
+                      color: "#edeae0",
+                      borderRadius: 10,
+                      padding: "10px 14px",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Import Another File
+                  </button>
+                  <Link
+                    href="/coach"
+                    className="btn btn-sm"
+                    style={{
+                      background: "#c9f055",
+                      border: "1px solid #c9f055",
+                      color: "#0b0c09",
+                      borderRadius: 10,
+                      padding: "10px 14px",
+                      fontWeight: 600,
+                      textDecoration: "none",
+                    }}
+                  >
+                    Return to Dashboard
+                  </Link>
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
