@@ -457,7 +457,7 @@ export async function POST(request: Request) {
 
     let activeToken = storedCarolToken;
     let activeRiderId = storedCarolRiderId;
-    let activeCarolUsername = providedCarolUsername || storedCarolUsername;
+    const activeCarolUsername = providedCarolUsername || storedCarolUsername;
     let collection:
       | Awaited<ReturnType<typeof collectCarolRides>>
       | null = null;
