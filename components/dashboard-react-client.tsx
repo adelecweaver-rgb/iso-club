@@ -528,6 +528,8 @@ export function DashboardReactClient({
   const [selectedRecoveryDate, setSelectedRecoveryDate] = useState<string>("");
   const [carolDebugData, setCarolDebugData] = useState<Array<Record<string, unknown>>>([]);
   const [carolDebugError, setCarolDebugError] = useState<string | null>(null);
+  const [carolDebugMemberData, setCarolDebugMemberData] = useState<Array<Record<string, unknown>>>([]);
+  const [carolDebugMemberError, setCarolDebugMemberError] = useState<string | null>(null);
   const [carolDebugLoading, setCarolDebugLoading] = useState(false);
 
   const displayName = useMemo(
@@ -566,6 +568,8 @@ export function DashboardReactClient({
     if (!user?.id) {
       setCarolDebugData([]);
       setCarolDebugError("Clerk user ID is unavailable.");
+      setCarolDebugMemberData([]);
+      setCarolDebugMemberError(payload.memberId ? null : "Database member ID is unavailable.");
       return;
     }
 
@@ -589,10 +593,28 @@ export function DashboardReactClient({
         if (cancelled) return;
         setCarolDebugData(Array.isArray(data) ? (data as Array<Record<string, unknown>>) : []);
         setCarolDebugError(error ? error.message : null);
+
+        if (payload.memberId) {
+          const { data: memberData, error: memberError } = await supabase
+            .from("carol_sessions")
+            .select("member_id, ride_type, session_date, peak_power_watts, manp, calories_incl_epoc")
+            .eq("member_id", payload.memberId)
+            .limit(5);
+          if (cancelled) return;
+          setCarolDebugMemberData(
+            Array.isArray(memberData) ? (memberData as Array<Record<string, unknown>>) : [],
+          );
+          setCarolDebugMemberError(memberError ? memberError.message : null);
+        } else {
+          setCarolDebugMemberData([]);
+          setCarolDebugMemberError("Dashboard payload memberId is missing.");
+        }
       } catch (error) {
         if (cancelled) return;
         setCarolDebugData([]);
         setCarolDebugError(error instanceof Error ? error.message : "CAROL debug query failed.");
+        setCarolDebugMemberData([]);
+        setCarolDebugMemberError(error instanceof Error ? error.message : "CAROL debug query failed.");
       } finally {
         if (!cancelled) setCarolDebugLoading(false);
       }
@@ -602,7 +624,7 @@ export function DashboardReactClient({
     return () => {
       cancelled = true;
     };
-  }, [memberView, mode, role, user?.id]);
+  }, [memberView, mode, payload.memberId, role, user?.id]);
 
   const allCarolRows = useMemo(() => (Array.isArray(payload.carolSessions) ? payload.carolSessions : []), [payload.carolSessions]);
   const rehitCarolRows = useMemo(
@@ -1250,6 +1272,28 @@ export function DashboardReactClient({
                 }}
               >
                 {carolDebugLoading ? "Loading..." : JSON.stringify(carolDebugData, null, 2)}
+              </pre>
+              <div style={{ fontSize: 12, color: carolDebugMemberError ? "var(--coral)" : "var(--text2)" }}>
+                <b>CAROL error (payload.memberId query):</b> {carolDebugMemberError || "null"}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text2)" }}>
+                <b>CAROL data by payload.memberId ({carolDebugMemberData.length}):</b>
+              </div>
+              <pre
+                style={{
+                  margin: 0,
+                  fontSize: 11,
+                  lineHeight: 1.5,
+                  color: "var(--text2)",
+                  background: "var(--bg3)",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: 12,
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {carolDebugLoading ? "Loading..." : JSON.stringify(carolDebugMemberData, null, 2)}
               </pre>
             </div>
           </div>

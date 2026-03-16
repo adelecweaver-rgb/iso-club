@@ -215,6 +215,80 @@ function formatDateForLabel(value: unknown): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
+function extractMissingColumnName(errorMessage: string): string | null {
+  const message = String(errorMessage || "");
+  const match =
+    message.match(/column ["']?([a-zA-Z0-9_]+)["']? does not exist/i) ||
+    message.match(/Could not find the ['"]([a-zA-Z0-9_]+)['"] column/i);
+  return match?.[1] ?? null;
+}
+
+async function loadCarolRowsWithFallback(
+  supabase: {
+    from: (table: string) => {
+      select: (columns: string) => {
+        eq: (column: string, value: string) => {
+          order: (orderColumn: string, options: { ascending: boolean }) => {
+            limit: (count: number) => PromiseLike<{ data: unknown; error: { message: string } | null }> | unknown;
+          };
+        };
+      };
+    };
+  },
+  memberId: string,
+): Promise<Array<Record<string, unknown>>> {
+  const requestedColumns = [
+    "session_date",
+    "ride_number",
+    "ride_type",
+    "fitness_score",
+    "peak_power_watts",
+    "avg_sprint_power",
+    "manp",
+    "calories_incl_epoc",
+    "calories_active",
+    "heart_rate_max",
+    "heart_rate_avg",
+    "duration_seconds",
+    "calories",
+    "max_hr",
+  ];
+
+  let selectedColumns = [...requestedColumns];
+  while (selectedColumns.length >= 3) {
+    const selectClause = selectedColumns.join(",");
+    const result = (await supabase
+      .from("carol_sessions")
+      .select(selectClause)
+      .eq("member_id", memberId)
+      .order("session_date", { ascending: false })
+      .limit(300)) as { data: unknown; error: { message: string } | null };
+
+    if (!result.error) {
+      return Array.isArray(result.data) ? (result.data as Array<Record<string, unknown>>) : [];
+    }
+
+    const missingColumn = extractMissingColumnName(result.error.message || "");
+    if (missingColumn && selectedColumns.includes(missingColumn)) {
+      selectedColumns = selectedColumns.filter((column) => column !== missingColumn);
+      continue;
+    }
+
+    break;
+  }
+
+  const fallbackResult = (await supabase
+    .from("carol_sessions")
+    .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr")
+    .eq("member_id", memberId)
+    .order("session_date", { ascending: false })
+    .limit(300)) as { data: unknown; error: { message: string } | null };
+  if (fallbackResult.error) return [];
+  return Array.isArray(fallbackResult.data)
+    ? (fallbackResult.data as Array<Record<string, unknown>>)
+    : [];
+}
+
 function monthKeyFromDate(date: Date): string {
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -510,29 +584,20 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   monthEnd.setMonth(monthEnd.getMonth() + 1);
   const monthEndIso = monthEnd.toISOString().slice(0, 10);
 
-  const carolPrimarySelect =
-    "session_date,ride_number,ride_type,fitness_score,peak_power_watts,avg_sprint_power,manp,calories_incl_epoc,calories_active,heart_rate_max,heart_rate_avg,duration_seconds,calories,max_hr";
-  const carolFallbackSelect = "session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr";
-  let carolRes = (await supabase
-    .from("carol_sessions")
-    .select(carolPrimarySelect)
-    .eq("member_id", memberId)
-    .order("session_date", { ascending: false })
-    .limit(300)) as unknown as {
-    data: unknown;
-    error: { message: string } | null;
-  };
-  if (carolRes.error && /column .* does not exist/i.test(carolRes.error.message || "")) {
-    carolRes = (await supabase
-      .from("carol_sessions")
-      .select(carolFallbackSelect)
-      .eq("member_id", memberId)
-      .order("session_date", { ascending: false })
-      .limit(300)) as unknown as {
-      data: unknown;
-      error: { message: string } | null;
-    };
-  }
+  const carolRows = await loadCarolRowsWithFallback(
+    supabase as unknown as {
+      from: (table: string) => {
+        select: (columns: string) => {
+          eq: (column: string, value: string) => {
+            order: (orderColumn: string, options: { ascending: boolean }) => {
+              limit: (count: number) => PromiseLike<{ data: unknown; error: { message: string } | null }> | unknown;
+            };
+          };
+        };
+      };
+    },
+    memberId,
+  );
 
   const [arxRes, scanRes, whoopRes, ouraRes, healthspanRes, recoveryRes, manualRes, bookingRes, protocolRes, reportRes] =
     await Promise.all([
@@ -597,7 +662,6 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     supabase.from("reports").select("title").eq("member_id", memberId).order("created_at", { ascending: false }).limit(3),
   ]);
 
-  const carolRows = Array.isArray(carolRes.data) ? (carolRes.data as Array<Record<string, unknown>>) : [];
   const arxRows = Array.isArray(arxRes.data) ? (arxRes.data as Array<Record<string, unknown>>) : [];
   const scanRow = Array.isArray(scanRes.data) && scanRes.data.length ? (scanRes.data[0] as Record<string, unknown>) : null;
   const whoopRow = Array.isArray(whoopRes.data) && whoopRes.data.length ? (whoopRes.data[0] as Record<string, unknown>) : null;
