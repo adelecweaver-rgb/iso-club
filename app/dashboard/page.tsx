@@ -3,7 +3,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { DashboardReactClient } from "@/components/dashboard-react-client";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
 import { loadPrototypeFromFiles } from "@/lib/server/prototype";
 import { getCurrentAuthState, routeForRole, type AppRole } from "@/lib/server/roles";
@@ -544,7 +543,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     "Member";
 
   const payload = makeDefaultPayload(clerkName);
-  const supabase = createSupabaseAdminClient() ?? (await createSupabaseServerClient());
+  const supabase = createSupabaseAdminClient();
   if (!supabase) return payload;
 
   let userRow: Record<string, unknown> | null = null;
@@ -552,9 +551,23 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   if (!byClerk.error && byClerk.data?.length) {
     userRow = byClerk.data[0] as Record<string, unknown>;
   } else if (email) {
-    const byEmail = await supabase.from("users").select("*").eq("email", email).limit(1);
-    if (!byEmail.error && byEmail.data?.length) {
-      userRow = byEmail.data[0] as Record<string, unknown>;
+    const byEmail = await supabase.from("users").select("*").eq("email", email).limit(2);
+    if (!byEmail.error && byEmail.data?.length === 1) {
+      const candidate = byEmail.data[0] as Record<string, unknown>;
+      const candidateClerkId = stringOr(candidate.clerk_id, "");
+      if (!candidateClerkId || candidateClerkId === userId) {
+        userRow = candidate;
+        if (!candidateClerkId && hasValue(candidate.id)) {
+          await supabase
+            .from("users")
+            .update({ clerk_id: userId })
+            .eq("id", stringOr(candidate.id, ""));
+          userRow = {
+            ...candidate,
+            clerk_id: userId,
+          };
+        }
+      }
     }
   }
 
