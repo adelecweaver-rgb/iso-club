@@ -284,6 +284,9 @@ async function loadCarolRowsWithFallback(
     "calories_incl_epoc",
     "calories_active",
     "heart_rate_max",
+    "sequential_number",
+    "is_valid",
+    "octane_score",
     "heart_rate_avg",
     "duration_seconds",
     "calories",
@@ -321,7 +324,7 @@ async function loadCarolRowsWithFallback(
 
   const fallbackResult = (await supabase
     .from("carol_sessions")
-    .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr")
+    .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr,manp,avg_sprint_power,calories_incl_epoc,heart_rate_max,sequential_number,is_valid,octane_score")
     .eq("member_id", memberId)
     .order("session_date", { ascending: false })
     .limit(300)) as { data: unknown; error: { message: string } | null };
