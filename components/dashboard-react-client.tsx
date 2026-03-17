@@ -195,6 +195,14 @@ function scanChangeColor(change: ScanChange, goodDirection: "up" | "down" | "neu
 
 type ScanItem = DashboardPayload["scanHistory"][number];
 
+function bsrCategory(bsr: number | null): string {
+  if (bsr === null) return "";
+  if (bsr >= 80) return "excellent";
+  if (bsr >= 60) return "healthy";
+  if (bsr >= 40) return "needs improvement";
+  return "high risk";
+}
+
 function scanInsight(current: ScanItem | undefined, previous: ScanItem | undefined): string {
   if (!current || !previous) {
     return "This is your baseline. Complete your next scan in 60–90 days to start tracking progress.";
@@ -203,11 +211,20 @@ function scanInsight(current: ScanItem | undefined, previous: ScanItem | undefin
   const leanDown = (current.leanMassLbsRaw ?? 0) < (previous.leanMassLbsRaw ?? 0);
   const fatUp = (current.fatMassLbsRaw ?? 0) > (previous.fatMassLbsRaw ?? 0);
   const fatDown = (current.fatMassLbsRaw ?? 0) < (previous.fatMassLbsRaw ?? 0);
+  const bsrUp = (current.bodyShapeRatingRaw ?? 0) > (previous.bodyShapeRatingRaw ?? 0);
+  const bsr = current.bodyShapeRatingRaw;
+  const bsrCat = bsrCategory(bsr);
+
   if (leanUp && fatDown) return "Great progress. You're building muscle and losing fat simultaneously — the ideal outcome.";
   if (leanUp && fatUp) return "You gained muscle and fat. Your training is working. Focus on nutrition timing — protein within 30 minutes post-workout and reduce processed carbs.";
   if (leanDown && fatUp) return "Body composition moved in the wrong direction this period. Let's review training frequency and nutrition together.";
   if (!leanDown && !leanUp && fatDown) return "You're losing fat while preserving muscle. Keep your protein intake high.";
-  if (leanDown && fatDown) return "You're losing weight but also losing muscle. Increase protein intake and ARX session frequency.";
+  if (leanDown && fatDown) {
+    const bsrNote = bsrUp && bsr !== null
+      ? ` Your Body Shape Rating also improved to ${bsr.toFixed(0)}${bsrCat ? ` (${bsrCat} range)` : ""} — that reflects better fat distribution and lower cardiovascular risk, which is a meaningful health marker.`
+      : "";
+    return `Your body fat is down and the overall direction is positive.${bsrNote} The priority now is protecting and growing lean muscle — focused, consistent ARX sessions combined with hitting your daily protein target are the key levers here. Small improvements in lean mass each scan period compound significantly over time.`;
+  }
   return "Your body composition is stable. Let's discuss your next goals.";
 }
 
