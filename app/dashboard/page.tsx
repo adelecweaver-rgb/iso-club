@@ -313,23 +313,30 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     protocolRes,
     reportRes,
   ] = await Promise.all([
-    // Try new column names first; if those columns don't exist in the DB yet, fall
-    // back to the old schema column names so the tab still renders with whatever data
-    // is available.
+    // Use select("*") so the query succeeds regardless of which columns exist in
+    // the schema. raw_data JSONB is returned but discarded during mapping.
+    // Try member_id first; if that column is absent (error) try user_id instead.
     (async () => {
-      const attempt = await supabase
+      const byMemberId = await supabase
         .from("carol_sessions")
-        .select("session_date,ride_type,peak_power_watts,manp,avg_sprint_power,calories_incl_epoc,heart_rate_max,sequential_number")
+        .select("*")
         .eq("member_id", memberId)
         .order("session_date", { ascending: false })
         .limit(60);
-      if (!attempt.error) return attempt;
-      // One or more new columns are absent — retry with the legacy column set.
+      if (!byMemberId.error) return byMemberId;
+      // member_id column may not exist — fall back to user_id
+      const byUserId = await supabase
+        .from("carol_sessions")
+        .select("*")
+        .eq("user_id", memberId)
+        .order("session_date", { ascending: false })
+        .limit(60);
+      if (!byUserId.error) return byUserId;
+      // session_date column may not exist — try without ordering
       return supabase
         .from("carol_sessions")
-        .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr")
-        .eq("member_id", memberId)
-        .order("session_date", { ascending: false })
+        .select("*")
+        .eq("user_id", memberId)
         .limit(60);
     })(),
     supabase
@@ -393,8 +400,6 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     supabase.from("reports").select("title").eq("member_id", memberId).order("created_at", { ascending: false }).limit(3),
   ]);
 
-  // carolRes may come from either the new-column query or the legacy-column fallback,
-  // so downstream mappings try both names for each metric field.
   const carolRows = Array.isArray(carolRes.data) ? (carolRes.data as Array<Record<string, unknown>>) : [];
   const arxRows = Array.isArray(arxRes.data) ? (arxRes.data as Array<Record<string, unknown>>) : [];
   const scanRows = Array.isArray(scanRes.data) ? (scanRes.data as Array<Record<string, unknown>>) : [];
