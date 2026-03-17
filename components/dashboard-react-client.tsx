@@ -14,7 +14,8 @@ type MemberSection =
   | "wearables"
   | "messages"
   | "reports"
-  | "schedule";
+  | "schedule"
+  | "goals";
 
 type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 type ActorRole = "member" | "coach" | "admin" | "staff" | "unknown";
@@ -124,6 +125,15 @@ type DashboardPayload = {
   };
   bookings: Array<{ label: string; status: string }>;
   reports: Array<{ title: string }>;
+  goals: {
+    activeGoals: string[];
+    progress: {
+      gain_muscle: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
+      lose_fat: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
+      improve_cardio: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
+      attendance: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current: number; target: number };
+    };
+  };
   checklistCompletions: {
     arxWeekDates: string[];
     carolWeekTypes: string[];
@@ -410,6 +420,43 @@ function buildArxInsight(groups: ArxExerciseGroup[]): string {
   return parts.join(" ");
 }
 
+// ─── Goals helpers ────────────────────────────────────────────────────────────
+
+const GOAL_DEFS: Record<string, { name: string; description: string; category: string }> = {
+  gain_muscle: { name: "Gain Muscle", description: "Track lean mass growth from Fit3D body scans.", category: "Strength" },
+  lose_fat: { name: "Lose Fat", description: "Track body fat percentage from Fit3D body scans.", category: "Composition" },
+  improve_cardio: { name: "Improve Cardio", description: "Track aerobic power (MANP) from CAROL sessions.", category: "Cardio" },
+  attendance: { name: "Consistency", description: "Track session completion against protocol targets.", category: "Habits" },
+};
+
+function goalStatusColor(direction: "positive" | "neutral" | "negative" | "no_data"): string {
+  if (direction === "positive") return "#9dcc3a";
+  if (direction === "neutral") return "#e8a838";
+  if (direction === "negative") return "#e05252";
+  return "var(--text3)";
+}
+
+function goalStatusLabel(status: string): string {
+  const map: Record<string, string> = {
+    gaining: "Gaining", maintaining: "Maintaining", losing: "Losing",
+    improving: "Improving", increasing: "Increasing",
+    declining: "Declining", on_track: "On Track", behind: "Behind", off_track: "Off Track",
+    no_data: "No data yet",
+  };
+  return map[status] ?? status;
+}
+
+function recommendProtocol(activeGoals: string[]): string | null {
+  const g = new Set(activeGoals);
+  if (g.size === 0) return null;
+  if ((g.has("gain_muscle") && g.has("lose_fat") && g.has("improve_cardio")) || g.size >= 4) return "Longevity Protocol";
+  if (g.has("gain_muscle") && g.has("improve_cardio")) return "Longevity Protocol";
+  if (g.has("gain_muscle") && g.has("lose_fat")) return "Metabolic Reset";
+  if (g.has("lose_fat")) return "Metabolic Reset";
+  if (g.has("improve_cardio")) return "Cardio Focus";
+  return "Strength Foundation";
+}
+
 // ─── Checklist helpers ────────────────────────────────────────────────────────
 
 type ChecklistItem = {
@@ -588,6 +635,14 @@ export function DashboardReactClient({
   const [allMembers, setAllMembers] = useState<Array<{ id: string; name: string; tier: string }>>([]);
   const [assignMemberId, setAssignMemberId] = useState("");
   const [assignProtocolId, setAssignProtocolId] = useState("");
+  const [localGoals, setLocalGoals] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = { gain_muscle: false, lose_fat: false, improve_cardio: false, attendance: false };
+    for (const gt of payload.goals.activeGoals) init[gt] = true;
+    return init;
+  });
+  const [savingGoal, setSavingGoal] = useState<string | null>(null);
+  const [memberGoals, setMemberGoals] = useState<Record<string, boolean>>({});
+  const [loadingMemberGoals, setLoadingMemberGoals] = useState(false);
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [assignCoachNotes, setAssignCoachNotes] = useState("");
   const [assignStatus, setAssignStatus] = useState("");
@@ -612,6 +667,38 @@ export function DashboardReactClient({
   const greetingName = useMemo(() => firstNameFromName(displayName), [displayName]);
   const userInitials = useMemo(() => initialsFromName(displayName), [displayName]);
   const isCoachAccount = role !== "member";
+
+  const handleGoalToggle = useCallback(async (goalType: string, forMemberId?: string) => {
+    if (forMemberId) {
+      const newVal = !memberGoals[goalType];
+      setMemberGoals((prev) => ({ ...prev, [goalType]: newVal }));
+      try {
+        await fetch("/api/coach/goals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ member_id: forMemberId, goal_type: goalType, is_active: newVal }) });
+      } catch { setMemberGoals((prev) => ({ ...prev, [goalType]: !newVal })); }
+    } else {
+      const newVal = !localGoals[goalType];
+      setSavingGoal(goalType);
+      setLocalGoals((prev) => ({ ...prev, [goalType]: newVal }));
+      try {
+        await fetch("/api/member/goals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ goal_type: goalType, is_active: newVal }) });
+      } catch { setLocalGoals((prev) => ({ ...prev, [goalType]: !newVal })); }
+      finally { setSavingGoal(null); }
+    }
+  }, [localGoals, memberGoals]);
+
+  useEffect(() => {
+    if (!isCoachAccount || mode !== "coach" || coachView !== "protocols" || !assignMemberId) return;
+    setLoadingMemberGoals(true);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/coach/goals?member_id=${assignMemberId}`);
+        const json = (await res.json().catch(() => ({}))) as { goals?: Array<{ goal_type: string; is_active: boolean }> };
+        const g: Record<string, boolean> = { gain_muscle: false, lose_fat: false, improve_cardio: false, attendance: false };
+        for (const goal of json.goals ?? []) if (goal.is_active) g[goal.goal_type] = true;
+        setMemberGoals(g);
+      } finally { setLoadingMemberGoals(false); }
+    })();
+  }, [assignMemberId, coachView, isCoachAccount, mode]);
   const payloadCoachRecipients = useMemo(
     () =>
       Array.isArray(payload.coach.members)
@@ -826,6 +913,9 @@ export function DashboardReactClient({
             <button className={activeMemberView("dashboard")} onClick={() => setMemberSection("dashboard")} type="button">
               Dashboard
             </button>
+            <button className={activeMemberView("goals")} onClick={() => setMemberSection("goals")} type="button">
+              My Goals
+            </button>
             <button className={activeMemberView("protocol")} onClick={() => setMemberSection("protocol")} type="button">
               My Protocol
             </button>
@@ -994,6 +1084,28 @@ export function DashboardReactClient({
             </div>
           </div>
 
+          {/* Goals summary badges */}
+          {payload.goals.activeGoals.length > 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
+              <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Goals</span>
+              {payload.goals.activeGoals.map((gt) => {
+                const prog = payload.goals.progress[gt as keyof typeof payload.goals.progress];
+                const color = goalStatusColor(prog?.direction ?? "no_data");
+                return (
+                  <button
+                    key={gt}
+                    type="button"
+                    onClick={() => setMemberSection("goals")}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, cursor: "pointer" }}
+                  >
+                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 11, color: "var(--text2)" }}>{GOAL_DEFS[gt]?.name ?? gt}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="grid-21">
             <div className="card">
               <div className="track-hero">
@@ -1117,6 +1229,71 @@ export function DashboardReactClient({
               </div>
             </div>
           </div>
+        </div>
+
+        <div id="view-goals" className="content" style={{ display: mode === "member" && memberView === "goals" ? "block" : "none" }}>
+          <div className="sec-header"><div className="sec-title">My Goals</div></div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginBottom: 20 }}>
+            {(["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).map((goalType) => {
+              const def = GOAL_DEFS[goalType];
+              const prog = payload.goals.progress[goalType];
+              const isActive = localGoals[goalType] ?? false;
+              const isSaving = savingGoal === goalType;
+              const color = goalStatusColor(prog.direction);
+              const progTarget = (prog as { target?: number }).target ?? 0;
+              const progCurrent = (prog as { current?: number }).current ?? 0;
+              const barPct = goalType === "attendance" && progTarget > 0
+                ? Math.min(100, (progCurrent / progTarget) * 100)
+                : prog.direction === "positive" ? 80 : prog.direction === "neutral" ? 50 : prog.direction === "negative" ? 20 : 0;
+              return (
+                <div key={goalType} className="card" style={{ padding: "16px 18px", opacity: isActive ? 1 : 0.55 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{def.name}</div>
+                      <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{def.category}</div>
+                    </div>
+                    {/* Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => { void handleGoalToggle(goalType); }}
+                      disabled={isSaving}
+                      style={{ width: 44, height: 24, borderRadius: 12, background: isActive ? "#9dcc3a" : "var(--bg3)", border: `2px solid ${isActive ? "#9dcc3a" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0, opacity: isSaving ? 0.5 : 1 }}
+                    >
+                      <div style={{ width: 16, height: 16, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: isActive ? 22 : 2, transition: "left 0.2s" }} />
+                    </button>
+                  </div>
+                  <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.55, marginBottom: 14 }}>{def.description}</p>
+                  {isActive && (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color }}>{goalStatusLabel(prog.status)}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 10 }}>{prog.display}</div>
+                      <div style={{ height: 4, background: "var(--bg3)", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${barPct}%`, background: color, borderRadius: 2, transition: "width 0.4s ease" }} />
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* Protocol recommendation */}
+          {(() => {
+            const active = Object.entries(localGoals).filter(([, v]) => v).map(([k]) => k);
+            const rec = recommendProtocol(active);
+            if (!rec || active.length === 0) return null;
+            return (
+              <div style={{ background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r)", padding: "14px 18px" }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(157,204,58,0.7)", marginBottom: 6 }}>Based on your goals</div>
+                <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 0 0" }}>
+                  We recommend the <strong style={{ color: "var(--text)" }}>{rec}</strong> protocol for your combination of goals.
+                  {" "}<button type="button" className="btn btn-sm" style={{ marginLeft: 8, fontSize: 11 }} onClick={() => setMemberSection("protocol")}>View protocol →</button>
+                </p>
+              </div>
+            );
+          })()}
         </div>
 
         <div id="view-protocol" className="content" style={{ display: mode === "member" && memberView === "protocol" ? "block" : "none" }}>
@@ -2138,6 +2315,60 @@ export function DashboardReactClient({
               )}
             </div>
           </div>
+
+          {/* Member goals section — shown when a member is selected */}
+          {assignMemberId && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-header"><div className="card-title">Member Goals</div></div>
+              {loadingMemberGoals ? (
+                <div className="card-body" style={{ color: "var(--text3)", fontSize: 12 }}>Loading goals…</div>
+              ) : (
+                <div style={{ padding: "8px 20px 16px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+                    {(["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).map((gt) => {
+                      const isOn = memberGoals[gt] ?? false;
+                      return (
+                        <div key={gt} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                          <span style={{ fontSize: 12, color: "var(--text2)" }}>{GOAL_DEFS[gt]?.name ?? gt}</span>
+                          <button
+                            type="button"
+                            onClick={() => { void handleGoalToggle(gt, assignMemberId); }}
+                            style={{ width: 40, height: 22, borderRadius: 11, background: isOn ? "#9dcc3a" : "var(--bg3)", border: `2px solid ${isOn ? "#9dcc3a" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0 }}
+                          >
+                            <div style={{ width: 14, height: 14, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: isOn ? 20 : 2, transition: "left 0.2s" }} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Protocol recommendation + quick-assign */}
+                  {(() => {
+                    const active = Object.entries(memberGoals).filter(([, v]) => v).map(([k]) => k);
+                    const rec = recommendProtocol(active);
+                    if (!rec || active.length === 0) return null;
+                    const recProtocol = coachProtocols.find((p) => p.name === rec);
+                    return (
+                      <div style={{ background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px" }}>
+                        <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 8 }}>
+                          Based on goals: recommend <strong style={{ color: "var(--text)" }}>{rec}</strong>
+                        </div>
+                        {recProtocol && (
+                          <button
+                            type="button"
+                            className="btn btn-lime btn-sm"
+                            style={{ fontSize: 11 }}
+                            onClick={() => setAssignProtocolId(recProtocol.id)}
+                          >
+                            Use {rec} →
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
     </div>

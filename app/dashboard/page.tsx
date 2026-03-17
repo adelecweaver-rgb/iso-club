@@ -18,7 +18,8 @@ type MemberSection =
   | "wearables"
   | "messages"
   | "reports"
-  | "schedule";
+  | "schedule"
+  | "goals";
 
 type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 
@@ -135,6 +136,15 @@ type DashboardPayload = {
   };
   bookings: Array<{ label: string; status: string }>;
   reports: Array<{ title: string }>;
+  goals: {
+    activeGoals: string[];
+    progress: {
+      gain_muscle: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
+      lose_fat: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
+      improve_cardio: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
+      attendance: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current: number; target: number };
+    };
+  };
   coach: {
     todayCount: string;
     lowRecoveryCount: string;
@@ -201,7 +211,8 @@ function normalizeMemberSection(input: string | undefined): MemberSection {
     value === "wearables" ||
     value === "messages" ||
     value === "reports" ||
-    value === "schedule"
+    value === "schedule" ||
+    value === "goals"
   ) {
     return value;
   }
@@ -295,6 +306,15 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     },
     bookings: [],
     reports: [],
+    goals: {
+      activeGoals: [],
+      progress: {
+        gain_muscle: { status: "no_data", display: "Complete a body scan to track progress.", direction: "no_data" },
+        lose_fat: { status: "no_data", display: "Complete a body scan to track progress.", direction: "no_data" },
+        improve_cardio: { status: "no_data", display: "Log CAROL sessions to track progress.", direction: "no_data" },
+        attendance: { status: "no_data", display: "No protocol assigned.", direction: "no_data", current: 0, target: 0 },
+      },
+    },
     checklistCompletions: {
       arxWeekDates: [],
       carolWeekTypes: [],
@@ -671,6 +691,62 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     weekStartDate: weekStartIso,
   };
 
+  // ─── Goal progress ───────────────────────────────────────────────────────────
+  // member_goals query (after main Promise.all to avoid blocking)
+  const goalsRes = await supabase.from("member_goals").select("goal_type,is_active").eq("member_id", memberId);
+  const activeGoals = (Array.isArray(goalsRes.data) ? (goalsRes.data as Array<Record<string, unknown>>) : [])
+    .filter((g) => g.is_active !== false)
+    .map((g) => stringOr(g.goal_type, ""))
+    .filter(Boolean);
+  payload.goals.activeGoals = activeGoals;
+
+  // gain_muscle: compare last two scan lean_mass_lbs
+  const lean0 = scanRows.length >= 1 && hasValue(scanRows[0].lean_mass_lbs) ? numberOr(scanRows[0].lean_mass_lbs, 0) : null;
+  const lean1 = scanRows.length >= 2 && hasValue(scanRows[1].lean_mass_lbs) ? numberOr(scanRows[1].lean_mass_lbs, 0) : null;
+  if (lean0 !== null && lean1 !== null) {
+    const diff = lean0 - lean1;
+    const sign = diff >= 0 ? "+" : "";
+    if (diff > 0.5) payload.goals.progress.gain_muscle = { status: "gaining", display: `Lean mass: ${sign}${diff.toFixed(1)} lbs since last scan`, direction: "positive" };
+    else if (diff < -0.5) payload.goals.progress.gain_muscle = { status: "losing", display: `Lean mass: ${diff.toFixed(1)} lbs since last scan`, direction: "negative" };
+    else payload.goals.progress.gain_muscle = { status: "maintaining", display: `Lean mass: ${sign}${diff.toFixed(1)} lbs since last scan`, direction: "neutral" };
+  }
+
+  // lose_fat: compare last two scan body_fat_pct
+  const fat0 = scanRows.length >= 1 && hasValue(scanRows[0].body_fat_pct) ? numberOr(scanRows[0].body_fat_pct, 0) : null;
+  const fat1 = scanRows.length >= 2 && hasValue(scanRows[1].body_fat_pct) ? numberOr(scanRows[1].body_fat_pct, 0) : null;
+  if (fat0 !== null && fat1 !== null) {
+    const diff = fat0 - fat1;
+    const sign = diff >= 0 ? "+" : "";
+    if (diff < -0.2) payload.goals.progress.lose_fat = { status: "improving", display: `Body fat: ${diff.toFixed(1)}% since last scan`, direction: "positive" };
+    else if (diff > 0.2) payload.goals.progress.lose_fat = { status: "increasing", display: `Body fat: ${sign}${diff.toFixed(1)}% since last scan`, direction: "negative" };
+    else payload.goals.progress.lose_fat = { status: "maintaining", display: `Body fat: ${sign}${diff.toFixed(1)}% since last scan`, direction: "neutral" };
+  }
+
+  // improve_cardio: last-30-days vs prior-30-days MANP (or peak_power_watts fallback)
+  const thirtyDaysAgoIso = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const sixtyDaysAgoIso = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const getCardioVal = (row: Record<string, unknown>) =>
+    hasValue(row.manp) ? numberOr(row.manp, 0) : hasValue(row.peak_power_watts) ? numberOr(row.peak_power_watts, 0) : null;
+  const recentVals = carolRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= thirtyDaysAgoIso).map(getCardioVal).filter((v): v is number => v !== null);
+  const priorVals = carolRows.filter((r) => { const d = stringOr(r.session_date, "").slice(0, 10); return d >= sixtyDaysAgoIso && d < thirtyDaysAgoIso; }).map(getCardioVal).filter((v): v is number => v !== null);
+  if (recentVals.length >= 2 && priorVals.length >= 1) {
+    const recentAvg = recentVals.reduce((a, b) => a + b, 0) / recentVals.length;
+    const priorAvg = priorVals.reduce((a, b) => a + b, 0) / priorVals.length;
+    const pctChange = priorAvg > 0 ? ((recentAvg - priorAvg) / priorAvg) * 100 : 0;
+    const sign = pctChange >= 0 ? "+" : "";
+    if (pctChange > 2) payload.goals.progress.improve_cardio = { status: "improving", display: `Cardio power: ${sign}${pctChange.toFixed(0)}% over last 30 days`, direction: "positive" };
+    else if (pctChange < -2) payload.goals.progress.improve_cardio = { status: "declining", display: `Cardio power: ${pctChange.toFixed(0)}% over last 30 days`, direction: "negative" };
+    else payload.goals.progress.improve_cardio = { status: "maintaining", display: `Cardio power: ${sign}${pctChange.toFixed(0)}% over last 30 days`, direction: "neutral" };
+  } else if (recentVals.length >= 1) {
+    payload.goals.progress.improve_cardio = { status: "no_data", display: "Need more sessions to compare periods.", direction: "no_data" };
+  }
+
+  // attendance: sessions this month vs protocol target
+  const arxMonthCount = arxRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= monthStartIso).length;
+  const carolMonthCount = carolRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= monthStartIso).length;
+  const recoveryMonthCount = recoveryRows.length;
+  const totalThisMonth = arxMonthCount + carolMonthCount + recoveryMonthCount;
+
   const protocolRow =
     Array.isArray(protocolRes.data) && protocolRes.data.length
       ? (protocolRes.data[0] as Record<string, unknown>)
@@ -711,6 +787,21 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
         }));
       }
     }
+  }
+
+  // Attendance goal: compare month sessions to protocol target
+  const arxWeekTarget = payload.protocol.arxPerWeek || 0;
+  const carolWeekTarget = payload.protocol.carolPerWeek || 0;
+  const recoveryMonthTarget = payload.protocol.recoveryPerMonth || 0;
+  const monthTarget = Math.round(arxWeekTarget * 4 + carolWeekTarget * 4 + recoveryMonthTarget);
+  if (monthTarget > 0) {
+    const ratio = totalThisMonth / monthTarget;
+    const display = `${totalThisMonth} of ${monthTarget} sessions completed this month`;
+    if (ratio >= 0.8) payload.goals.progress.attendance = { status: "on_track", display, direction: "positive", current: totalThisMonth, target: monthTarget };
+    else if (ratio >= 0.5) payload.goals.progress.attendance = { status: "behind", display, direction: "neutral", current: totalThisMonth, target: monthTarget };
+    else payload.goals.progress.attendance = { status: "off_track", display, direction: "negative", current: totalThisMonth, target: monthTarget };
+  } else {
+    payload.goals.progress.attendance = { status: "no_data", display: `${totalThisMonth} total sessions this month`, direction: "no_data", current: totalThisMonth, target: 0 };
   }
 
   if (payload.role === "coach") {
