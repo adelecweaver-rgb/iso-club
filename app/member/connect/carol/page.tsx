@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { MemberConnectCarolForm } from "@/components/member-connect-carol-form";
-import { getCurrentAuthState, routeForRole } from "@/lib/server/roles";
+import { getCurrentAuthState } from "@/lib/server/roles";
 import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
 import { getActorContext } from "@/lib/server/actor";
 
@@ -20,12 +20,7 @@ export default async function MemberConnectCarolPage() {
   if (!authState.isAuthenticated) {
     redirect("/sign-in");
   }
-  if (authState.role !== "member") {
-    redirect(routeForRole(authState.role));
-  }
-  if (!authState.onboardingComplete) {
-    redirect("/onboarding");
-  }
+  // Allow any authenticated user (member or coach) to connect their own account
 
   const { context } = await getActorContext();
   if (!context) {

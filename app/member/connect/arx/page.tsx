@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { MemberConnectArxForm } from "@/components/member-connect-arx-form";
-import { getCurrentAuthState, routeForRole } from "@/lib/server/roles";
+import { getCurrentAuthState } from "@/lib/server/roles";
 import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
 import { getActorContext } from "@/lib/server/actor";
 
@@ -18,8 +18,6 @@ export default async function MemberConnectArxPage() {
 
   const authState = await getCurrentAuthState();
   if (!authState.isAuthenticated) redirect("/sign-in");
-  if (authState.role !== "member") redirect(routeForRole(authState.role));
-  if (!authState.onboardingComplete) redirect("/onboarding");
 
   const { context } = await getActorContext();
   if (!context) redirect("/sign-in");
