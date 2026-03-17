@@ -55,9 +55,14 @@ type DashboardPayload = {
   }>;
   arxHistory: Array<{ label: string; value: string }>;
   scan: {
+    scanDate: string;
     bodyFatPct: string;
     weightLbs: string;
     leanMassLbs: string;
+    fatMassLbs: string;
+    bodyShapeRating: string;
+    waistIn: string;
+    hipsIn: string;
     headForwardIn: string;
     shoulderForwardIn: string;
     hipForwardIn: string;
@@ -67,6 +72,17 @@ type DashboardPayload = {
     bodyFatPct: string;
     weightLbs: string;
     leanMassLbs: string;
+    fatMassLbs: string;
+    bodyShapeRating: string;
+    waistIn: string;
+    hipsIn: string;
+    bodyFatPctRaw: number | null;
+    weightLbsRaw: number | null;
+    leanMassLbsRaw: number | null;
+    fatMassLbsRaw: number | null;
+    bodyShapeRatingRaw: number | null;
+    waistInRaw: number | null;
+    hipsInRaw: number | null;
   }>;
   recoveryCounts: {
     infraredSauna: string;
@@ -204,9 +220,14 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     carolSessions: [],
     arxHistory: [],
     scan: {
+      scanDate: "",
       bodyFatPct: "--",
       weightLbs: "--",
       leanMassLbs: "--",
+      fatMassLbs: "--",
+      bodyShapeRating: "--",
+      waistIn: "--",
+      hipsIn: "--",
       headForwardIn: "--",
       shoulderForwardIn: "--",
       hipForwardIn: "--",
@@ -327,7 +348,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       .limit(1200),
     supabase
       .from("fit3d_scans")
-      .select("scan_date,body_fat_pct,weight_lbs,lean_mass_lbs,posture_head_forward_in,posture_shoulder_forward_in,posture_hip_forward_in")
+      .select("scan_date,body_fat_pct,weight_lbs,lean_mass_lbs,fat_mass_lbs,body_shape_rating,waist_in,hips_in,posture_head_forward_in,posture_shoulder_forward_in,posture_hip_forward_in")
       .eq("member_id", memberId)
       .order("scan_date", { ascending: false })
       .limit(120),
@@ -400,7 +421,6 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   const reportRows = Array.isArray(reportRes.data) ? (reportRes.data as Array<Record<string, unknown>>) : [];
 
   const arxLatest = arxRows[0] ?? null;
-  const carolLatest = carolRows[0] ?? null;
   const carolFitnessRow = carolRows.find(
     (row) => hasValue(row.manp) || hasValue(row.fitness_score) || hasValue(row.octane_score),
   );
@@ -473,9 +493,14 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   }));
 
   payload.scan = {
-    bodyFatPct: scanRow && hasValue(scanRow.body_fat_pct) ? numberOr(scanRow.body_fat_pct, 0).toFixed(2) : "--",
+    scanDate: scanRow ? formatDateForLabel(scanRow.scan_date) : "",
+    bodyFatPct: scanRow && hasValue(scanRow.body_fat_pct) ? numberOr(scanRow.body_fat_pct, 0).toFixed(1) : "--",
     weightLbs: scanRow && hasValue(scanRow.weight_lbs) ? numberOr(scanRow.weight_lbs, 0).toFixed(1) : "--",
     leanMassLbs: scanRow && hasValue(scanRow.lean_mass_lbs) ? numberOr(scanRow.lean_mass_lbs, 0).toFixed(1) : "--",
+    fatMassLbs: scanRow && hasValue(scanRow.fat_mass_lbs) ? numberOr(scanRow.fat_mass_lbs, 0).toFixed(1) : "--",
+    bodyShapeRating: scanRow && hasValue(scanRow.body_shape_rating) ? numberOr(scanRow.body_shape_rating, 0).toFixed(1) : "--",
+    waistIn: scanRow && hasValue(scanRow.waist_in) ? numberOr(scanRow.waist_in, 0).toFixed(1) : "--",
+    hipsIn: scanRow && hasValue(scanRow.hips_in) ? numberOr(scanRow.hips_in, 0).toFixed(1) : "--",
     headForwardIn:
       scanRow && hasValue(scanRow.posture_head_forward_in) ? numberOr(scanRow.posture_head_forward_in, 0).toFixed(1) : "--",
     shoulderForwardIn:
@@ -485,9 +510,20 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   };
   payload.scanHistory = scanRows.map((row) => ({
     scanDate: formatDateForLabel(row.scan_date),
-    bodyFatPct: hasValue(row.body_fat_pct) ? numberOr(row.body_fat_pct, 0).toFixed(2) : "--",
+    bodyFatPct: hasValue(row.body_fat_pct) ? numberOr(row.body_fat_pct, 0).toFixed(1) : "--",
     weightLbs: hasValue(row.weight_lbs) ? numberOr(row.weight_lbs, 0).toFixed(1) : "--",
     leanMassLbs: hasValue(row.lean_mass_lbs) ? numberOr(row.lean_mass_lbs, 0).toFixed(1) : "--",
+    fatMassLbs: hasValue(row.fat_mass_lbs) ? numberOr(row.fat_mass_lbs, 0).toFixed(1) : "--",
+    bodyShapeRating: hasValue(row.body_shape_rating) ? numberOr(row.body_shape_rating, 0).toFixed(1) : "--",
+    waistIn: hasValue(row.waist_in) ? numberOr(row.waist_in, 0).toFixed(1) : "--",
+    hipsIn: hasValue(row.hips_in) ? numberOr(row.hips_in, 0).toFixed(1) : "--",
+    bodyFatPctRaw: hasValue(row.body_fat_pct) ? numberOr(row.body_fat_pct, 0) : null,
+    weightLbsRaw: hasValue(row.weight_lbs) ? numberOr(row.weight_lbs, 0) : null,
+    leanMassLbsRaw: hasValue(row.lean_mass_lbs) ? numberOr(row.lean_mass_lbs, 0) : null,
+    fatMassLbsRaw: hasValue(row.fat_mass_lbs) ? numberOr(row.fat_mass_lbs, 0) : null,
+    bodyShapeRatingRaw: hasValue(row.body_shape_rating) ? numberOr(row.body_shape_rating, 0) : null,
+    waistInRaw: hasValue(row.waist_in) ? numberOr(row.waist_in, 0) : null,
+    hipsInRaw: hasValue(row.hips_in) ? numberOr(row.hips_in, 0) : null,
   }));
 
   const modalityCounts: Record<string, number> = {};

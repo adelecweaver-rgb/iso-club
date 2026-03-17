@@ -54,9 +54,14 @@ type DashboardPayload = {
   carolSessions: CarolSession[];
   arxHistory: Array<{ label: string; value: string }>;
   scan: {
+    scanDate: string;
     bodyFatPct: string;
     weightLbs: string;
     leanMassLbs: string;
+    fatMassLbs: string;
+    bodyShapeRating: string;
+    waistIn: string;
+    hipsIn: string;
     headForwardIn: string;
     shoulderForwardIn: string;
     hipForwardIn: string;
@@ -66,6 +71,17 @@ type DashboardPayload = {
     bodyFatPct: string;
     weightLbs: string;
     leanMassLbs: string;
+    fatMassLbs: string;
+    bodyShapeRating: string;
+    waistIn: string;
+    hipsIn: string;
+    bodyFatPctRaw: number | null;
+    weightLbsRaw: number | null;
+    leanMassLbsRaw: number | null;
+    fatMassLbsRaw: number | null;
+    bodyShapeRatingRaw: number | null;
+    waistInRaw: number | null;
+    hipsInRaw: number | null;
   }>;
   recoveryCounts: {
     infraredSauna: string;
@@ -164,6 +180,55 @@ function normalizeCarolTabKey(rideType: string): "rehit" | "fat_burn" | "free_cu
   return "rehit";
 }
 
+type ScanChange = { pct: number; display: string; direction: "up" | "down" } | null;
+
+function scanPctChange(current: number | null, previous: number | null): ScanChange {
+  if (current === null || previous === null || previous === 0) return null;
+  const pct = ((current - previous) / Math.abs(previous)) * 100;
+  return { pct, display: `${Math.abs(pct).toFixed(1)}%`, direction: pct >= 0 ? "up" : "down" };
+}
+
+function scanChangeColor(change: ScanChange, goodDirection: "up" | "down" | "neutral"): string {
+  if (!change || goodDirection === "neutral") return "var(--text3)";
+  return change.direction === goodDirection ? "#9dcc3a" : "#e05252";
+}
+
+type ScanItem = DashboardPayload["scanHistory"][number];
+
+function scanInsight(current: ScanItem | undefined, previous: ScanItem | undefined): string {
+  if (!current || !previous) {
+    return "This is your baseline. Complete your next scan in 60–90 days to start tracking progress.";
+  }
+  const leanUp = (current.leanMassLbsRaw ?? 0) > (previous.leanMassLbsRaw ?? 0);
+  const leanDown = (current.leanMassLbsRaw ?? 0) < (previous.leanMassLbsRaw ?? 0);
+  const fatUp = (current.fatMassLbsRaw ?? 0) > (previous.fatMassLbsRaw ?? 0);
+  const fatDown = (current.fatMassLbsRaw ?? 0) < (previous.fatMassLbsRaw ?? 0);
+  if (leanUp && fatDown) return "Great progress. You're building muscle and losing fat simultaneously — the ideal outcome.";
+  if (leanUp && fatUp) return "You gained muscle and fat. Your training is working. Focus on nutrition timing — protein within 30 minutes post-workout and reduce processed carbs.";
+  if (leanDown && fatUp) return "Body composition moved in the wrong direction this period. Let's review training frequency and nutrition together.";
+  if (!leanDown && !leanUp && fatDown) return "You're losing fat while preserving muscle. Keep your protein intake high.";
+  if (leanDown && fatDown) return "You're losing weight but also losing muscle. Increase protein intake and ARX session frequency.";
+  return "Your body composition is stable. Let's discuss your next goals.";
+}
+
+function sparklinePath(values: (number | null)[], w: number, h: number): string {
+  const pts = values
+    .map((v, i) => (v !== null ? { x: i, y: v } : null))
+    .filter((p): p is { x: number; y: number } => p !== null);
+  if (pts.length < 2) return "";
+  const minY = Math.min(...pts.map((p) => p.y));
+  const maxY = Math.max(...pts.map((p) => p.y));
+  const rangeY = maxY - minY || 1;
+  const maxX = values.length - 1 || 1;
+  return pts
+    .map((p, i) => {
+      const sx = (p.x / maxX) * w;
+      const sy = h - 2 - ((p.y - minY) / rangeY) * (h - 4);
+      return `${i === 0 ? "M" : "L"} ${sx.toFixed(1)} ${sy.toFixed(1)}`;
+    })
+    .join(" ");
+}
+
 function formatMessageTime(isoValue: string): string {
   if (!isoValue) return "";
   const parsed = new Date(isoValue);
@@ -232,6 +297,7 @@ export function DashboardReactClient({
   const [carolTab, setCarolTab] = useState<"rehit" | "fat_burn" | "free_custom" | "fitness_tests">(
     "rehit",
   );
+  const [activeScanDot, setActiveScanDot] = useState<number | null>(null);
   const [peerName, setPeerName] = useState("Dustin");
   const [peerId, setPeerId] = useState(payload.coachId ?? "");
   const [selectedCoachRecipientId, setSelectedCoachRecipientId] = useState(
@@ -762,44 +828,171 @@ export function DashboardReactClient({
         </div>
 
         <div id="view-scans" className="content" style={{ display: mode === "member" && memberView === "scans" ? "block" : "none" }}>
-          <div className="sec-header"><div className="sec-title">Body Scans</div></div>
-          <div className="grid-2">
-            <div className="card">
-              <div className="card-header"><div className="card-title">Body composition</div></div>
-              <div className="metric-row"><div className="metric-label">Body fat %</div><div className="metric-val">{payload.scan.bodyFatPct}</div></div>
-              <div className="metric-row"><div className="metric-label">Weight (lbs)</div><div className="metric-val">{payload.scan.weightLbs}</div></div>
-              <div className="metric-row"><div className="metric-label">Lean mass (lbs)</div><div className="metric-val">{payload.scan.leanMassLbs}</div></div>
-            </div>
-            <div className="card">
-              <div className="card-header"><div className="card-title">Posture analysis</div></div>
-              <div className="metric-row"><div className="metric-label">Head forward</div><div className="metric-val">{payload.scan.headForwardIn}&quot;</div></div>
-              <div className="metric-row"><div className="metric-label">Shoulder forward</div><div className="metric-val">{payload.scan.shoulderForwardIn}&quot;</div></div>
-              <div className="metric-row"><div className="metric-label">Hip forward</div><div className="metric-val">{payload.scan.hipForwardIn}&quot;</div></div>
-            </div>
-          </div>
-          <div className="card" style={{ marginTop: 14 }}>
-            <div className="card-header"><div className="card-title">Historical scans</div></div>
-            {payload.scanHistory.length ? (
-              payload.scanHistory.map((row, index) => (
-                <div className="metric-row" key={`${row.scanDate}-${index}`}>
-                  <div className="metric-label">{row.scanDate || "Recent scan"}</div>
-                  <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      Weight <b style={{ color: "var(--text)" }}>{row.weightLbs}</b>
-                    </span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      Body fat <b style={{ color: "var(--text)" }}>{row.bodyFatPct}%</b>
-                    </span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                      Lean mass <b style={{ color: "var(--text)" }}>{row.leanMassLbs}</b>
-                    </span>
+          {(() => {
+            const current = payload.scanHistory[0];
+            const previous = payload.scanHistory[1];
+            const scansAsc = [...payload.scanHistory].reverse();
+
+            const metrics: Array<{
+              label: string;
+              value: string;
+              raw: number | null;
+              prevRaw: number | null;
+              good: "up" | "down" | "neutral";
+              unit?: string;
+            }> = [
+              { label: "Weight", value: payload.scan.weightLbs, raw: current?.weightLbsRaw ?? null, prevRaw: previous?.weightLbsRaw ?? null, good: "neutral", unit: "lbs" },
+              { label: "Body fat %", value: payload.scan.bodyFatPct, raw: current?.bodyFatPctRaw ?? null, prevRaw: previous?.bodyFatPctRaw ?? null, good: "down", unit: "%" },
+              { label: "Lean mass", value: payload.scan.leanMassLbs, raw: current?.leanMassLbsRaw ?? null, prevRaw: previous?.leanMassLbsRaw ?? null, good: "up", unit: "lbs" },
+              { label: "Fat mass", value: payload.scan.fatMassLbs, raw: current?.fatMassLbsRaw ?? null, prevRaw: previous?.fatMassLbsRaw ?? null, good: "down", unit: "lbs" },
+              { label: "Body shape", value: payload.scan.bodyShapeRating, raw: current?.bodyShapeRatingRaw ?? null, prevRaw: previous?.bodyShapeRatingRaw ?? null, good: "up" },
+              { label: "Waist", value: payload.scan.waistIn, raw: current?.waistInRaw ?? null, prevRaw: previous?.waistInRaw ?? null, good: "down", unit: "\"" },
+              { label: "Hips", value: payload.scan.hipsIn, raw: current?.hipsInRaw ?? null, prevRaw: previous?.hipsInRaw ?? null, good: "down", unit: "\"" },
+            ];
+
+            const bfSparkVals = scansAsc.map((s) => s.bodyFatPctRaw);
+            const leanSparkVals = scansAsc.map((s) => s.leanMassLbsRaw);
+            const wtSparkVals = scansAsc.map((s) => s.weightLbsRaw);
+            const bfFirst = bfSparkVals.find((v) => v !== null) ?? null;
+            const bfLast = [...bfSparkVals].reverse().find((v) => v !== null) ?? null;
+            const leanFirst = leanSparkVals.find((v) => v !== null) ?? null;
+            const leanLast = [...leanSparkVals].reverse().find((v) => v !== null) ?? null;
+
+            return (
+              <>
+                <div className="sec-header">
+                  <div className="sec-title">
+                    Body Composition{payload.scan.scanDate ? ` — Last scan: ${payload.scan.scanDate}` : ""}
                   </div>
                 </div>
-              ))
-            ) : (
-              <div className="card-body"><p style={{ color: "var(--text3)" }}>No historical scans yet.</p></div>
-            )}
-          </div>
+
+                {/* AI insight */}
+                <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Dustin&apos;s Analysis</div>
+                  <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>
+                    {scanInsight(current, previous)}
+                  </p>
+                </div>
+
+                {/* Metrics grid */}
+                <div className="card" style={{ marginBottom: 14 }}>
+                  <div className="card-header"><div className="card-title">Metrics</div></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
+                    {metrics.map((m) => {
+                      const change = scanPctChange(m.raw, m.prevRaw);
+                      const color = scanChangeColor(change, m.good);
+                      const arrow = change ? (change.direction === "up" ? "↑" : "↓") : null;
+                      return (
+                        <div key={m.label} className="metric-row" style={{ borderRight: "none" }}>
+                          <div className="metric-label">{m.label}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
+                              {m.value}{m.value !== "--" && m.unit ? m.unit : ""}
+                            </span>
+                            {change && (
+                              <span style={{ fontSize: 11, color, fontWeight: 500 }}>
+                                {arrow} {change.display}
+                              </span>
+                            )}
+                            {!change && previous && (
+                              <span style={{ fontSize: 11, color: "var(--text3)" }}>—</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Posture */}
+                <div className="card" style={{ marginBottom: 14 }}>
+                  <div className="card-header"><div className="card-title">Posture analysis</div></div>
+                  <div className="metric-row"><div className="metric-label">Head forward</div><div className="metric-val">{payload.scan.headForwardIn}&quot;</div></div>
+                  <div className="metric-row"><div className="metric-label">Shoulder forward</div><div className="metric-val">{payload.scan.shoulderForwardIn}&quot;</div></div>
+                  <div className="metric-row"><div className="metric-label">Hip forward</div><div className="metric-val">{payload.scan.hipForwardIn}&quot;</div></div>
+                </div>
+
+                {/* Timeline */}
+                {scansAsc.length > 0 && (
+                  <div className="card" style={{ marginBottom: 14 }}>
+                    <div className="card-header"><div className="card-title">Scan journey</div></div>
+                    <div style={{ padding: "8px 16px 20px", overflowX: "auto" }}>
+                      <div style={{ position: "relative", height: 80, minWidth: Math.max(scansAsc.length * 90, 280) }}>
+                        {/* Line segments */}
+                        {scansAsc.length > 1 && scansAsc.slice(1).map((scan, i) => {
+                          const prev = scansAsc[i];
+                          const fatDown = (scan.bodyFatPctRaw ?? 99) < (prev.bodyFatPctRaw ?? 99);
+                          const leftPct = (i / (scansAsc.length - 1)) * 100;
+                          const widthPct = (1 / (scansAsc.length - 1)) * 100;
+                          return (
+                            <div key={i} style={{ position: "absolute", top: 20, left: `${leftPct}%`, width: `${widthPct}%`, height: 2, background: fatDown ? "#9dcc3a" : "#e05252" }} />
+                          );
+                        })}
+                        {/* Dots */}
+                        {scansAsc.map((scan, i) => {
+                          const leftPct = scansAsc.length === 1 ? 50 : (i / (scansAsc.length - 1)) * 100;
+                          const isActive = activeScanDot === i;
+                          return (
+                            <div key={i} style={{ position: "absolute", left: `${leftPct}%`, top: 12, transform: "translateX(-50%)" }}>
+                              <button
+                                type="button"
+                                onClick={() => setActiveScanDot(isActive ? null : i)}
+                                style={{ width: 16, height: 16, borderRadius: "50%", background: isActive ? "#9dcc3a" : "var(--bg3)", border: "2px solid #9dcc3a", cursor: "pointer", padding: 0, display: "block" }}
+                              />
+                              <div style={{ fontSize: 9, marginTop: 6, color: "var(--text3)", whiteSpace: "nowrap", textAlign: "center", transform: "translateX(-30%)" }}>
+                                {scan.scanDate}
+                              </div>
+                              {isActive && (
+                                <div style={{ position: "absolute", bottom: "calc(100% + 10px)", left: "50%", transform: "translateX(-50%)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 14px", zIndex: 20, whiteSpace: "nowrap", boxShadow: "0 6px 24px rgba(0,0,0,0.35)" }}>
+                                  <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>{scan.scanDate}</div>
+                                  <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 3 }}>Weight: <b>{scan.weightLbs} lbs</b></div>
+                                  <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 3 }}>Body fat: <b>{scan.bodyFatPct}%</b></div>
+                                  <div style={{ fontSize: 11, color: "var(--text2)" }}>Lean mass: <b>{scan.leanMassLbs} lbs</b></div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Sparklines */}
+                {scansAsc.length >= 2 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                    {[
+                      { label: "Body fat %", vals: bfSparkVals, current: current?.bodyFatPct, good: "down" as const, first: bfFirst, last: bfLast },
+                      { label: "Lean mass", vals: leanSparkVals, current: current?.leanMassLbs, good: "up" as const, first: leanFirst, last: leanLast },
+                      { label: "Weight", vals: wtSparkVals, current: current?.weightLbs, good: "neutral" as const, first: null, last: null },
+                    ].map((chart) => {
+                      const path = sparklinePath(chart.vals, 100, 36);
+                      const trendGood =
+                        chart.good === "neutral" ? true :
+                        chart.good === "down" ? (chart.last ?? 0) <= (chart.first ?? 0) :
+                        (chart.last ?? 0) >= (chart.first ?? 0);
+                      const lineColor = chart.good === "neutral" ? "var(--text3)" : trendGood ? "#9dcc3a" : "#e05252";
+                      return (
+                        <div key={chart.label} className="card" style={{ padding: "14px 16px" }}>
+                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{chart.label}</div>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>{chart.current ?? "--"}</div>
+                          {path ? (
+                            <svg viewBox="0 0 100 36" style={{ width: "100%", height: 36, display: "block" }}>
+                              <path d={path} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          ) : (
+                            <div style={{ height: 36, display: "flex", alignItems: "center" }}>
+                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Not enough data</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div id="view-recovery" className="content" style={{ display: mode === "member" && memberView === "recovery" ? "block" : "none" }}>
