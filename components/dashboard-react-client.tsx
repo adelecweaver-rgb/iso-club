@@ -481,12 +481,6 @@ function isChecklistBlockedToday(
   return false;
 }
 
-function complianceColor(actual: number, target: number): string {
-  if (target === 0) return "var(--text3)";
-  if (actual >= target) return "#9dcc3a";
-  if (actual >= Math.ceil(target * 0.5)) return "#e8a838";
-  return "#e05252";
-}
 
 function formatTargetSystem(s: string): string {
   const map: Record<string, string> = { muscle: "Muscle", cardio: "Cardio", metabolic: "Metabolic", recovery: "Recovery", performance: "Performance" };
@@ -568,6 +562,28 @@ export function DashboardReactClient({
   const [activeScanDot, setActiveScanDot] = useState<number | null>(null);
   const [checklistChecked, setChecklistChecked] = useState<Record<string, boolean>>({});
   const [checklistLogging, setChecklistLogging] = useState<string | null>(null);
+
+  const handleChecklistItem = useCallback(async (item: ChecklistItem, c: DashboardPayload["checklistCompletions"]) => {
+    if (isChecklistItemDone(item, c, checklistChecked)) return;
+    if (checklistLogging) return;
+    setChecklistLogging(item.id);
+    try {
+      const res = await fetch("/api/member/checklist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: item.type, subtype: item.subtype }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { success?: boolean; already_logged?: boolean };
+      if (res.ok || json.already_logged) {
+        setChecklistChecked((prev) => ({ ...prev, [item.id]: true }));
+        if (item.type === "arx") { c.arxWeekDates.push(c.todayDate); c.arxTodayLogged = true; }
+        else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); c.carolTodayTypes.push(item.subtype); }
+        else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); c.recoveryTodayModalities.push(item.subtype); }
+      }
+    } finally {
+      setChecklistLogging(null);
+    }
+  }, [checklistChecked, checklistLogging]);
   const [coachProtocols, setCoachProtocols] = useState<Array<{ id: string; name: string; target_system: string; description: string }>>([]);
   const [allMembers, setAllMembers] = useState<Array<{ id: string; name: string; tier: string }>>([]);
   const [assignMemberId, setAssignMemberId] = useState("");
@@ -993,64 +1009,66 @@ export function DashboardReactClient({
                 <span className="tag tag-lime">Active</span>
               </div>
               {payload.protocol.targetSystem ? (
-                // New-style library protocol: show weekly targets + focus areas
-                <div style={{ padding: "4px 0 8px" }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: "0 20px 12px" }}>
-                    {[
-                      { label: "ARX / week", target: payload.protocol.arxPerWeek, actual: payload.protocol.compliance.arxThisWeek },
-                      { label: "CAROL / week", target: payload.protocol.carolPerWeek, actual: payload.protocol.compliance.carolThisWeek },
-                      { label: "Recovery / month", target: payload.protocol.recoveryPerMonth, actual: payload.protocol.compliance.recoveryThisMonth },
-                    ].map(({ label, target, actual }) => {
-                      const color = complianceColor(actual, target);
-                      return (
-                        <div key={label} style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "8px 10px" }}>
-                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{label}</div>
-                          <div style={{ fontSize: 15, fontWeight: 700, color }}>
-                            {actual}<span style={{ fontSize: 10, fontWeight: 400, color: "var(--text3)" }}> / {target}</span>
-                          </div>
-                          <div style={{ height: 2, background: "var(--border)", borderRadius: 1, marginTop: 5, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${Math.min(100, target > 0 ? (actual / target) * 100 : 0)}%`, background: color, borderRadius: 1 }} />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {(payload.protocol.arxExercises.length > 0 || payload.protocol.carolRideTypes.length > 0) && (
-                    <div style={{ padding: "0 20px 8px", display: "flex", gap: 20, flexWrap: "wrap" }}>
-                      {payload.protocol.carolRideTypes.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>CAROL</div>
-                          <div style={{ fontSize: 11, color: "var(--text2)" }}>{payload.protocol.carolRideTypes.join(", ").replace(/_/g, " ")}</div>
-                        </div>
-                      )}
-                      {payload.protocol.arxExercises.length > 0 && (
-                        <div>
-                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>ARX</div>
-                          <div style={{ fontSize: 11, color: "var(--text2)" }}>{payload.protocol.arxExercises.map(formatExerciseName).join(", ")}</div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {(() => {
-                    const cl = generateChecklist(payload.protocol);
-                    const done = cl.filter((item) => isChecklistItemDone(item, payload.checklistCompletions, checklistChecked)).length;
-                    return cl.length > 0 ? (
-                      <div style={{ padding: "0 20px 12px" }}>
-                        <div style={{ fontSize: 11, color: done === cl.length ? "#9dcc3a" : "var(--text3)", marginBottom: 6 }}>
-                          {done} of {cl.length} completed this week
-                        </div>
-                        <div style={{ height: 3, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${cl.length > 0 ? (done / cl.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 2 }} />
+                // New-style: interactive weekly checklist directly on dashboard
+                (() => {
+                  const cl = generateChecklist(payload.protocol);
+                  const c = payload.checklistCompletions;
+                  const doneCount = cl.filter((item) => isChecklistItemDone(item, c, checklistChecked)).length;
+                  const groups = [
+                    { key: "strength", label: "Strength", items: cl.filter((i) => i.category === "strength") },
+                    { key: "cardio", label: "Cardio", items: cl.filter((i) => i.category === "cardio") },
+                    { key: "recovery", label: "Recovery", items: cl.filter((i) => i.category === "recovery") },
+                  ].filter((g) => g.items.length > 0);
+                  return (
+                    <div style={{ padding: "0 20px 14px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, color: "var(--text3)" }}>This week</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: doneCount === cl.length && cl.length > 0 ? "#9dcc3a" : "var(--text2)" }}>
+                          {doneCount} of {cl.length} done
                         </div>
                       </div>
-                    ) : null;
-                  })()}
-                  <div style={{ padding: "0 20px 4px" }}>
-                    <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setMemberSection("protocol")} type="button">
-                      View full protocol →
-                    </button>
-                  </div>
-                </div>
+                      <div style={{ height: 3, background: "var(--border)", borderRadius: 2, marginBottom: 14, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${cl.length > 0 ? (doneCount / cl.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 2, transition: "width 0.3s ease" }} />
+                      </div>
+                      {groups.map((group) => (
+                        <div key={group.key} style={{ marginBottom: 12 }}>
+                          <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 6 }}>{group.label}</div>
+                          {group.items.map((item) => {
+                            const done = isChecklistItemDone(item, c, checklistChecked);
+                            const blockedToday = isChecklistBlockedToday(item, c, checklistChecked);
+                            const isLogging = checklistLogging === item.id;
+                            return (
+                              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => { void handleChecklistItem(item, c); }}
+                                  disabled={isLogging || (blockedToday && !done)}
+                                  style={{
+                                    width: 22, height: 22, borderRadius: "50%", flexShrink: 0, padding: 0,
+                                    background: done ? "#9dcc3a" : "transparent",
+                                    border: `2px solid ${done ? "#9dcc3a" : blockedToday ? "var(--border)" : "rgba(157,204,58,0.5)"}`,
+                                    cursor: done || (blockedToday && !done) ? "default" : "pointer",
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    transition: "all 0.2s", opacity: isLogging ? 0.5 : 1,
+                                  }}
+                                >
+                                  {done && <span style={{ color: "#0b0c09", fontSize: 10, fontWeight: 800, lineHeight: 1 }}>✓</span>}
+                                  {isLogging && <span style={{ color: "var(--text3)", fontSize: 9 }}>…</span>}
+                                </button>
+                                <span style={{ fontSize: 12.5, color: done ? "var(--text3)" : "var(--text2)", textDecoration: done ? "line-through" : "none", transition: "all 0.2s" }}>
+                                  {item.label}
+                                </span>
+                                {blockedToday && !done && (
+                                  <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: "auto" }}>today ✓</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()
               ) : payload.protocol.sessions.length ? (
                 payload.protocol.sessions.map((session, index) => (
                   <div key={`${session.name}-${index}`} className="session-item">
@@ -1147,35 +1165,6 @@ export function DashboardReactClient({
                           { key: "recovery", label: "Recovery", items: checklist.filter((i) => i.category === "recovery") },
                         ].filter((g) => g.items.length > 0);
 
-                        async function handleCheck(item: ChecklistItem) {
-                          if (isChecklistItemDone(item, c, checklistChecked)) return;
-                          if (checklistLogging) return;
-                          setChecklistLogging(item.id);
-                          try {
-                            const res = await fetch("/api/member/checklist", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ type: item.type, subtype: item.subtype }),
-                            });
-                            const json = await res.json().catch(() => ({})) as { success?: boolean; already_logged?: boolean };
-                            if (res.ok || json.already_logged) {
-                              setChecklistChecked((prev) => ({ ...prev, [item.id]: true }));
-                              if (item.type === "arx") {
-                                c.arxWeekDates.push(c.todayDate);
-                                c.arxTodayLogged = true;
-                              } else if (item.type === "carol") {
-                                c.carolWeekTypes.push(item.subtype);
-                                c.carolTodayTypes.push(item.subtype);
-                              } else if (item.type === "recovery") {
-                                c.recoveryWeekModalities.push(item.subtype);
-                                c.recoveryTodayModalities.push(item.subtype);
-                              }
-                            }
-                          } finally {
-                            setChecklistLogging(null);
-                          }
-                        }
-
                         return (
                           <div style={{ padding: "0 20px 16px" }}>
                             {/* Progress summary */}
@@ -1203,7 +1192,7 @@ export function DashboardReactClient({
                                     <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
                                       <button
                                         type="button"
-                                        onClick={() => { void handleCheck(item); }}
+                                        onClick={() => { void handleChecklistItem(item, c); }}
                                         disabled={isLogging || (blockedToday && !done)}
                                         style={{
                                           width: 24,
