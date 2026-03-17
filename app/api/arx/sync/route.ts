@@ -143,11 +143,42 @@ function extractTotalPages(html: string): number {
   return Math.max(...matches.map((m) => parseInt(m[1], 10)));
 }
 
+async function fetchFirstPage(sessId: string): Promise<{ html: string; userId: string }> {
+  // /user/me/exercise_sets redirects to /user/{UUID}/exercise_sets when authenticated.
+  // res.url after following redirects gives us the UUID without needing to parse HTML.
+  const res = await fetch(`${ARX_BASE}/user/me/exercise_sets`, {
+    cache: "no-store",
+    headers: {
+      Cookie: `PHPSESSID=${sessId}`,
+      "User-Agent": "Mozilla/5.0 (compatible; IsoClub/1.0)",
+    },
+  });
+
+  const finalUrl = res.url ?? "";
+  const html = await res.text();
+
+  // Detect redirect to login — session is not authenticated
+  if (finalUrl.includes("/login") || (!res.ok && res.status === 302)) {
+    throw new Error("ARX login failed — session not established. Please check your username and password.");
+  }
+
+  // Extract UUID from the final URL (most reliable)
+  const uuidFromUrl = finalUrl.match(/\/user\/([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})\//i)?.[1];
+
+  // Fallback: extract from embedded JS variable
+  const uuidFromHtml = extractJsonVar(html, "userId") as string | null;
+
+  const userId = uuidFromUrl ?? uuidFromHtml ?? null;
+  if (!userId) {
+    throw new Error(
+      `Could not determine ARX user ID. Final URL: ${finalUrl || "(empty)"}. Login may have failed.`,
+    );
+  }
+  return { html, userId };
+}
+
 async function fetchPage(sessId: string, userId: string, page: number): Promise<string> {
-  const url =
-    page === 1
-      ? `${ARX_BASE}/user/${userId}/exercise_sets`
-      : `${ARX_BASE}/user/${userId}/exercise_sets?page=${page}`;
+  const url = `${ARX_BASE}/user/${userId}/exercise_sets?page=${page}`;
   const res = await fetch(url, {
     cache: "no-store",
     headers: {
@@ -260,12 +291,8 @@ export async function POST(request: Request) {
     // Login and get session cookie
     const sessId = await loginToArx(activeUsername, arxPassword);
 
-    // Fetch page 1 to discover user UUID and total pages
-    const page1Html = await fetchPage(sessId, "me", 1);
-    const arxUserId = extractJsonVar(page1Html, "userId");
-    if (typeof arxUserId !== "string" || !arxUserId) {
-      throw new Error("Could not extract ARX user ID after login. Login may have failed.");
-    }
+    // Fetch page 1 — also discovers ARX user UUID from the redirect URL
+    const { html: page1Html, userId: arxUserId } = await fetchFirstPage(sessId);
 
     const totalPages = extractTotalPages(page1Html);
     const allSets: Array<Record<string, unknown>> = [];
