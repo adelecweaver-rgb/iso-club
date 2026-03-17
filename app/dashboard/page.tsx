@@ -313,12 +313,25 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     protocolRes,
     reportRes,
   ] = await Promise.all([
-    supabase
-      .from("carol_sessions")
-      .select("session_date,ride_type,peak_power_watts,manp,avg_sprint_power,calories_incl_epoc,heart_rate_max,sequential_number")
-      .eq("member_id", memberId)
-      .order("session_date", { ascending: false })
-      .limit(60),
+    // Try new column names first; if those columns don't exist in the DB yet, fall
+    // back to the old schema column names so the tab still renders with whatever data
+    // is available.
+    (async () => {
+      const attempt = await supabase
+        .from("carol_sessions")
+        .select("session_date,ride_type,peak_power_watts,manp,avg_sprint_power,calories_incl_epoc,heart_rate_max,sequential_number")
+        .eq("member_id", memberId)
+        .order("session_date", { ascending: false })
+        .limit(60);
+      if (!attempt.error) return attempt;
+      // One or more new columns are absent — retry with the legacy column set.
+      return supabase
+        .from("carol_sessions")
+        .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr")
+        .eq("member_id", memberId)
+        .order("session_date", { ascending: false })
+        .limit(60);
+    })(),
     supabase
       .from("arx_sessions")
       .select("session_date,exercise,output,concentric_max,eccentric_max")
@@ -380,6 +393,8 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     supabase.from("reports").select("title").eq("member_id", memberId).order("created_at", { ascending: false }).limit(3),
   ]);
 
+  // carolRes may come from either the new-column query or the legacy-column fallback,
+  // so downstream mappings try both names for each metric field.
   const carolRows = Array.isArray(carolRes.data) ? (carolRes.data as Array<Record<string, unknown>>) : [];
   const arxRows = Array.isArray(arxRes.data) ? (arxRes.data as Array<Record<string, unknown>>) : [];
   const scanRows = Array.isArray(scanRes.data) ? (scanRes.data as Array<Record<string, unknown>>) : [];
@@ -401,7 +416,9 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
 
   const arxLatest = arxRows[0] ?? null;
   const carolLatest = carolRows[0] ?? null;
-  payload.metrics.carolFitness = carolLatest && hasValue(carolLatest.manp) ? Math.round(numberOr(carolLatest.manp, 0)).toString() : "--";
+  payload.metrics.carolFitness = carolLatest && (hasValue(carolLatest.manp) || hasValue(carolLatest.fitness_score))
+    ? Math.round(numberOr(hasValue(carolLatest.manp) ? carolLatest.manp : carolLatest.fitness_score, 0)).toString()
+    : "--";
   payload.metrics.arxOutput =
     arxLatest && (hasValue(arxLatest.concentric_max) || hasValue(arxLatest.output))
       ? Math.round(numberOr(arxLatest.concentric_max, numberOr(arxLatest.output, 0))).toString()
@@ -422,18 +439,34 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   };
 
   payload.carolHistory = carolRows.slice(0, 3).map((row) => ({
-    label: `${formatDateForLabel(row.session_date)} · Ride #${stringOr(row.sequential_number, "—")}`,
-    value: hasValue(row.manp) ? Math.round(numberOr(row.manp, 0)).toString() : "--",
+    label: `${formatDateForLabel(row.session_date)} · Ride #${stringOr(row.sequential_number, "") || stringOr(row.ride_number, "—")}`,
+    value: hasValue(row.manp)
+      ? Math.round(numberOr(row.manp, 0)).toString()
+      : hasValue(row.fitness_score)
+        ? Math.round(numberOr(row.fitness_score, 0)).toString()
+        : "--",
   }));
   payload.carolSessions = carolRows.map((row) => ({
     sessionDate: stringOr(row.session_date, ""),
     rideType: stringOr(row.ride_type, "REHIT"),
     peakPowerWatts: hasValue(row.peak_power_watts) ? Math.round(numberOr(row.peak_power_watts, 0)).toString() : "--",
-    manp: hasValue(row.manp) ? Math.round(numberOr(row.manp, 0)).toString() : "--",
+    manp: hasValue(row.manp)
+      ? Math.round(numberOr(row.manp, 0)).toString()
+      : hasValue(row.fitness_score)
+        ? Math.round(numberOr(row.fitness_score, 0)).toString()
+        : "--",
     avgSprintPower: hasValue(row.avg_sprint_power) ? Math.round(numberOr(row.avg_sprint_power, 0)).toString() : "--",
-    caloriesInclEpoc: hasValue(row.calories_incl_epoc) ? Math.round(numberOr(row.calories_incl_epoc, 0)).toString() : "--",
-    heartRateMax: hasValue(row.heart_rate_max) ? Math.round(numberOr(row.heart_rate_max, 0)).toString() : "--",
-    sequentialNumber: stringOr(row.sequential_number, "—"),
+    caloriesInclEpoc: hasValue(row.calories_incl_epoc)
+      ? Math.round(numberOr(row.calories_incl_epoc, 0)).toString()
+      : hasValue(row.calories)
+        ? Math.round(numberOr(row.calories, 0)).toString()
+        : "--",
+    heartRateMax: hasValue(row.heart_rate_max)
+      ? Math.round(numberOr(row.heart_rate_max, 0)).toString()
+      : hasValue(row.max_hr)
+        ? Math.round(numberOr(row.max_hr, 0)).toString()
+        : "--",
+    sequentialNumber: stringOr(row.sequential_number, "") || stringOr(row.ride_number, "—"),
   }));
   payload.arxHistory = arxRows.map((row) => ({
     label: `${formatDateForLabel(row.session_date)} · ${stringOr(row.exercise, "ARX exercise")}`,
