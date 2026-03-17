@@ -47,20 +47,34 @@ function asNum(v: unknown): number | null {
 
 // ─── ARX auth ────────────────────────────────────────────────────────────────
 
-async function getCsrfToken(): Promise<string> {
-  const res = await fetch(`${ARX_BASE}/login`, {
-    cache: "no-store",
-    headers: { "User-Agent": "Mozilla/5.0 (compatible; IsoClub/1.0)" },
-  });
-  const html = await res.text();
-  const match = html.match(/<input[^>]+name="_csrf_token"[^>]+value="([^"]+)"/);
-  if (!match) throw new Error("Could not find CSRF token on ARX login page.");
-  return match[1];
+function extractPhpSessId(setCookieHeader: string): string {
+  return setCookieHeader.match(/PHPSESSID=([^;]+)/)?.[1] ?? "";
 }
 
 async function loginToArx(username: string, password: string): Promise<string> {
-  const csrfToken = await getCsrfToken();
-  const res = await fetch(`${ARX_BASE}/login_check`, {
+  // Step 1: GET login page — capture initial PHPSESSID so Symfony can validate
+  // the CSRF token against the session (required for Symfony security component).
+  const loginPageRes = await fetch(`${ARX_BASE}/login`, {
+    cache: "no-store",
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; IsoClub/1.0)" },
+  });
+  const loginHtml = await loginPageRes.text();
+  const initialSessId = extractPhpSessId(loginPageRes.headers.get("set-cookie") ?? "");
+
+  // Extract CSRF token — try both attribute orderings
+  const csrfMatch =
+    loginHtml.match(/name="_csrf_token"[^>]*value="([^"]+)"/) ??
+    loginHtml.match(/value="([^"]+)"[^>]*name="_csrf_token"/) ??
+    loginHtml.match(/name="[^"]*_token[^"]*"[^>]*value="([^"]+)"/) ??
+    loginHtml.match(/value="([^"]+)"[^>]*name="[^"]*_token[^"]*"/);
+  if (!csrfMatch) {
+    throw new Error("Could not extract CSRF token from ARX login page. The site structure may have changed.");
+  }
+  const csrfToken = csrfMatch[1];
+
+  // Step 2: POST login_check — pass initial PHPSESSID so Symfony can look up
+  // the CSRF token from the session and validate it.
+  const loginCheckRes = await fetch(`${ARX_BASE}/login_check`, {
     method: "POST",
     redirect: "manual",
     cache: "no-store",
@@ -69,6 +83,7 @@ async function loginToArx(username: string, password: string): Promise<string> {
       "User-Agent": "Mozilla/5.0 (compatible; IsoClub/1.0)",
       Origin: ARX_BASE,
       Referer: `${ARX_BASE}/login`,
+      ...(initialSessId ? { Cookie: `PHPSESSID=${initialSessId}` } : {}),
     },
     body: new URLSearchParams({
       _username: username,
@@ -77,17 +92,23 @@ async function loginToArx(username: string, password: string): Promise<string> {
     }).toString(),
   });
 
-  // Symfony login returns 302 on success
-  if (res.status !== 302 && res.status !== 301 && res.status !== 200) {
-    throw new Error(`ARX login returned unexpected status ${res.status}.`);
+  if (loginCheckRes.status !== 302 && loginCheckRes.status !== 301 && loginCheckRes.status !== 200) {
+    throw new Error(`ARX login returned unexpected status ${loginCheckRes.status}.`);
   }
 
-  const setCookie = res.headers.get("set-cookie") ?? "";
-  const match = setCookie.match(/PHPSESSID=([^;]+)/);
-  if (!match) {
-    throw new Error("ARX login failed. Please check your username and password.");
+  // Successful Symfony login sets a new PHPSESSID via Set-Cookie
+  const newSessId = extractPhpSessId(loginCheckRes.headers.get("set-cookie") ?? "");
+  if (!newSessId) {
+    // Login may have failed silently — redirected back to /login
+    const redirectTo = loginCheckRes.headers.get("location") ?? "";
+    if (redirectTo.includes("login")) {
+      throw new Error("ARX login failed. Please check your username and password.");
+    }
+    // Some server configurations reuse the existing session
+    if (initialSessId) return initialSessId;
+    throw new Error("ARX login failed — no session cookie returned.");
   }
-  return match[1];
+  return newSessId;
 }
 
 // ─── HTML data extraction ─────────────────────────────────────────────────────
