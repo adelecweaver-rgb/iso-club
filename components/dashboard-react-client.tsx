@@ -1312,7 +1312,12 @@ export function DashboardReactClient({
 
             return (
               <>
-                <div className="sec-header"><div className="sec-title">ARX Strength</div></div>
+                <div className="sec-header">
+                  <div className="sec-title">ARX Strength</div>
+                  <Link className="btn btn-sm" href="/member/connect/arx">
+                    ↩ Load ARX data
+                  </Link>
+                </div>
 
                 {/* Summary cards */}
                 <div className="grid-4" style={{ marginBottom: 16 }}>
@@ -1395,7 +1400,15 @@ export function DashboardReactClient({
                     })}
                   </div>
                 ) : (
-                  <div className="card"><div className="card-body"><p style={{ color: "var(--text3)" }}>No ARX sessions logged yet.</p></div></div>
+                  <div className="card" style={{ textAlign: "center", padding: "32px 24px" }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>No ARX data yet</div>
+                    <p style={{ fontSize: 13, color: "var(--text3)", marginBottom: 20, lineHeight: 1.6 }}>
+                      Export your workout history from the ARX member portal and upload it here to see your strength analytics.
+                    </p>
+                    <Link className="btn btn-lime btn-sm" href="/member/connect/arx">
+                      Import ARX data →
+                    </Link>
+                  </div>
                 )}
 
                 {/* Exercise comparison */}
