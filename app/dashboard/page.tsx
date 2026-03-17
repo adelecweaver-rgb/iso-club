@@ -313,32 +313,12 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     protocolRes,
     reportRes,
   ] = await Promise.all([
-    // Use select("*") so the query succeeds regardless of which columns exist in
-    // the schema. raw_data JSONB is returned but discarded during mapping.
-    // Try member_id first; if that column is absent (error) try user_id instead.
-    (async () => {
-      const byMemberId = await supabase
-        .from("carol_sessions")
-        .select("*")
-        .eq("member_id", memberId)
-        .order("session_date", { ascending: false })
-        .limit(60);
-      if (!byMemberId.error) return byMemberId;
-      // member_id column may not exist — fall back to user_id
-      const byUserId = await supabase
-        .from("carol_sessions")
-        .select("*")
-        .eq("user_id", memberId)
-        .order("session_date", { ascending: false })
-        .limit(60);
-      if (!byUserId.error) return byUserId;
-      // session_date column may not exist — try without ordering
-      return supabase
-        .from("carol_sessions")
-        .select("*")
-        .eq("user_id", memberId)
-        .limit(60);
-    })(),
+    supabase
+      .from("carol_sessions")
+      .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr,manp,avg_sprint_power,calories_incl_epoc,heart_rate_max,sequential_number")
+      .eq("member_id", memberId)
+      .order("session_date", { ascending: false })
+      .limit(60),
     supabase
       .from("arx_sessions")
       .select("session_date,exercise,output,concentric_max,eccentric_max")
