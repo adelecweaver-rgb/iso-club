@@ -45,12 +45,13 @@ type DashboardPayload = {
   carolHistory: Array<{ label: string; value: string }>;
   carolSessions: Array<{
     sessionDate: string;
-    rideNumber: string;
+    sequentialNumber: string;
     rideType: string;
-    fitnessScore: string;
+    manp: string;
+    avgSprintPower: string;
     peakPowerWatts: string;
-    calories: string;
-    maxHr: string;
+    caloriesInclEpoc: string;
+    heartRateMax: string;
   }>;
   arxHistory: Array<{ label: string; value: string }>;
   scan: {
@@ -314,7 +315,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   ] = await Promise.all([
     supabase
       .from("carol_sessions")
-      .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr")
+      .select("session_date,sequential_number,ride_type,manp,avg_sprint_power,peak_power_watts,calories_incl_epoc,heart_rate_max")
       .eq("member_id", memberId)
       .order("session_date", { ascending: false })
       .limit(60),
@@ -400,7 +401,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
 
   const arxLatest = arxRows[0] ?? null;
   const carolLatest = carolRows[0] ?? null;
-  payload.metrics.carolFitness = carolLatest && hasValue(carolLatest.fitness_score) ? numberOr(carolLatest.fitness_score, 0).toFixed(1) : "--";
+  payload.metrics.carolFitness = carolLatest && hasValue(carolLatest.manp) ? numberOr(carolLatest.manp, 0).toFixed(1) : "--";
   payload.metrics.arxOutput =
     arxLatest && (hasValue(arxLatest.concentric_max) || hasValue(arxLatest.output))
       ? Math.round(numberOr(arxLatest.concentric_max, numberOr(arxLatest.output, 0))).toString()
@@ -421,17 +422,18 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   };
 
   payload.carolHistory = carolRows.slice(0, 3).map((row) => ({
-    label: `${formatDateForLabel(row.session_date)} · Ride #${stringOr(row.ride_number, "—")}`,
-    value: numberOr(row.fitness_score, 0).toFixed(1),
+    label: `${formatDateForLabel(row.session_date)} · Ride #${stringOr(row.sequential_number, "—")}`,
+    value: hasValue(row.manp) ? numberOr(row.manp, 0).toFixed(1) : "--",
   }));
   payload.carolSessions = carolRows.map((row) => ({
     sessionDate: stringOr(row.session_date, ""),
-    rideNumber: stringOr(row.ride_number, "—"),
+    sequentialNumber: stringOr(row.sequential_number, "—"),
     rideType: stringOr(row.ride_type, "REHIT"),
-    fitnessScore: hasValue(row.fitness_score) ? numberOr(row.fitness_score, 0).toFixed(1) : "--",
+    manp: hasValue(row.manp) ? numberOr(row.manp, 0).toFixed(1) : "--",
+    avgSprintPower: hasValue(row.avg_sprint_power) ? Math.round(numberOr(row.avg_sprint_power, 0)).toString() : "--",
     peakPowerWatts: hasValue(row.peak_power_watts) ? Math.round(numberOr(row.peak_power_watts, 0)).toString() : "--",
-    calories: hasValue(row.calories) ? Math.round(numberOr(row.calories, 0)).toString() : "--",
-    maxHr: hasValue(row.max_hr) ? Math.round(numberOr(row.max_hr, 0)).toString() : "--",
+    caloriesInclEpoc: hasValue(row.calories_incl_epoc) ? Math.round(numberOr(row.calories_incl_epoc, 0)).toString() : "--",
+    heartRateMax: hasValue(row.heart_rate_max) ? Math.round(numberOr(row.heart_rate_max, 0)).toString() : "--",
   }));
   payload.arxHistory = arxRows.map((row) => ({
     label: `${formatDateForLabel(row.session_date)} · ${stringOr(row.exercise, "ARX exercise")}`,

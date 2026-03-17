@@ -21,12 +21,13 @@ type ActorRole = "member" | "coach" | "admin" | "staff" | "unknown";
 
 type CarolSession = {
   sessionDate: string;
-  rideNumber: string;
+  sequentialNumber: string;
   rideType: string;
-  fitnessScore: string;
+  manp: string;
+  avgSprintPower: string;
   peakPowerWatts: string;
-  calories: string;
-  maxHr: string;
+  caloriesInclEpoc: string;
+  heartRateMax: string;
 };
 
 type DashboardPayload = {
@@ -406,9 +407,6 @@ export function DashboardReactClient({
   };
 
   const latestCarol = carolStatRows[0];
-  const peakPower = carolStatRows.length
-    ? Math.max(...carolStatRows.map((row) => Number(row.peakPowerWatts || 0)))
-    : 0;
 
   const handleSignOut = useCallback(async () => {
     await signOut({ redirectUrl: "/" });
@@ -716,24 +714,24 @@ export function DashboardReactClient({
             <button className={`tab ${carolTab === "fitness_tests" ? "active" : ""}`} onClick={() => setCarolTab("fitness_tests")} type="button">Fitness Tests</button>
           </div>
           <div className="grid-4" style={{ marginBottom: 16 }}>
-            <div className="stat-card"><div className="stat-label">Fitness score</div><div className="stat-val">{latestCarol?.fitnessScore || "--"}</div></div>
-            <div className="stat-card amber"><div className="stat-label">Peak power</div><div className="stat-val">{peakPower > 0 ? Math.round(peakPower) : "--"}</div></div>
+            <div className="stat-card"><div className="stat-label">MANP</div><div className="stat-val">{latestCarol?.manp || "--"}</div></div>
+            <div className="stat-card amber"><div className="stat-label">Avg sprint power</div><div className="stat-val">{latestCarol?.avgSprintPower ? `${latestCarol.avgSprintPower}W` : "--"}</div></div>
             <div className="stat-card blue"><div className="stat-label">Total rides</div><div className="stat-val">{memberCarolRows.length}</div></div>
-            <div className="stat-card"><div className="stat-label">Last max HR</div><div className="stat-val">{latestCarol?.maxHr || "--"}</div></div>
+            <div className="stat-card"><div className="stat-label">Max HR</div><div className="stat-val">{latestCarol?.heartRateMax || "--"}</div></div>
           </div>
           <div className="card">
             <div className="card-header"><div className="card-title">Ride history</div></div>
             {memberCarolRows.length ? (
               memberCarolRows.slice(0, 25).map((row) => (
-                <div className="metric-row" key={`${row.sessionDate}-${row.rideNumber}`}>
+                <div className="metric-row" key={`${row.sessionDate}-${row.sequentialNumber}`}>
                   <div className="metric-label">
-                    {row.sessionDate || "Recent"} · Ride #{row.rideNumber}
+                    {row.sessionDate || "Recent"} · Ride #{row.sequentialNumber}
                   </div>
                   <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Score <b style={{ color: "var(--text)" }}>{row.fitnessScore}</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Peak <b style={{ color: "var(--text)" }}>{row.peakPowerWatts}W</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Cal <b style={{ color: "var(--text)" }}>{row.calories}</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Max HR <b style={{ color: "var(--text)" }}>{row.maxHr}</b></span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>MANP <b style={{ color: "var(--text)" }}>{row.manp}</b></span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Avg Sprint <b style={{ color: "var(--text)" }}>{row.avgSprintPower}W</b></span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Cal <b style={{ color: "var(--text)" }}>{row.caloriesInclEpoc}</b></span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Max HR <b style={{ color: "var(--text)" }}>{row.heartRateMax}</b></span>
                   </div>
                 </div>
               ))
