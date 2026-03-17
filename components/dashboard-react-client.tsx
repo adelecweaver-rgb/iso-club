@@ -111,6 +111,16 @@ type DashboardPayload = {
     weekCurrent: string;
     weekTotal: string;
     sessions: Array<{ name: string; detail: string; duration: string; status: string }>;
+    id: string;
+    targetSystem: string;
+    arxPerWeek: number;
+    carolPerWeek: number;
+    recoveryPerMonth: number;
+    carolRideTypes: string[];
+    arxExercises: string[];
+    coachNotes: string;
+    startDate: string;
+    compliance: { arxThisWeek: number; carolThisWeek: number; recoveryThisMonth: number };
   };
   bookings: Array<{ label: string; status: string }>;
   reports: Array<{ title: string }>;
@@ -390,6 +400,22 @@ function buildArxInsight(groups: ArxExerciseGroup[]): string {
   return parts.join(" ");
 }
 
+function complianceColor(actual: number, target: number): string {
+  if (target === 0) return "var(--text3)";
+  if (actual >= target) return "#9dcc3a";
+  if (actual >= Math.ceil(target * 0.5)) return "#e8a838";
+  return "#e05252";
+}
+
+function formatTargetSystem(s: string): string {
+  const map: Record<string, string> = { muscle: "Muscle", cardio: "Cardio", metabolic: "Metabolic", recovery: "Recovery", performance: "Performance" };
+  return map[s] ?? s;
+}
+
+function formatExerciseName(s: string): string {
+  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function formatMessageTime(isoValue: string): string {
   if (!isoValue) return "";
   const parsed = new Date(isoValue);
@@ -459,6 +485,13 @@ export function DashboardReactClient({
     "rehit",
   );
   const [activeScanDot, setActiveScanDot] = useState<number | null>(null);
+  const [coachProtocols, setCoachProtocols] = useState<Array<{ id: string; name: string; target_system: string; description: string }>>([]);
+  const [assignMemberId, setAssignMemberId] = useState("");
+  const [assignProtocolId, setAssignProtocolId] = useState("");
+  const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().slice(0, 10));
+  const [assignCoachNotes, setAssignCoachNotes] = useState("");
+  const [assignStatus, setAssignStatus] = useState("");
+  const [isAssigning, setIsAssigning] = useState(false);
   const [peerName, setPeerName] = useState("Dustin");
   const [peerId, setPeerId] = useState(payload.coachId ?? "");
   const [selectedCoachRecipientId, setSelectedCoachRecipientId] = useState(
@@ -581,6 +614,17 @@ export function DashboardReactClient({
     if (!threadRef.current) return;
     threadRef.current.scrollTop = threadRef.current.scrollHeight;
   }, [messages]);
+
+  useEffect(() => {
+    if (!isCoachAccount || mode !== "coach" || coachView !== "protocols") return;
+    if (coachProtocols.length > 0) return;
+    void (async () => {
+      try {
+        const res = await getJson<{ protocols: typeof coachProtocols }>("/api/coach/protocols");
+        if (Array.isArray(res.protocols)) setCoachProtocols(res.protocols);
+      } catch { /* table may not exist yet */ }
+    })();
+  }, [coachView, isCoachAccount, mode, coachProtocols.length]);
 
   const sendMessage = useCallback(async () => {
     if (sendingMessage) return;
@@ -851,7 +895,10 @@ export function DashboardReactClient({
                 <div style={{ flex: 1 }}>
                   <div className="track-name">{payload.protocol.name || "Strength Foundation Track"}</div>
                   <div className="track-meta">
-                    Prescribed by <b>Dustin</b> · Week {payload.protocol.weekCurrent} of {payload.protocol.weekTotal}
+                    Prescribed by <b>Dustin</b>
+                    {payload.protocol.targetSystem
+                      ? ` · ${formatTargetSystem(payload.protocol.targetSystem)}`
+                      : ` · Week ${payload.protocol.weekCurrent} of ${payload.protocol.weekTotal}`}
                   </div>
                 </div>
                 <span className="tag tag-lime">Active</span>
@@ -907,32 +954,118 @@ export function DashboardReactClient({
         </div>
 
         <div id="view-protocol" className="content" style={{ display: mode === "member" && memberView === "protocol" ? "block" : "none" }}>
-          <div className="sec-header">
-            <div className="sec-title">My Protocol</div>
-          </div>
-          <div className="card">
-            <div className="track-hero">
-              <div style={{ flex: 1 }}>
-                <div className="track-name">{payload.protocol.name || "Protocol"}</div>
-                <div className="track-meta">Week {payload.protocol.weekCurrent} of {payload.protocol.weekTotal}</div>
-              </div>
-              <span className="tag tag-lime">Active</span>
-            </div>
-            {payload.protocol.sessions.length ? (
-              payload.protocol.sessions.map((session, index) => (
-                <div key={`${session.name}-${index}`} className="session-item">
-                  <div className="s-num">{index + 1}</div>
-                  <div className="s-info">
-                    <div className="s-name">{session.name}</div>
-                    <div className="s-detail">{session.detail}</div>
+          {(() => {
+            const p = payload.protocol;
+            const hasNewProtocol = !!p.targetSystem;
+            const { arxThisWeek, carolThisWeek, recoveryThisMonth } = p.compliance;
+
+            return (
+              <>
+                <div className="sec-header"><div className="sec-title">My Protocol</div></div>
+
+                {hasNewProtocol ? (
+                  <>
+                    {/* Protocol header card */}
+                    <div className="card" style={{ marginBottom: 14 }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "16px 20px 12px" }}>
+                        <div>
+                          <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>{p.name}</div>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            <span style={{ fontSize: 10, background: "rgba(157,204,58,0.12)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.3)", borderRadius: 4, padding: "2px 8px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                              {formatTargetSystem(p.targetSystem)}
+                            </span>
+                            {p.startDate && <span style={{ fontSize: 11, color: "var(--text3)" }}>Started {p.startDate}</span>}
+                          </div>
+                        </div>
+                        <span className="tag tag-lime">Active</span>
+                      </div>
+
+                      {/* Weekly targets */}
+                      <div style={{ padding: "0 20px 16px", display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                        {[
+                          { label: "ARX sessions / week", target: p.arxPerWeek, actual: arxThisWeek, unit: "session" },
+                          { label: "CAROL rides / week", target: p.carolPerWeek, actual: carolThisWeek, unit: "ride" },
+                          { label: "Recovery / month", target: p.recoveryPerMonth, actual: recoveryThisMonth, unit: "session" },
+                        ].map(({ label, target, actual, unit }) => {
+                          const color = complianceColor(actual, target);
+                          return (
+                            <div key={label} style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                              <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{label}</div>
+                              <div style={{ fontSize: 18, fontWeight: 700, color }}>
+                                {actual} <span style={{ fontSize: 11, fontWeight: 400, color: "var(--text3)" }}>of {target}</span>
+                              </div>
+                              <div style={{ height: 3, background: "var(--border)", borderRadius: 2, marginTop: 6, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${Math.min(100, target > 0 ? (actual / target) * 100 : 0)}%`, background: color, borderRadius: 2 }} />
+                              </div>
+                              <div style={{ fontSize: 9, color, marginTop: 4 }}>
+                                {actual >= target ? "✓ On track" : actual > 0 ? `${target - actual} more ${unit}${target - actual !== 1 ? "s" : ""} to go` : "Not started"}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Focus grid */}
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+                      {/* CAROL ride types */}
+                      <div className="card" style={{ padding: "14px 16px" }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>CAROL — Ride types to focus on</div>
+                        {p.carolRideTypes.length > 0 ? p.carolRideTypes.map((rt) => (
+                          <div key={rt} style={{ fontSize: 12, color: "var(--text2)", padding: "4px 0", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "#9dcc3a" }}>→</span> {rt.replace(/_/g, " ")}
+                          </div>
+                        )) : <div style={{ fontSize: 12, color: "var(--text3)" }}>No specific ride types</div>}
+                      </div>
+
+                      {/* ARX exercises */}
+                      <div className="card" style={{ padding: "14px 16px" }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>ARX — Priority exercises</div>
+                        {p.arxExercises.length > 0 ? p.arxExercises.map((ex) => (
+                          <div key={ex} style={{ fontSize: 12, color: "var(--text2)", padding: "4px 0", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 6 }}>
+                            <span style={{ color: "#9dcc3a" }}>→</span> {formatExerciseName(ex)}
+                          </div>
+                        )) : <div style={{ fontSize: 12, color: "var(--text3)" }}>No specific exercises</div>}
+                      </div>
+                    </div>
+
+                    {/* Coach notes */}
+                    {p.coachNotes && (
+                      <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px" }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Notes from Dustin</div>
+                        <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{p.coachNotes}</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* Legacy protocol display */
+                  <div className="card">
+                    <div className="track-hero">
+                      <div style={{ flex: 1 }}>
+                        <div className="track-name">{p.name || "Protocol"}</div>
+                        <div className="track-meta">Week {p.weekCurrent} of {p.weekTotal}</div>
+                      </div>
+                      <span className="tag tag-lime">Active</span>
+                    </div>
+                    {p.sessions.length ? (
+                      p.sessions.map((session, index) => (
+                        <div key={`${session.name}-${index}`} className="session-item">
+                          <div className="s-num">{index + 1}</div>
+                          <div className="s-info">
+                            <div className="s-name">{session.name}</div>
+                            <div className="s-detail">{session.detail}</div>
+                          </div>
+                          <div className="s-dur">{session.duration} min</div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="card-body"><p style={{ color: "var(--text3)" }}>No protocol assigned yet. Ask your coach to assign one.</p></div>
+                    )}
                   </div>
-                  <div className="s-dur">{session.duration} min</div>
-                </div>
-              ))
-            ) : (
-              <div className="card-body"><p style={{ color: "var(--text3)" }}>No protocol assigned yet.</p></div>
-            )}
-          </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div id="view-carol" className="content" style={{ display: mode === "member" && memberView === "carol" ? "block" : "none" }}>
@@ -1653,8 +1786,122 @@ export function DashboardReactClient({
         </div>
 
         <div id="coach-protocols" className="content" style={{ display: mode === "coach" && coachView === "protocols" ? "block" : "none" }}>
-          <div className="sec-header"><div className="sec-title">Protocols</div></div>
-          <div className="card"><div className="card-body">Create and manage member protocols here.</div></div>
+          <div className="sec-header"><div className="sec-title">Assign Protocol</div></div>
+
+          {/* Protocol library */}
+          {coachProtocols.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12, marginBottom: 20 }}>
+              {coachProtocols.map((proto) => (
+                <div
+                  key={proto.id}
+                  onClick={() => setAssignProtocolId(proto.id)}
+                  style={{ cursor: "pointer", background: assignProtocolId === proto.id ? "rgba(157,204,58,0.08)" : "var(--bg2)", border: `1px solid ${assignProtocolId === proto.id ? "#9dcc3a" : "var(--border)"}`, borderRadius: "var(--r)", padding: "12px 14px" }}
+                >
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>{proto.name}</div>
+                  <span style={{ fontSize: 9, background: "rgba(157,204,58,0.1)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.25)", borderRadius: 3, padding: "1px 6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                    {formatTargetSystem(proto.target_system ?? "")}
+                  </span>
+                  <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, marginBottom: 0, lineHeight: 1.5 }}>{proto.description}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {coachProtocols.length === 0 && (
+            <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card-body">
+                <p style={{ color: "var(--text3)" }}>No protocols found. Run <code>protocols_tables.sql</code> in your Supabase SQL editor to create the protocol library.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Assignment form */}
+          <div className="card">
+            <div className="card-header"><div className="card-title">Assign to member</div></div>
+            <div style={{ padding: "16px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              <div>
+                <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 6 }}>Member</label>
+                <select
+                  className="form-input"
+                  value={assignMemberId}
+                  onChange={(e) => setAssignMemberId(e.target.value)}
+                >
+                  <option value="">Select member…</option>
+                  {effectiveCoachRecipients.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 6 }}>Protocol</label>
+                <select
+                  className="form-input"
+                  value={assignProtocolId}
+                  onChange={(e) => setAssignProtocolId(e.target.value)}
+                >
+                  <option value="">Select protocol…</option>
+                  {coachProtocols.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name} — {formatTargetSystem(p.target_system ?? "")}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 6 }}>Start date</label>
+                <input
+                  className="form-input"
+                  type="date"
+                  value={assignStartDate}
+                  onChange={(e) => setAssignStartDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 6 }}>Coach notes (optional)</label>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="e.g. Focus on eccentric phase on ARX"
+                  value={assignCoachNotes}
+                  onChange={(e) => setAssignCoachNotes(e.target.value)}
+                />
+              </div>
+            </div>
+            <div style={{ padding: "0 20px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+              <button
+                className="btn btn-lime btn-sm"
+                type="button"
+                disabled={isAssigning || !assignMemberId || !assignProtocolId}
+                onClick={async () => {
+                  if (!assignMemberId || !assignProtocolId) return;
+                  setIsAssigning(true);
+                  setAssignStatus("Assigning…");
+                  try {
+                    await postJson("/api/coach/protocols", {
+                      action: "assign",
+                      member_id: assignMemberId,
+                      protocol_id: assignProtocolId,
+                      start_date: assignStartDate,
+                      coach_notes: assignCoachNotes || undefined,
+                    });
+                    setAssignStatus("✓ Protocol assigned successfully.");
+                    setAssignMemberId("");
+                    setAssignProtocolId("");
+                    setAssignCoachNotes("");
+                  } catch (err) {
+                    setAssignStatus(err instanceof Error ? err.message : "Failed to assign protocol.");
+                  } finally {
+                    setIsAssigning(false);
+                  }
+                }}
+              >
+                {isAssigning ? "Assigning…" : "Assign Protocol"}
+              </button>
+              {assignStatus && (
+                <span style={{ fontSize: 12, color: assignStatus.startsWith("✓") ? "#9dcc3a" : "#e05252" }}>
+                  {assignStatus}
+                </span>
+              )}
+            </div>
+          </div>
         </div>
       </main>
     </div>

@@ -112,6 +112,16 @@ type DashboardPayload = {
     weekCurrent: string;
     weekTotal: string;
     sessions: Array<{ name: string; detail: string; duration: string; status: string }>;
+    id: string;
+    targetSystem: string;
+    arxPerWeek: number;
+    carolPerWeek: number;
+    recoveryPerMonth: number;
+    carolRideTypes: string[];
+    arxExercises: string[];
+    coachNotes: string;
+    startDate: string;
+    compliance: { arxThisWeek: number; carolThisWeek: number; recoveryThisMonth: number };
   };
   bookings: Array<{ label: string; status: string }>;
   reports: Array<{ title: string }>;
@@ -262,6 +272,16 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       weekCurrent: "--",
       weekTotal: "--",
       sessions: [],
+      id: "",
+      targetSystem: "",
+      arxPerWeek: 0,
+      carolPerWeek: 0,
+      recoveryPerMonth: 0,
+      carolRideTypes: [],
+      arxExercises: [],
+      coachNotes: "",
+      startDate: "",
+      compliance: { arxThisWeek: 0, carolThisWeek: 0, recoveryThisMonth: 0 },
     },
     bookings: [],
     reports: [],
@@ -399,13 +419,24 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       .gte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true })
       .limit(5),
-    supabase
-      .from("protocols")
-      .select("id,name,week_current,week_total")
-      .eq("member_id", memberId)
-      .eq("is_active", true)
-      .order("updated_at", { ascending: false })
-      .limit(1),
+    // Try new assignment system first; fall back to old per-member protocols table
+    (async () => {
+      const newRes = await supabase
+        .from("member_protocols")
+        .select("id,start_date,coach_notes,protocols(id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
+        .eq("member_id", memberId)
+        .eq("status", "active")
+        .order("assigned_at", { ascending: false })
+        .limit(1);
+      if (!newRes.error) return newRes;
+      return supabase
+        .from("protocols")
+        .select("id,name,week_current,week_total")
+        .eq("member_id", memberId)
+        .eq("is_active", true)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+    })(),
     supabase.from("reports").select("title").eq("member_id", memberId).order("created_at", { ascending: false }).limit(3),
   ]);
 
@@ -422,10 +453,6 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   const recoveryRows = Array.isArray(recoveryRes.data) ? (recoveryRes.data as Array<Record<string, unknown>>) : [];
   const manualRows = Array.isArray(manualRes.data) ? (manualRes.data as Array<Record<string, unknown>>) : [];
   const bookingRows = Array.isArray(bookingRes.data) ? (bookingRes.data as Array<Record<string, unknown>>) : [];
-  const protocolRow =
-    Array.isArray(protocolRes.data) && protocolRes.data.length
-      ? (protocolRes.data[0] as Record<string, unknown>)
-      : null;
   const reportRows = Array.isArray(reportRes.data) ? (reportRes.data as Array<Record<string, unknown>>) : [];
 
   const arxLatest = arxRows[0] ?? null;
@@ -584,7 +611,45 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   }));
   payload.reports = reportRows.map((row) => ({ title: stringOr(row.title, "Report") }));
 
-  if (protocolRow) {
+  // Compliance: current week (Monday-based) and current month
+  const todayDate = new Date();
+  const daysFromMonday = todayDate.getDay() === 0 ? 6 : todayDate.getDay() - 1;
+  const weekStartDate = new Date(todayDate);
+  weekStartDate.setDate(todayDate.getDate() - daysFromMonday);
+  weekStartDate.setHours(0, 0, 0, 0);
+  const weekStartIso = weekStartDate.toISOString().slice(0, 10);
+  const arxDatesThisWeek = new Set(
+    arxRows
+      .filter((row) => stringOr(row.session_date, "").slice(0, 10) >= weekStartIso)
+      .map((row) => stringOr(row.session_date, "").slice(0, 10)),
+  );
+  const carolThisWeek = carolRows.filter((row) => stringOr(row.session_date, "").slice(0, 10) >= weekStartIso).length;
+  payload.protocol.compliance = {
+    arxThisWeek: arxDatesThisWeek.size,
+    carolThisWeek,
+    recoveryThisMonth: recoveryRows.length,
+  };
+
+  const protocolRow =
+    Array.isArray(protocolRes.data) && protocolRes.data.length
+      ? (protocolRes.data[0] as Record<string, unknown>)
+      : null;
+  const protocolLib = protocolRow ? (protocolRow.protocols as Record<string, unknown> | null | undefined) : null;
+
+  if (protocolLib) {
+    // New-style: member_protocols → protocols library
+    payload.protocol.id = stringOr(protocolLib.id, "");
+    payload.protocol.name = stringOr(protocolLib.name, "");
+    payload.protocol.targetSystem = stringOr(protocolLib.target_system, "");
+    payload.protocol.arxPerWeek = Math.round(numberOr(protocolLib.arx_frequency_per_week, 0));
+    payload.protocol.carolPerWeek = Math.round(numberOr(protocolLib.carol_frequency_per_week, 0));
+    payload.protocol.recoveryPerMonth = Math.round(numberOr(protocolLib.recovery_target_per_month, 0));
+    payload.protocol.carolRideTypes = Array.isArray(protocolLib.carol_ride_types) ? (protocolLib.carol_ride_types as string[]) : [];
+    payload.protocol.arxExercises = Array.isArray(protocolLib.arx_exercises) ? (protocolLib.arx_exercises as string[]) : [];
+    payload.protocol.coachNotes = stringOr(protocolRow!.coach_notes, "");
+    payload.protocol.startDate = stringOr(protocolRow!.start_date, "");
+  } else if (protocolRow) {
+    // Legacy: old per-member protocols table
     payload.protocol.name = stringOr(protocolRow.name, "");
     payload.protocol.weekCurrent = Math.round(numberOr(protocolRow.week_current, 1)).toString();
     payload.protocol.weekTotal = Math.round(numberOr(protocolRow.week_total, 12)).toString();
