@@ -258,6 +258,76 @@ type ArxExerciseGroup = {
   sessions: Array<{ sessionDate: string; output: number | null; concentricMax: number | null; eccentricMax: number | null }>;
 };
 
+function carolNum(s: string): number | null {
+  if (!s || s === "--" || s === "—") return null;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function estimateVo2Max(manpW: number, weightLbs: number): number | null {
+  if (manpW <= 0 || weightLbs < 50) return null;
+  const kg = weightLbs / 2.205;
+  return 10.8 * (manpW / kg) + 7;
+}
+
+function vo2Category(vo2: number): { label: string; color: string; barPct: number } {
+  const barPct = Math.min(100, Math.max(0, ((vo2 - 20) / 45) * 100));
+  if (vo2 >= 55) return { label: "Excellent", color: "#9dcc3a", barPct };
+  if (vo2 >= 50) return { label: "Very Good", color: "#9dcc3a", barPct };
+  if (vo2 >= 44) return { label: "Good", color: "#9dcc3a", barPct };
+  if (vo2 >= 35) return { label: "Average", color: "#e8a838", barPct };
+  return { label: "Below Average", color: "#e05252", barPct };
+}
+
+function buildCarolInsight(
+  carolSessions: DashboardPayload["carolSessions"],
+  weightLbsStr: string,
+): string {
+  const rehit = carolSessions.filter((s) => normalizeCarolTabKey(s.rideType) === "rehit");
+  if (rehit.length === 0) {
+    return carolSessions.length > 0
+      ? "You have non-REHIT sessions logged. Add REHIT rides to unlock VO2 max tracking and your aerobic fitness trajectory."
+      : "Connect your CAROL account to start tracking cardio fitness and see your VO2 max estimate.";
+  }
+
+  const parts: string[] = [];
+  const weightLbs = carolNum(weightLbsStr) ?? carolNum(weightLbsStr.replace(/[^0-9.]/g, ""));
+  const rehitWithManp = rehit.filter((s) => (carolNum(s.manp) ?? 0) > 0);
+  const latestManp = carolNum(rehitWithManp[0]?.manp ?? "");
+
+  if (latestManp && weightLbs) {
+    const vo2 = estimateVo2Max(latestManp, weightLbs);
+    if (vo2) {
+      const cat = vo2Category(vo2);
+      parts.push(
+        `Based on your MANP and scan weight, estimated VO2 max is ~${vo2.toFixed(0)} ml/kg/min — ${cat.label.toLowerCase()} cardiorespiratory capacity.`,
+      );
+    }
+  } else if (latestManp) {
+    parts.push(`Current MANP of ${Math.round(latestManp)} W reflects strong aerobic power output. Complete a body scan to unlock a personalised VO2 max estimate.`);
+  }
+
+  if (rehitWithManp.length >= 6) {
+    const recentAvg = rehitWithManp.slice(0, 3).reduce((s, r) => s + (carolNum(r.manp) ?? 0), 0) / 3;
+    const olderAvg = rehitWithManp.slice(3, 6).reduce((s, r) => s + (carolNum(r.manp) ?? 0), 0) / 3;
+    if (olderAvg > 0) {
+      const pct = ((recentAvg - olderAvg) / olderAvg) * 100;
+      if (pct > 3) parts.push(`Aerobic fitness is trending up ${pct.toFixed(0)}% over recent sessions — consistent REHIT is working.`);
+      else if (pct < -3) parts.push(`MANP is slightly down recently. This is often fatigue or under-recovery — prioritise sleep and ensure at least 48 hours between REHIT sessions.`);
+      else parts.push(`MANP is holding steady — normal during an adaptation phase. Maintain 2 REHIT sessions per week to continue progressing.`);
+    }
+  }
+
+  const lastEpoc = carolNum(rehit[0]?.caloriesInclEpoc ?? "");
+  if (lastEpoc && lastEpoc > 80) {
+    parts.push(`Last session generated ~${Math.round(lastEpoc)} kcal including EPOC — that metabolic boost continues for hours after the workout, which is a core benefit of REHIT.`);
+  }
+
+  return parts.length > 0
+    ? parts.join(" ")
+    : "Keep building your REHIT session history — aerobic trends and VO2 max estimates will appear as more data comes in.";
+}
+
 function buildArxByExercise(sessions: DashboardPayload["arxSessions"]): ArxExerciseGroup[] {
   const map = new Map<string, ArxExerciseGroup["sessions"]>();
   for (const s of sessions) {
@@ -866,39 +936,167 @@ export function DashboardReactClient({
         </div>
 
         <div id="view-carol" className="content" style={{ display: mode === "member" && memberView === "carol" ? "block" : "none" }}>
-          <div className="sec-header"><div className="sec-title">CAROL Rides</div></div>
-          <div className="tabs">
-            <button className={`tab ${carolTab === "rehit" ? "active" : ""}`} onClick={() => setCarolTab("rehit")} type="button">REHIT</button>
-            <button className={`tab ${carolTab === "fat_burn" ? "active" : ""}`} onClick={() => setCarolTab("fat_burn")} type="button">Fat Burn</button>
-            <button className={`tab ${carolTab === "free_custom" ? "active" : ""}`} onClick={() => setCarolTab("free_custom")} type="button">Free &amp; Custom</button>
-            <button className={`tab ${carolTab === "fitness_tests" ? "active" : ""}`} onClick={() => setCarolTab("fitness_tests")} type="button">Fitness Tests</button>
-          </div>
-          <div className="grid-4" style={{ marginBottom: 16 }}>
-            <div className="stat-card"><div className="stat-label">MANP</div><div className="stat-val">{latestCarol?.manp || "--"}</div></div>
-            <div className="stat-card amber"><div className="stat-label">Avg sprint power</div><div className="stat-val">{peakAvgSprintPower > 0 ? Math.round(peakAvgSprintPower) : "--"}</div></div>
-            <div className="stat-card blue"><div className="stat-label">Total rides</div><div className="stat-val">{memberCarolRows.length}</div></div>
-            <div className="stat-card"><div className="stat-label">Last max HR</div><div className="stat-val">{latestCarol?.heartRateMax || "--"}</div></div>
-          </div>
-          <div className="card">
-            <div className="card-header"><div className="card-title">Ride history</div></div>
-            {memberCarolRows.length ? (
-              memberCarolRows.slice(0, 25).map((row) => (
-                <div className="metric-row" key={`${row.sessionDate}-${row.sequentialNumber}`}>
-                  <div className="metric-label">
-                    {row.sessionDate || "Recent"} · Ride #{row.sequentialNumber}
-                  </div>
-                  <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>MANP <b style={{ color: "var(--text)" }}>{row.manp}</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Avg Sprint <b style={{ color: "var(--text)" }}>{row.avgSprintPower}W</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Cal+EPOC <b style={{ color: "var(--text)" }}>{row.caloriesInclEpoc}</b></span>
-                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Max HR <b style={{ color: "var(--text)" }}>{row.heartRateMax}</b></span>
-                  </div>
+          {(() => {
+            const allCarol = Array.isArray(payload.carolSessions) ? payload.carolSessions : [];
+            const rehitSessions = allCarol.filter((s) => normalizeCarolTabKey(s.rideType) === "rehit");
+            const rehitWithManp = rehitSessions.filter((s) => (carolNum(s.manp) ?? 0) > 0);
+            const latestManp = carolNum(rehitWithManp[0]?.manp ?? "");
+            const weightLbs = carolNum(payload.scan.weightLbs);
+            const vo2 = latestManp && weightLbs ? estimateVo2Max(latestManp, weightLbs) : null;
+            const vo2Cat = vo2 ? vo2Category(vo2) : null;
+            const now = new Date();
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+            const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
+            const sessionsThisMonth = allCarol.filter((s) => s.sessionDate >= monthStart).length;
+            const sessionsPrevMonth = allCarol.filter((s) => s.sessionDate >= prevMonthStart && s.sessionDate < monthStart).length;
+
+            // MANP trend
+            let manpTrendLabel = "";
+            let manpTrendColor = "var(--text3)";
+            if (rehitWithManp.length >= 6) {
+              const recentAvg = rehitWithManp.slice(0, 3).reduce((s, r) => s + (carolNum(r.manp) ?? 0), 0) / 3;
+              const olderAvg = rehitWithManp.slice(3, 6).reduce((s, r) => s + (carolNum(r.manp) ?? 0), 0) / 3;
+              if (olderAvg > 0) {
+                const pct = ((recentAvg - olderAvg) / olderAvg) * 100;
+                if (pct > 3) { manpTrendLabel = `↑ ${pct.toFixed(0)}%`; manpTrendColor = "#9dcc3a"; }
+                else if (pct < -3) { manpTrendLabel = `↓ ${Math.abs(pct).toFixed(0)}%`; manpTrendColor = "#e05252"; }
+                else { manpTrendLabel = "Stable"; manpTrendColor = "var(--text3)"; }
+              }
+            } else if (rehitWithManp.length >= 2) {
+              manpTrendLabel = "Building history…";
+            }
+
+            return (
+              <>
+                <div className="sec-header">
+                  <div className="sec-title">CAROL Rides</div>
+                  <Link className="btn btn-sm" href="/member/connect/carol">
+                    ↩ Load CAROL data
+                  </Link>
                 </div>
-              ))
-            ) : (
-              <div className="card-body"><p style={{ color: "var(--text3)" }}>No rides logged for this tab yet.</p></div>
-            )}
-          </div>
+
+                {/* Empty state */}
+                {allCarol.length === 0 && (
+                  <div className="card" style={{ marginBottom: 16, textAlign: "center", padding: "32px 24px" }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>No CAROL data yet</div>
+                    <p style={{ fontSize: 13, color: "var(--text3)", marginBottom: 20, lineHeight: 1.6 }}>
+                      Connect your CAROL account to see your ride history, MANP fitness score, and estimated VO2 max.
+                    </p>
+                    <Link className="btn btn-lime btn-sm" href="/member/connect/carol">
+                      Connect CAROL account →
+                    </Link>
+                  </div>
+                )}
+
+                {/* Health snapshot */}
+                {allCarol.length > 0 && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
+                    {/* VO2 Max */}
+                    <div className="card" style={{ padding: "14px 16px" }}>
+                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Est. VO2 Max</div>
+                      {vo2 && vo2Cat ? (
+                        <>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
+                            <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{vo2.toFixed(0)}</span>
+                            <span style={{ fontSize: 10, color: "var(--text3)" }}>ml/kg/min</span>
+                          </div>
+                          <div style={{ height: 4, background: "var(--bg3)", borderRadius: 2, marginBottom: 6, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${vo2Cat.barPct}%`, background: vo2Cat.color, borderRadius: 2 }} />
+                          </div>
+                          <span style={{ fontSize: 10, color: vo2Cat.color, fontWeight: 600 }}>{vo2Cat.label}</span>
+                        </>
+                      ) : (
+                        <div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>--</div>
+                          <div style={{ fontSize: 10, color: "var(--text3)", lineHeight: 1.5 }}>
+                            {latestManp ? "Complete a body scan to estimate" : "Needs REHIT data"}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* MANP / Aerobic power */}
+                    <div className="card" style={{ padding: "14px 16px" }}>
+                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Aerobic Power (MANP)</div>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
+                        <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "--"}</span>
+                        {latestManp ? <span style={{ fontSize: 10, color: "var(--text3)" }}>W</span> : null}
+                      </div>
+                      {manpTrendLabel ? (
+                        <span style={{ fontSize: 11, color: manpTrendColor, fontWeight: 500 }}>{manpTrendLabel} vs prior sessions</span>
+                      ) : (
+                        <span style={{ fontSize: 10, color: "var(--text3)" }}>{rehitSessions.length < 2 ? "More REHIT sessions needed" : "Trend building…"}</span>
+                      )}
+                    </div>
+
+                    {/* Training consistency */}
+                    <div className="card" style={{ padding: "14px 16px" }}>
+                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>This Month</div>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
+                        <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{sessionsThisMonth}</span>
+                        <span style={{ fontSize: 10, color: "var(--text3)" }}>sessions</span>
+                      </div>
+                      {sessionsPrevMonth > 0 ? (
+                        <span style={{ fontSize: 11, color: sessionsThisMonth >= sessionsPrevMonth ? "#9dcc3a" : "var(--text3)" }}>
+                          {sessionsThisMonth >= sessionsPrevMonth ? "↑" : "↓"} vs {sessionsPrevMonth} last month
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 10, color: "var(--text3)" }}>{allCarol.length} rides total</span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Dustin's Analysis */}
+                {allCarol.length > 0 && (
+                  <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Dustin&apos;s Analysis</div>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>
+                      {buildCarolInsight(allCarol, payload.scan.weightLbs)}
+                    </p>
+                  </div>
+                )}
+
+                {/* Tab filter + stat cards + ride history */}
+                {allCarol.length > 0 && (
+                  <>
+                    <div className="tabs">
+                      <button className={`tab ${carolTab === "rehit" ? "active" : ""}`} onClick={() => setCarolTab("rehit")} type="button">REHIT</button>
+                      <button className={`tab ${carolTab === "fat_burn" ? "active" : ""}`} onClick={() => setCarolTab("fat_burn")} type="button">Fat Burn</button>
+                      <button className={`tab ${carolTab === "free_custom" ? "active" : ""}`} onClick={() => setCarolTab("free_custom")} type="button">Free &amp; Custom</button>
+                      <button className={`tab ${carolTab === "fitness_tests" ? "active" : ""}`} onClick={() => setCarolTab("fitness_tests")} type="button">Fitness Tests</button>
+                    </div>
+                    <div className="grid-4" style={{ marginBottom: 16 }}>
+                      <div className="stat-card"><div className="stat-label">MANP</div><div className="stat-val">{latestCarol?.manp || "--"}</div></div>
+                      <div className="stat-card amber"><div className="stat-label">Avg sprint power</div><div className="stat-val">{peakAvgSprintPower > 0 ? Math.round(peakAvgSprintPower) : "--"}</div></div>
+                      <div className="stat-card blue"><div className="stat-label">Total rides</div><div className="stat-val">{memberCarolRows.length}</div></div>
+                      <div className="stat-card"><div className="stat-label">Last max HR</div><div className="stat-val">{latestCarol?.heartRateMax || "--"}</div></div>
+                    </div>
+                    <div className="card">
+                      <div className="card-header"><div className="card-title">Ride history</div></div>
+                      {memberCarolRows.length ? (
+                        memberCarolRows.slice(0, 25).map((row) => (
+                          <div className="metric-row" key={`${row.sessionDate}-${row.sequentialNumber}`}>
+                            <div className="metric-label">
+                              {row.sessionDate || "Recent"} · Ride #{row.sequentialNumber}
+                            </div>
+                            <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+                              <span style={{ fontSize: 11, color: "var(--text3)" }}>MANP <b style={{ color: "var(--text)" }}>{row.manp}</b></span>
+                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Avg Sprint <b style={{ color: "var(--text)" }}>{row.avgSprintPower}W</b></span>
+                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Cal+EPOC <b style={{ color: "var(--text)" }}>{row.caloriesInclEpoc}</b></span>
+                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Max HR <b style={{ color: "var(--text)" }}>{row.heartRateMax}</b></span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="card-body"><p style={{ color: "var(--text3)" }}>No rides logged for this tab yet.</p></div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div id="view-arx" className="content" style={{ display: mode === "member" && memberView === "arx" ? "block" : "none" }}>
