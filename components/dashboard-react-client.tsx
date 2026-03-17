@@ -909,7 +909,52 @@ export function DashboardReactClient({
                 </div>
                 <span className="tag tag-lime">Active</span>
               </div>
-              {payload.protocol.sessions.length ? (
+              {payload.protocol.targetSystem ? (
+                // New-style library protocol: show weekly targets + focus areas
+                <div style={{ padding: "4px 0 8px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, padding: "0 20px 12px" }}>
+                    {[
+                      { label: "ARX / week", target: payload.protocol.arxPerWeek, actual: payload.protocol.compliance.arxThisWeek },
+                      { label: "CAROL / week", target: payload.protocol.carolPerWeek, actual: payload.protocol.compliance.carolThisWeek },
+                      { label: "Recovery / month", target: payload.protocol.recoveryPerMonth, actual: payload.protocol.compliance.recoveryThisMonth },
+                    ].map(({ label, target, actual }) => {
+                      const color = complianceColor(actual, target);
+                      return (
+                        <div key={label} style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "8px 10px" }}>
+                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{label}</div>
+                          <div style={{ fontSize: 15, fontWeight: 700, color }}>
+                            {actual}<span style={{ fontSize: 10, fontWeight: 400, color: "var(--text3)" }}> / {target}</span>
+                          </div>
+                          <div style={{ height: 2, background: "var(--border)", borderRadius: 1, marginTop: 5, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${Math.min(100, target > 0 ? (actual / target) * 100 : 0)}%`, background: color, borderRadius: 1 }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {(payload.protocol.arxExercises.length > 0 || payload.protocol.carolRideTypes.length > 0) && (
+                    <div style={{ padding: "0 20px 8px", display: "flex", gap: 20, flexWrap: "wrap" }}>
+                      {payload.protocol.carolRideTypes.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>CAROL</div>
+                          <div style={{ fontSize: 11, color: "var(--text2)" }}>{payload.protocol.carolRideTypes.join(", ").replace(/_/g, " ")}</div>
+                        </div>
+                      )}
+                      {payload.protocol.arxExercises.length > 0 && (
+                        <div>
+                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>ARX</div>
+                          <div style={{ fontSize: 11, color: "var(--text2)" }}>{payload.protocol.arxExercises.map(formatExerciseName).join(", ")}</div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div style={{ padding: "0 20px 4px" }}>
+                    <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setMemberSection("protocol")} type="button">
+                      View full protocol →
+                    </button>
+                  </div>
+                </div>
+              ) : payload.protocol.sessions.length ? (
                 payload.protocol.sessions.map((session, index) => (
                   <div key={`${session.name}-${index}`} className="session-item">
                     <div className="s-num">{index + 1}</div>
