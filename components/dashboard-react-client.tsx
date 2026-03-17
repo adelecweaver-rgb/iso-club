@@ -463,6 +463,23 @@ function shortGoalDisplay(display: string): string {
     .replace("Body fat:", "Body fat");
 }
 
+function goalStatValue(display: string, direction: string): string {
+  if (direction === "no_data") return "—";
+  // Extract just the numeric/key part after the first colon, or use attendance "X/Y" form
+  const afterColon = display.match(/:\s*([^\s].+)/);
+  if (afterColon) {
+    return afterColon[1]
+      .replace(" since last scan", "")
+      .replace(" over last 30 days", "")
+      .replace(" completed this month", "")
+      .trim();
+  }
+  // attendance-style "12 of 16 sessions..." → "12 / 16"
+  const ofMatch = display.match(/(\d+) of (\d+)/);
+  if (ofMatch) return `${ofMatch[1]} / ${ofMatch[2]}`;
+  return shortGoalDisplay(display);
+}
+
 function recommendProtocol(activeGoals: string[]): string | null {
   const g = new Set(activeGoals);
   if (g.size === 0) return null;
@@ -1128,22 +1145,59 @@ export function DashboardReactClient({
 
         <div id="view-dashboard" className="content" style={{ display: mode === "member" && memberView === "dashboard" ? "block" : "none" }}>
           <div className="grid-4">
-            <div className="stat-card anim d1">
-              <div className="stat-label">CAROL fitness score</div>
-              <div className="stat-val">{payload.metrics.carolFitness}</div>
-            </div>
-            <div className="stat-card amber anim d2">
-              <div className="stat-label">ARX leg press output</div>
-              <div className="stat-val">{payload.metrics.arxOutput}</div>
-            </div>
-            <div className="stat-card blue anim d3">
-              <div className="stat-label">Lean mass</div>
-              <div className="stat-val">{payload.metrics.leanMass}</div>
-            </div>
-            <div className="stat-card teal anim d4">
-              <div className="stat-label">Whoop recovery</div>
-              <div className="stat-val">{payload.metrics.whoopRecovery}</div>
-            </div>
+            {(() => {
+              const anyGoalActive = Object.values(localGoals).some(Boolean);
+              const GOAL_ORDER = ["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const;
+              const ANIM = ["anim d1", "anim d2", "anim d3", "anim d4"];
+
+              if (anyGoalActive) {
+                return GOAL_ORDER.map((gt, i) => {
+                  const isOn = localGoals[gt] ?? false;
+                  const prog = payload.goals.progress[gt];
+                  const color = isOn ? goalStatusColor(prog.direction) : "var(--text3)";
+                  const compactVal = isOn ? goalStatValue(prog.display, prog.direction) : "—";
+                  const statusText = isOn ? goalStatusLabel(prog.status) : "Not active";
+                  return (
+                    <button
+                      key={gt}
+                      type="button"
+                      className={`stat-card ${ANIM[i]}`}
+                      onClick={() => setMemberSection("goals")}
+                      style={{ textAlign: "left", cursor: "pointer", opacity: isOn ? 1 : 0.45, background: isOn ? `${color}10` : undefined, border: isOn ? `1px solid ${color}40` : undefined }}
+                    >
+                      <div className="stat-label" style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
+                        {GOAL_DEFS[gt]?.name ?? gt}
+                      </div>
+                      <div className="stat-val" style={{ color, fontSize: 22 }}>{compactVal}</div>
+                      <div style={{ fontSize: 10, color, marginTop: 2, fontWeight: 500 }}>{statusText}</div>
+                    </button>
+                  );
+                });
+              }
+
+              // Default metrics when no goals are set
+              return (
+                <>
+                  <div className="stat-card anim d1">
+                    <div className="stat-label">CAROL fitness score</div>
+                    <div className="stat-val">{payload.metrics.carolFitness}</div>
+                  </div>
+                  <div className="stat-card amber anim d2">
+                    <div className="stat-label">ARX leg press output</div>
+                    <div className="stat-val">{payload.metrics.arxOutput}</div>
+                  </div>
+                  <div className="stat-card blue anim d3">
+                    <div className="stat-label">Lean mass</div>
+                    <div className="stat-val">{payload.metrics.leanMass}</div>
+                  </div>
+                  <div className="stat-card teal anim d4">
+                    <div className="stat-label">Whoop recovery</div>
+                    <div className="stat-val">{payload.metrics.whoopRecovery}</div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
 
           {/* Goals Progress section */}
