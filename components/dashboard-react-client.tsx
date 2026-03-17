@@ -1014,6 +1014,15 @@ export function DashboardReactClient({
               <>
                 <div className="sec-header"><div className="sec-title">My Protocol</div></div>
 
+                {hasNewProtocol && (
+                  <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Note from Dustin</div>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>
+                      Based on your goals and time commitment, you&apos;re on the <strong style={{ color: "var(--text)" }}>{p.name}</strong> track. Follow the weekly targets below and reach out if you want to adjust the intensity or focus.
+                    </p>
+                  </div>
+                )}
+
                 {hasNewProtocol ? (
                   <>
                     {/* Protocol header card */}
