@@ -917,7 +917,7 @@ export function DashboardReactClient({
                   <div className="card" style={{ marginBottom: 14 }}>
                     <div className="card-header"><div className="card-title">Scan journey</div></div>
                     <div style={{ padding: "8px 16px 20px", overflowX: "auto" }}>
-                      <div style={{ position: "relative", height: 80, minWidth: Math.max(scansAsc.length * 90, 280) }}>
+                      <div style={{ position: "relative", height: 130, minWidth: Math.max(scansAsc.length * 90, 280) }}>
                         {/* Line segments */}
                         {scansAsc.length > 1 && scansAsc.slice(1).map((scan, i) => {
                           const prev = scansAsc[i];
@@ -943,7 +943,7 @@ export function DashboardReactClient({
                                 {scan.scanDate}
                               </div>
                               {isActive && (
-                                <div style={{ position: "absolute", bottom: "calc(100% + 10px)", left: "50%", transform: "translateX(-50%)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 14px", zIndex: 20, whiteSpace: "nowrap", boxShadow: "0 6px 24px rgba(0,0,0,0.35)" }}>
+                                <div style={{ position: "absolute", top: "calc(100% + 10px)", left: "50%", transform: "translateX(-50%)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 14px", zIndex: 20, whiteSpace: "nowrap", boxShadow: "0 6px 24px rgba(0,0,0,0.35)" }}>
                                   <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>{scan.scanDate}</div>
                                   <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 3 }}>Weight: <b>{scan.weightLbs} lbs</b></div>
                                   <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 3 }}>Body fat: <b>{scan.bodyFatPct}%</b></div>
