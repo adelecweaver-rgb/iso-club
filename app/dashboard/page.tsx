@@ -123,6 +123,16 @@ type DashboardPayload = {
     startDate: string;
     compliance: { arxThisWeek: number; carolThisWeek: number; recoveryThisMonth: number };
   };
+  checklistCompletions: {
+    arxWeekDates: string[];
+    carolWeekTypes: string[];
+    recoveryWeekModalities: string[];
+    arxTodayLogged: boolean;
+    carolTodayTypes: string[];
+    recoveryTodayModalities: string[];
+    todayDate: string;
+    weekStartDate: string;
+  };
   bookings: Array<{ label: string; status: string }>;
   reports: Array<{ title: string }>;
   coach: {
@@ -285,6 +295,16 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     },
     bookings: [],
     reports: [],
+    checklistCompletions: {
+      arxWeekDates: [],
+      carolWeekTypes: [],
+      recoveryWeekModalities: [],
+      arxTodayLogged: false,
+      carolTodayTypes: [],
+      recoveryTodayModalities: [],
+      todayDate: new Date().toISOString().slice(0, 10),
+      weekStartDate: new Date().toISOString().slice(0, 10),
+    },
     coach: {
       todayCount: "0",
       lowRecoveryCount: "0",
@@ -402,7 +422,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       .limit(1),
     supabase
       .from("recovery_sessions")
-      .select("modality")
+      .select("session_date,modality")
       .eq("member_id", memberId)
       .gte("session_date", monthStartIso)
       .lt("session_date", monthEndIso),
@@ -628,6 +648,27 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     arxThisWeek: arxDatesThisWeek.size,
     carolThisWeek,
     recoveryThisMonth: recoveryRows.length,
+  };
+
+  const todayIso = todayDate.toISOString().slice(0, 10);
+  const arxWeekDates = arxRows
+    .filter((row) => stringOr(row.session_date, "").slice(0, 10) >= weekStartIso)
+    .map((row) => stringOr(row.session_date, "").slice(0, 10));
+  const carolWeekRows = carolRows.filter((row) => stringOr(row.session_date, "").slice(0, 10) >= weekStartIso);
+  const recoveryWeekRows = recoveryRows.filter((row) => stringOr(row.session_date, "").slice(0, 10) >= weekStartIso);
+  payload.checklistCompletions = {
+    arxWeekDates,
+    carolWeekTypes: carolWeekRows.map((row) => stringOr(row.ride_type, "")),
+    recoveryWeekModalities: recoveryWeekRows.map((row) => stringOr(row.modality, "")),
+    arxTodayLogged: arxWeekDates.includes(todayIso),
+    carolTodayTypes: carolRows
+      .filter((row) => stringOr(row.session_date, "").slice(0, 10) === todayIso)
+      .map((row) => stringOr(row.ride_type, "")),
+    recoveryTodayModalities: recoveryRows
+      .filter((row) => stringOr(row.session_date, "").slice(0, 10) === todayIso)
+      .map((row) => stringOr(row.modality, "")),
+    todayDate: todayIso,
+    weekStartDate: weekStartIso,
   };
 
   const protocolRow =
