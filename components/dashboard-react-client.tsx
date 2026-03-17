@@ -486,6 +486,7 @@ export function DashboardReactClient({
   );
   const [activeScanDot, setActiveScanDot] = useState<number | null>(null);
   const [coachProtocols, setCoachProtocols] = useState<Array<{ id: string; name: string; target_system: string; description: string }>>([]);
+  const [allMembers, setAllMembers] = useState<Array<{ id: string; name: string; tier: string }>>([]);
   const [assignMemberId, setAssignMemberId] = useState("");
   const [assignProtocolId, setAssignProtocolId] = useState("");
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().slice(0, 10));
@@ -617,14 +618,19 @@ export function DashboardReactClient({
 
   useEffect(() => {
     if (!isCoachAccount || mode !== "coach" || coachView !== "protocols") return;
-    if (coachProtocols.length > 0) return;
     void (async () => {
       try {
-        const res = await getJson<{ protocols: typeof coachProtocols }>("/api/coach/protocols");
-        if (Array.isArray(res.protocols)) setCoachProtocols(res.protocols);
-      } catch { /* table may not exist yet */ }
+        if (coachProtocols.length === 0) {
+          const res = await getJson<{ protocols: typeof coachProtocols }>("/api/coach/protocols");
+          if (Array.isArray(res.protocols)) setCoachProtocols(res.protocols);
+        }
+        if (allMembers.length === 0) {
+          const res = await getJson<{ members: typeof allMembers }>("/api/coach/members");
+          if (Array.isArray(res.members)) setAllMembers(res.members);
+        }
+      } catch { /* tables may not exist yet */ }
     })();
-  }, [coachView, isCoachAccount, mode, coachProtocols.length]);
+  }, [coachView, isCoachAccount, mode, coachProtocols.length, allMembers.length]);
 
   const sendMessage = useCallback(async () => {
     if (sendingMessage) return;
@@ -1827,8 +1833,8 @@ export function DashboardReactClient({
                   onChange={(e) => setAssignMemberId(e.target.value)}
                 >
                   <option value="">Select member…</option>
-                  {effectiveCoachRecipients.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
+                  {(allMembers.length > 0 ? allMembers : effectiveCoachRecipients).map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}{("tier" in m && m.tier) ? ` — ${m.tier}` : ""}</option>
                   ))}
                 </select>
               </div>
