@@ -662,6 +662,14 @@ export function DashboardReactClient({
   const [loadingMemberGoals, setLoadingMemberGoals] = useState(false);
   const [protocolRequested, setProtocolRequested] = useState(false);
   const [isRequestingProtocol, setIsRequestingProtocol] = useState(false);
+  const [showProtocolModal, setShowProtocolModal] = useState(false);
+  const [protocolRequestText, setProtocolRequestText] = useState("");
+  const [sendingProtocolRequest, setSendingProtocolRequest] = useState(false);
+  const [protocolRequestSent, setProtocolRequestSent] = useState(false);
+  const [notifPanelOpen, setNotifPanelOpen] = useState(false);
+  const [coachNotifs, setCoachNotifs] = useState<Array<{ id: string; member_id: string; member_name: string; type: string; message: string; is_read: boolean; created_at: string }>>([]);
+  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
+  const [notifLoaded, setNotifLoaded] = useState(false);
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [assignCoachNotes, setAssignCoachNotes] = useState("");
   const [assignStatus, setAssignStatus] = useState("");
@@ -704,6 +712,20 @@ export function DashboardReactClient({
       finally { setSavingGoal(null); }
     }
   }, [localGoals, memberGoals]);
+
+  // Load coach notifications eagerly when in coach mode
+  useEffect(() => {
+    if (!isCoachAccount) return;
+    if (notifLoaded) return;
+    setNotifLoaded(true);
+    void (async () => {
+      try {
+        const res = await getJson<{ notifications: typeof coachNotifs; unread_count: number }>("/api/coach/notifications");
+        if (Array.isArray(res.notifications)) setCoachNotifs(res.notifications);
+        setNotifUnreadCount(res.unread_count ?? 0);
+      } catch { /* table may not exist yet */ }
+    })();
+  }, [isCoachAccount, notifLoaded, coachNotifs]);
 
   useEffect(() => {
     if (!isCoachAccount || mode !== "coach" || coachView !== "protocols" || !assignMemberId) return;
@@ -1063,6 +1085,27 @@ export function DashboardReactClient({
                 </Link>
               </>
             ) : null}
+            {/* Coach notification bell */}
+            {isCoachAccount && (
+              <button
+                type="button"
+                className="btn notif-wrap btn-sm"
+                onClick={() => {
+                  setNotifPanelOpen(true);
+                  if (!notifLoaded) {
+                    setNotifLoaded(false); // trigger reload
+                  }
+                }}
+                style={{ position: "relative", minWidth: 36 }}
+              >
+                🔔
+                {notifUnreadCount > 0 && (
+                  <span style={{ position: "absolute", top: -4, right: -4, background: "#e05252", color: "white", borderRadius: "50%", width: 16, height: 16, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+                    {notifUnreadCount > 9 ? "9+" : notifUnreadCount}
+                  </span>
+                )}
+              </button>
+            )}
             <button
               className="btn notif-wrap btn-sm"
               onClick={() => {
@@ -1498,6 +1541,32 @@ export function DashboardReactClient({
                         <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{p.coachNotes}</p>
                       </div>
                     )}
+
+                    {/* Change Protocol section */}
+                    <div className="card" style={{ marginTop: 14, padding: "16px 20px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 14 }}>Change Protocol</div>
+                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          onClick={() => { setShowProtocolModal(true); setProtocolRequestSent(false); setProtocolRequestText(""); }}
+                        >
+                          Request Protocol Adjustment
+                        </button>
+                        <a
+                          href="https://theiso.club/book"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-lime btn-sm"
+                          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                        >
+                          ✦ Book a 1:1 with Dustin
+                        </a>
+                      </div>
+                      <p style={{ fontSize: 11, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
+                        Want a quick adjustment? Request a free protocol review. Need a deeper look at your data and goals? Book a personalized 1:1 consultation with Dustin.
+                      </p>
+                    </div>
                   </>
                 ) : (
                   /* Legacy protocol display */
@@ -2432,6 +2501,137 @@ export function DashboardReactClient({
             </div>
           )}
         </div>
+
+        {/* Protocol request modal */}
+        {showProtocolModal && (
+          <div
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+            onClick={(e) => { if (e.target === e.currentTarget) setShowProtocolModal(false); }}
+          >
+            <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "24px", maxWidth: 480, width: "100%" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Request Protocol Adjustment</div>
+              <p style={{ fontSize: 12.5, color: "var(--text3)", marginBottom: 14, lineHeight: 1.6 }}>Tell Dustin what you&apos;d like to change and why. He&apos;ll review and update your protocol.</p>
+              {protocolRequestSent ? (
+                <div style={{ color: "#9dcc3a", fontSize: 13, fontWeight: 500, padding: "12px 0" }}>
+                  ✓ Request sent. Dustin will review and update your protocol.
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    className="form-input"
+                    style={{ width: "100%", minHeight: 100, resize: "vertical", marginBottom: 14, boxSizing: "border-box" }}
+                    placeholder="e.g. I'd like to add more cardio sessions and reduce the recovery target — I've been feeling good and want to push harder."
+                    value={protocolRequestText}
+                    onChange={(e) => setProtocolRequestText(e.target.value)}
+                  />
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <button
+                      type="button"
+                      className="btn btn-lime btn-sm"
+                      disabled={sendingProtocolRequest || !protocolRequestText.trim()}
+                      onClick={async () => {
+                        if (!protocolRequestText.trim() || sendingProtocolRequest) return;
+                        setSendingProtocolRequest(true);
+                        try {
+                          await postJson("/api/member/notifications", { type: "protocol_change_request", message: protocolRequestText.trim() });
+                          setProtocolRequestSent(true);
+                          setProtocolRequestText("");
+                        } catch { /* silent */ } finally { setSendingProtocolRequest(false); }
+                      }}
+                    >
+                      {sendingProtocolRequest ? "Sending…" : "Send Request"}
+                    </button>
+                    <button type="button" className="btn btn-sm" onClick={() => setShowProtocolModal(false)}>Cancel</button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Coach notifications panel */}
+        {notifPanelOpen && (
+          <>
+            <div style={{ position: "fixed", inset: 0, zIndex: 999 }} onClick={() => setNotifPanelOpen(false)} />
+            <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: 380, maxWidth: "100vw", background: "var(--bg2)", borderLeft: "1px solid var(--border)", zIndex: 1000, overflowY: "auto", boxShadow: "-6px 0 24px rgba(0,0,0,0.35)", display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 20px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Notifications</div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  {coachNotifs.some((n) => !n.is_read) && (
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      style={{ fontSize: 10 }}
+                      onClick={async () => {
+                        try {
+                          await postJson("/api/coach/notifications", { mark_all_read: true });
+                          setCoachNotifs((prev) => prev.map((n) => ({ ...n, is_read: true })));
+                          setNotifUnreadCount(0);
+                        } catch { /* silent */ }
+                      }}
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                  <button type="button" style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 18, padding: 0 }} onClick={() => setNotifPanelOpen(false)}>✕</button>
+                </div>
+              </div>
+              {coachNotifs.length === 0 ? (
+                <div style={{ padding: 24, color: "var(--text3)", fontSize: 13 }}>No notifications yet.</div>
+              ) : (
+                coachNotifs.map((notif) => (
+                  <div key={notif.id} style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", background: notif.is_read ? "transparent" : "rgba(157,204,58,0.04)" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
+                      <div>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>{notif.member_name}</span>
+                        {!notif.is_read && <span style={{ marginLeft: 8, fontSize: 9, background: "#9dcc3a", color: "#0b0c09", borderRadius: 3, padding: "1px 5px", fontWeight: 700 }}>NEW</span>}
+                      </div>
+                      <span style={{ fontSize: 10, color: "var(--text3)", whiteSpace: "nowrap" }}>
+                        {new Date(notif.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
+                      {notif.type === "protocol_change_request" ? "Protocol change request" : "General"}
+                    </div>
+                    <p style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 10px 0" }}>{notif.message}</p>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      {!notif.is_read && (
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ fontSize: 10 }}
+                          onClick={async () => {
+                            try {
+                              await postJson("/api/coach/notifications", { notification_id: notif.id });
+                              setCoachNotifs((prev) => prev.map((n) => n.id === notif.id ? { ...n, is_read: true } : n));
+                              setNotifUnreadCount((c) => Math.max(0, c - 1));
+                            } catch { /* silent */ }
+                          }}
+                        >
+                          Mark read
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ fontSize: 10 }}
+                        onClick={() => {
+                          setSelectedCoachRecipientId(notif.member_id);
+                          setCoachView("messages");
+                          setMode("coach");
+                          setNotifPanelOpen(false);
+                          void loadMessages(true, notif.member_id);
+                        }}
+                      >
+                        Message member →
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
