@@ -446,6 +446,23 @@ function goalStatusLabel(status: string): string {
   return map[status] ?? status;
 }
 
+const PROTOCOL_REASONS: Record<string, string> = {
+  "Longevity Protocol": "Covers muscle growth, fat loss, cardio fitness, and recovery — the complete multi-system approach.",
+  "Metabolic Reset": "Combines ARX strength training with fat-burning CAROL sessions to shift body composition.",
+  "Cardio Focus": "Prioritizes CAROL REHIT and extended sessions to build aerobic capacity and raise VO2 max.",
+  "Strength Foundation": "Builds foundational muscle strength with targeted ARX sessions and progressive overload.",
+};
+
+function shortGoalDisplay(display: string): string {
+  return display
+    .replace(" since last scan", "")
+    .replace(" over last 30 days", "")
+    .replace(" completed this month", "")
+    .replace("Cardio power:", "Cardio")
+    .replace("Lean mass:", "Lean mass")
+    .replace("Body fat:", "Body fat");
+}
+
 function recommendProtocol(activeGoals: string[]): string | null {
   const g = new Set(activeGoals);
   if (g.size === 0) return null;
@@ -643,6 +660,8 @@ export function DashboardReactClient({
   const [savingGoal, setSavingGoal] = useState<string | null>(null);
   const [memberGoals, setMemberGoals] = useState<Record<string, boolean>>({});
   const [loadingMemberGoals, setLoadingMemberGoals] = useState(false);
+  const [protocolRequested, setProtocolRequested] = useState(false);
+  const [isRequestingProtocol, setIsRequestingProtocol] = useState(false);
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [assignCoachNotes, setAssignCoachNotes] = useState("");
   const [assignStatus, setAssignStatus] = useState("");
@@ -1084,25 +1103,31 @@ export function DashboardReactClient({
             </div>
           </div>
 
-          {/* Goals summary badges */}
+          {/* Goals Progress section */}
           {payload.goals.activeGoals.length > 0 && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
-              <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Goals</span>
-              {payload.goals.activeGoals.map((gt) => {
-                const prog = payload.goals.progress[gt as keyof typeof payload.goals.progress];
-                const color = goalStatusColor(prog?.direction ?? "no_data");
-                return (
-                  <button
-                    key={gt}
-                    type="button"
-                    onClick={() => setMemberSection("goals")}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, cursor: "pointer" }}
-                  >
-                    <div style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 11, color: "var(--text2)" }}>{GOAL_DEFS[gt]?.name ?? gt}</span>
-                  </button>
-                );
-              })}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10 }}>Goals Progress</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
+                {payload.goals.activeGoals.map((gt) => {
+                  const prog = payload.goals.progress[gt as keyof typeof payload.goals.progress];
+                  const color = goalStatusColor(prog?.direction ?? "no_data");
+                  const short = prog?.direction !== "no_data" ? shortGoalDisplay(prog?.display ?? "") : "No data yet";
+                  return (
+                    <button
+                      key={gt}
+                      type="button"
+                      onClick={() => setMemberSection("goals")}
+                      style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 12px", cursor: "pointer", textAlign: "left" }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{GOAL_DEFS[gt]?.name ?? gt}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.4 }}>{short}</div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           )}
 
@@ -1284,13 +1309,50 @@ export function DashboardReactClient({
             const active = Object.entries(localGoals).filter(([, v]) => v).map(([k]) => k);
             const rec = recommendProtocol(active);
             if (!rec || active.length === 0) return null;
+            const reason = PROTOCOL_REASONS[rec] ?? "Matched to your current goal combination.";
+            async function handleAskCoach() {
+              if (isRequestingProtocol || protocolRequested) return;
+              setIsRequestingProtocol(true);
+              try {
+                let resolvedPeerId = peerId;
+                if (!resolvedPeerId) {
+                  const inbox = await getJson<{ peer?: { id?: string }; coach?: { id?: string } }>("/api/messages/inbox");
+                  resolvedPeerId = String(inbox.peer?.id || inbox.coach?.id || "");
+                }
+                if (!resolvedPeerId) throw new Error("no peer");
+                const goalNames = active.map((g) => GOAL_DEFS[g]?.name ?? g).join(", ");
+                await postJson("/api/messages/send", {
+                  recipient_id: resolvedPeerId,
+                  body: `Hi Dustin — the dashboard is recommending the ${rec} protocol based on my current goals (${goalNames}). Could you assign this when you have a chance? Thanks!`,
+                });
+                setProtocolRequested(true);
+              } catch { /* silent */ } finally { setIsRequestingProtocol(false); }
+            }
             return (
-              <div style={{ background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r)", padding: "14px 18px" }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(157,204,58,0.7)", marginBottom: 6 }}>Based on your goals</div>
-                <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 0 0" }}>
-                  We recommend the <strong style={{ color: "var(--text)" }}>{rec}</strong> protocol for your combination of goals.
-                  {" "}<button type="button" className="btn btn-sm" style={{ marginLeft: 8, fontSize: 11 }} onClick={() => setMemberSection("protocol")}>View protocol →</button>
-                </p>
+              <div style={{ background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.25)", borderRadius: "var(--r)", padding: "18px 20px" }}>
+                <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(157,204,58,0.7)", marginBottom: 8 }}>Protocol Recommendation</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
+                  Based on your goals, we recommend: <span style={{ color: "#9dcc3a" }}>{rec}</span>
+                </div>
+                <p style={{ fontSize: 12.5, color: "var(--text3)", lineHeight: 1.6, margin: "0 0 14px 0" }}>{reason}</p>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  {protocolRequested ? (
+                    <span style={{ fontSize: 12, color: "#9dcc3a", fontWeight: 500 }}>✓ Request sent to Dustin</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn-lime btn-sm"
+                      disabled={isRequestingProtocol}
+                      onClick={() => { void handleAskCoach(); }}
+                      style={{ fontSize: 12 }}
+                    >
+                      {isRequestingProtocol ? "Sending…" : "Ask coach to assign this protocol"}
+                    </button>
+                  )}
+                  <button type="button" className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setMemberSection("protocol")}>
+                    View current protocol →
+                  </button>
+                </div>
               </div>
             );
           })()}
