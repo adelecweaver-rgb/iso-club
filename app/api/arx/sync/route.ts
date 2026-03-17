@@ -144,8 +144,6 @@ function extractTotalPages(html: string): number {
 }
 
 async function fetchFirstPage(sessId: string): Promise<{ html: string; userId: string }> {
-  // /user/me/exercise_sets redirects to /user/{UUID}/exercise_sets when authenticated.
-  // res.url after following redirects gives us the UUID without needing to parse HTML.
   const res = await fetch(`${ARX_BASE}/user/me/exercise_sets`, {
     cache: "no-store",
     headers: {
@@ -157,21 +155,24 @@ async function fetchFirstPage(sessId: string): Promise<{ html: string; userId: s
   const finalUrl = res.url ?? "";
   const html = await res.text();
 
-  // Detect redirect to login — session is not authenticated
-  if (finalUrl.includes("/login") || (!res.ok && res.status === 302)) {
+  if (finalUrl.includes("/login")) {
     throw new Error("ARX login failed — session not established. Please check your username and password.");
   }
 
-  // Extract UUID from the final URL (most reliable)
-  const uuidFromUrl = finalUrl.match(/\/user\/([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})\//i)?.[1];
+  // UUID may appear in the redirect URL when Symfony rewrites /user/me/ → /user/{UUID}/
+  const uuidFromUrl = finalUrl.match(
+    /\/user\/([0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12})\//i,
+  )?.[1] ?? null;
 
-  // Fallback: extract from embedded JS variable
-  const uuidFromHtml = extractJsonVar(html, "userId") as string | null;
+  // Symfony also embeds the UUID as a plain JS string: let userId = "UUID-HERE";
+  // extractJsonVar only handles arrays/objects — use a direct regex for string values.
+  const uuidFromHtml = html.match(/let userId\s*=\s*"([^"]+)"/)?.[1] ?? null;
 
   const userId = uuidFromUrl ?? uuidFromHtml ?? null;
   if (!userId) {
+    const pageTitle = html.match(/<title>([^<]*)<\/title>/)?.[1] ?? "unknown";
     throw new Error(
-      `Could not determine ARX user ID. Final URL: ${finalUrl || "(empty)"}. Login may have failed.`,
+      `Could not determine ARX user ID. Page: "${pageTitle}". URL: ${finalUrl}. Login may have failed.`,
     );
   }
   return { html, userId };
