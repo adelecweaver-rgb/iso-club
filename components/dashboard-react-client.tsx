@@ -53,6 +53,13 @@ type DashboardPayload = {
   carolHistory: Array<{ label: string; value: string }>;
   carolSessions: CarolSession[];
   arxHistory: Array<{ label: string; value: string }>;
+  arxSessions: Array<{
+    sessionDate: string;
+    exercise: string;
+    output: number | null;
+    concentricMax: number | null;
+    eccentricMax: number | null;
+  }>;
   scan: {
     scanDate: string;
     bodyFatPct: string;
@@ -244,6 +251,73 @@ function sparklinePath(values: (number | null)[], w: number, h: number): string 
       return `${i === 0 ? "M" : "L"} ${sx.toFixed(1)} ${sy.toFixed(1)}`;
     })
     .join(" ");
+}
+
+type ArxExerciseGroup = {
+  exercise: string;
+  sessions: Array<{ sessionDate: string; output: number | null; concentricMax: number | null; eccentricMax: number | null }>;
+};
+
+function buildArxByExercise(sessions: DashboardPayload["arxSessions"]): ArxExerciseGroup[] {
+  const map = new Map<string, ArxExerciseGroup["sessions"]>();
+  for (const s of sessions) {
+    const arr = map.get(s.exercise) ?? [];
+    arr.push(s);
+    map.set(s.exercise, arr);
+  }
+  return Array.from(map.entries())
+    .map(([exercise, arr]) => ({ exercise, sessions: arr }))
+    .sort((a, b) => b.sessions.length - a.sessions.length);
+}
+
+function eccRatioLabel(ratio: number): { label: string; color: string } {
+  if (ratio >= 1.3) return { label: "Excellent", color: "#9dcc3a" };
+  if (ratio >= 1.15) return { label: "Good", color: "#9dcc3a" };
+  if (ratio >= 1.0) return { label: "Developing", color: "#e8a838" };
+  return { label: "Review form", color: "#e05252" };
+}
+
+function buildArxInsight(groups: ArxExerciseGroup[]): string {
+  if (groups.length === 0) return "Log your first ARX session to start tracking strength progress.";
+  if (groups.every((g) => g.sessions.length < 2)) return "Keep building your session history — you need a few more sessions per exercise to start seeing meaningful trend data.";
+
+  const parts: string[] = [];
+
+  // PRs: most recent session is the all-time best concentric
+  const prExercises = groups
+    .filter(({ sessions }) => {
+      if (sessions.length < 2) return false;
+      const latest = sessions[0].concentricMax ?? 0;
+      const allTime = Math.max(...sessions.map((s) => s.concentricMax ?? 0));
+      return latest > 0 && latest >= allTime;
+    })
+    .map(({ exercise }) => exercise);
+  if (prExercises.length > 0) {
+    parts.push(`New personal record${prExercises.length > 1 ? "s" : ""} on ${prExercises.slice(0, 2).join(" and ")} this cycle — strength is building.`);
+  }
+
+  // Strongest positive trend across exercises with enough history
+  let bestTrend = { exercise: "", pct: 0 };
+  for (const { exercise, sessions } of groups) {
+    if (sessions.length < 6) continue;
+    const recentAvg = sessions.slice(0, 3).reduce((s, r) => s + (r.concentricMax ?? 0), 0) / 3;
+    const olderAvg = sessions.slice(3, 6).reduce((s, r) => s + (r.concentricMax ?? 0), 0) / 3;
+    if (olderAvg > 0) {
+      const pct = ((recentAvg - olderAvg) / olderAvg) * 100;
+      if (pct > bestTrend.pct) bestTrend = { exercise, pct };
+    }
+  }
+  if (bestTrend.pct > 3) parts.push(`${bestTrend.exercise} concentric output is up ${bestTrend.pct.toFixed(0)}% over recent sessions.`);
+
+  // Low ecc:conc ratio warning
+  const lowRatio = groups.find(({ sessions }) => {
+    const s = sessions[0];
+    return s.concentricMax && s.eccentricMax && s.eccentricMax / s.concentricMax < 1.1;
+  });
+  if (lowRatio) parts.push(`Eccentric strength on ${lowRatio.exercise} is below 1.1× — slow the negative phase on your next session to activate more muscle fibers and reduce injury risk.`);
+
+  if (parts.length === 0) return "Consistent training base. Focus on progressive overload — aim to slightly exceed your previous session output on each primary movement.";
+  return parts.join(" ");
 }
 
 function formatMessageTime(isoValue: string): string {
@@ -828,20 +902,133 @@ export function DashboardReactClient({
         </div>
 
         <div id="view-arx" className="content" style={{ display: mode === "member" && memberView === "arx" ? "block" : "none" }}>
-          <div className="sec-header"><div className="sec-title">ARX Strength</div></div>
-          <div className="card">
-            <div className="card-header"><div className="card-title">Exercise history</div></div>
-            {payload.arxHistory.length ? (
-              payload.arxHistory.map((row) => (
-                <div className="metric-row" key={row.label}>
-                  <div className="metric-label">{row.label}</div>
-                  <div className="metric-val">{row.value}</div>
+          {(() => {
+            const arxGroups = buildArxByExercise(payload.arxSessions);
+            const totalSessions = payload.arxSessions.length;
+            const allConc = payload.arxSessions.map((s) => s.concentricMax ?? 0);
+            const peakOutput = allConc.length ? Math.max(...allConc) : 0;
+            const now = new Date();
+            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+            const sessionsThisMonth = payload.arxSessions.filter((s) => s.sessionDate >= monthStart).length;
+            const peakExercise = arxGroups[0]?.exercise ?? "--";
+
+            // Latest concentric per exercise for comparison bars
+            const latestConc = arxGroups.map(({ exercise, sessions }) => ({
+              exercise,
+              value: sessions[0]?.concentricMax ?? 0,
+            }));
+            const maxConc = latestConc.reduce((m, e) => Math.max(m, e.value), 0);
+
+            return (
+              <>
+                <div className="sec-header"><div className="sec-title">ARX Strength</div></div>
+
+                {/* Summary cards */}
+                <div className="grid-4" style={{ marginBottom: 16 }}>
+                  <div className="stat-card"><div className="stat-label">Total sessions</div><div className="stat-val">{totalSessions || "--"}</div></div>
+                  <div className="stat-card amber"><div className="stat-label">Peak concentric</div><div className="stat-val">{peakOutput > 0 ? Math.round(peakOutput) : "--"}</div></div>
+                  <div className="stat-card blue"><div className="stat-label">This month</div><div className="stat-val">{sessionsThisMonth}</div></div>
+                  <div className="stat-card"><div className="stat-label">Top exercise</div><div className="stat-val" style={{ fontSize: 13 }}>{peakExercise}</div></div>
                 </div>
-              ))
-            ) : (
-              <div className="card-body"><p style={{ color: "var(--text3)" }}>No ARX sessions logged yet.</p></div>
-            )}
-          </div>
+
+                {/* Coaching insight */}
+                {totalSessions > 0 && (
+                  <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Dustin&apos;s Analysis</div>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{buildArxInsight(arxGroups)}</p>
+                  </div>
+                )}
+
+                {/* Per-exercise cards */}
+                {arxGroups.length > 0 ? (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginBottom: 16 }}>
+                    {arxGroups.map(({ exercise, sessions }) => {
+                      const latest = sessions[0];
+                      const conc = latest?.concentricMax ?? null;
+                      const ecc = latest?.eccentricMax ?? null;
+                      const ratio = conc && ecc ? ecc / conc : null;
+                      const ratioInfo = ratio !== null ? eccRatioLabel(ratio) : null;
+                      const pr = conc !== null ? Math.max(...sessions.map((s) => s.concentricMax ?? 0)) : 0;
+                      const isPR = conc !== null && conc >= pr && sessions.length > 1;
+                      // Sparkline: last 12 sessions ascending
+                      const sparkVals = sessions.slice(0, 12).reverse().map((s) => s.concentricMax);
+                      const sparkFirst = sparkVals.find((v) => v !== null) ?? null;
+                      const sparkLast = [...sparkVals].reverse().find((v) => v !== null) ?? null;
+                      const trending = sparkFirst !== null && sparkLast !== null && sparkLast > sparkFirst;
+                      const path = sparklinePath(sparkVals, 100, 32);
+
+                      return (
+                        <div key={exercise} className="card" style={{ padding: "16px 18px" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", letterSpacing: "0.04em", textTransform: "uppercase" }}>{exercise}</div>
+                              <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 2 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""}</div>
+                            </div>
+                            {isPR && <span style={{ fontSize: 9, background: "rgba(157,204,58,0.15)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.3)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
+                          </div>
+
+                          {/* Conc / Ecc row */}
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
+                            <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "8px 10px" }}>
+                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.1em" }}>Concentric</div>
+                              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{conc !== null ? Math.round(conc) : "--"}</div>
+                              <div style={{ fontSize: 9, color: "var(--text3)" }}>lbs</div>
+                            </div>
+                            <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "8px 10px" }}>
+                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.1em" }}>Eccentric</div>
+                              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{ecc !== null ? Math.round(ecc) : "--"}</div>
+                              <div style={{ fontSize: 9, color: "var(--text3)" }}>lbs</div>
+                            </div>
+                          </div>
+
+                          {/* Ecc:Conc ratio */}
+                          {ratioInfo && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                              <div style={{ fontSize: 11, color: "var(--text3)" }}>Ecc:Conc</div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: ratioInfo.color }}>{ratio!.toFixed(2)}×</div>
+                              <span style={{ fontSize: 10, color: ratioInfo.color, background: `${ratioInfo.color}18`, border: `1px solid ${ratioInfo.color}40`, borderRadius: 4, padding: "1px 6px" }}>{ratioInfo.label}</span>
+                            </div>
+                          )}
+
+                          {/* Sparkline */}
+                          {path ? (
+                            <div>
+                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Concentric trend</div>
+                              <svg viewBox="0 0 100 32" style={{ width: "100%", height: 32, display: "block" }}>
+                                <path d={path} fill="none" stroke={trending ? "#9dcc3a" : "#e05252"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="card"><div className="card-body"><p style={{ color: "var(--text3)" }}>No ARX sessions logged yet.</p></div></div>
+                )}
+
+                {/* Exercise comparison */}
+                {latestConc.length > 1 && maxConc > 0 && (
+                  <div className="card">
+                    <div className="card-header"><div className="card-title">Latest output by exercise</div></div>
+                    <div style={{ padding: "8px 0" }}>
+                      {latestConc.sort((a, b) => b.value - a.value).map(({ exercise, value }) => (
+                        <div key={exercise} style={{ padding: "6px 20px 6px 20px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                            <span style={{ fontSize: 11.5, color: "var(--text2)" }}>{exercise}</span>
+                            <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text)" }}>{value > 0 ? `${Math.round(value)} lbs` : "--"}</span>
+                          </div>
+                          <div style={{ height: 6, background: "var(--bg3)", borderRadius: 3, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${(value / maxConc) * 100}%`, background: "#9dcc3a", borderRadius: 3, transition: "width 0.4s ease" }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
 
         <div id="view-scans" className="content" style={{ display: mode === "member" && memberView === "scans" ? "block" : "none" }}>

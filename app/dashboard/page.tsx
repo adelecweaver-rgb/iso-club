@@ -54,6 +54,13 @@ type DashboardPayload = {
     sequentialNumber: string;
   }>;
   arxHistory: Array<{ label: string; value: string }>;
+  arxSessions: Array<{
+    sessionDate: string;
+    exercise: string;
+    output: number | null;
+    concentricMax: number | null;
+    eccentricMax: number | null;
+  }>;
   scan: {
     scanDate: string;
     bodyFatPct: string;
@@ -219,6 +226,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     carolHistory: [],
     carolSessions: [],
     arxHistory: [],
+    arxSessions: [],
     scan: {
       scanDate: "",
       bodyFatPct: "--",
@@ -490,6 +498,13 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   payload.arxHistory = arxRows.map((row) => ({
     label: `${formatDateForLabel(row.session_date)} · ${stringOr(row.exercise, "ARX exercise")}`,
     value: Math.round(numberOr(row.concentric_max, numberOr(row.output, 0))).toString(),
+  }));
+  payload.arxSessions = arxRows.map((row) => ({
+    sessionDate: stringOr(row.session_date, ""),
+    exercise: stringOr(row.exercise, "ARX exercise"),
+    output: hasValue(row.output) ? numberOr(row.output, 0) : null,
+    concentricMax: hasValue(row.concentric_max) ? numberOr(row.concentric_max, 0) : null,
+    eccentricMax: hasValue(row.eccentric_max) ? numberOr(row.eccentric_max, 0) : null,
   }));
 
   payload.scan = {
