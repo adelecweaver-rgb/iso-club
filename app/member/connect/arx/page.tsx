@@ -28,5 +28,14 @@ export default async function MemberConnectArxPage() {
     clerkUser?.username ||
     "Member";
 
-  return <MemberConnectArxForm memberName={memberName} />;
+  const savedArxUsername =
+    typeof context.dbUser.arx_username === "string" ? context.dbUser.arx_username : "";
+
+  return (
+    <MemberConnectArxForm
+      memberName={memberName}
+      savedArxUsername={savedArxUsername}
+      hasStoredUsername={savedArxUsername.length > 0}
+    />
+  );
 }

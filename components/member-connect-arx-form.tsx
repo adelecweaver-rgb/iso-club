@@ -1,61 +1,57 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
-type ImportResult = {
+type SyncResult = {
   imported: number;
   exercises: string[];
+  pages: number;
 };
 
 type Props = {
   memberName: string;
+  savedArxUsername: string;
+  hasStoredUsername: boolean;
 };
 
-export function MemberConnectArxForm({ memberName }: Props) {
-  const fileRef = useRef<HTMLInputElement | null>(null);
-  const [fileName, setFileName] = useState("");
-  const [isUploading, setIsUploading] = useState(false);
+export function MemberConnectArxForm({ memberName, savedArxUsername, hasStoredUsername }: Props) {
+  const [arxUsername, setArxUsername] = useState(savedArxUsername);
+  const [arxPassword, setArxPassword] = useState("");
+  const [isSyncing, setIsSyncing] = useState(false);
   const [progress, setProgress] = useState("");
   const [error, setError] = useState("");
-  const [result, setResult] = useState<ImportResult | null>(null);
+  const [result, setResult] = useState<SyncResult | null>(null);
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const file = fileRef.current?.files?.[0];
-    if (!file) {
-      setError("Please select a CSV file to upload.");
-      return;
-    }
     setError("");
     setResult(null);
-    setIsUploading(true);
-    setProgress("Uploading and parsing CSV…");
-
+    setIsSyncing(true);
+    setProgress("Connecting to ARX…");
     try {
-      const formData = new FormData();
-      formData.append("csv", file);
-
+      setProgress("Logging in to my.arxfit.com…");
       const response = await fetch("/api/arx/sync", {
         method: "POST",
-        body: formData,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ arxUsername, arxPassword }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload.success === false) {
-        throw new Error(payload.error || "Unable to import ARX data.");
+        throw new Error(payload.error || "Unable to sync ARX data.");
       }
       setProgress("Import complete.");
       setResult({
         imported: Number(payload.imported || 0),
         exercises: Array.isArray(payload.exercises) ? payload.exercises : [],
+        pages: Number(payload.pages || 1),
       });
-      if (fileRef.current) fileRef.current.value = "";
-      setFileName("");
-    } catch (err) {
+      setArxPassword("");
+    } catch (syncError) {
       setProgress("");
-      setError(err instanceof Error ? err.message : "Unable to import ARX data.");
+      setError(syncError instanceof Error ? syncError.message : "Unable to sync ARX data.");
     } finally {
-      setIsUploading(false);
+      setIsSyncing(false);
     }
   }
 
@@ -65,83 +61,66 @@ export function MemberConnectArxForm({ memberName }: Props) {
         <div>
           <h1 style={{ margin: 0, fontFamily: "Georgia, serif", fontSize: 36 }}>Connect ARX</h1>
           <p style={{ marginTop: 8, color: "#9b9889" }}>
-            Import your ARX workout history into your Iso Club dashboard.
+            Sync your ARX workout history directly into your Iso Club dashboard.
           </p>
         </div>
 
-        {/* How-to instructions */}
-        <div style={{ background: "#111209", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#c9f055", marginBottom: 12, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-            How to export your ARX data
-          </div>
-          <ol style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 8 }}>
-            {[
-              <>Log in to your ARX account at <a href="https://app.arxfit.com" target="_blank" rel="noreferrer" style={{ color: "#c9f055" }}>app.arxfit.com</a></>,
-              <>Navigate to your <b style={{ color: "#edeae0" }}>Workout History</b> or <b style={{ color: "#edeae0" }}>Profile</b></>,
-              <>Click <b style={{ color: "#edeae0" }}>Export</b> or <b style={{ color: "#edeae0" }}>Download CSV</b> to save your workout data</>,
-              "Upload the downloaded CSV file below",
-            ].map((step, i) => (
-              <li key={i} style={{ fontSize: 13, color: "#9b9889", lineHeight: 1.6 }}>{step}</li>
-            ))}
-          </ol>
-        </div>
-
-        {/* Upload form */}
         <div style={{ background: "#111209", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, padding: 16 }}>
           <div style={{ fontSize: 12, color: "#9b9889", marginBottom: 12 }}>
             Member: <span style={{ color: "#edeae0" }}>{memberName}</span>
           </div>
-          <form onSubmit={onSubmit} style={{ display: "grid", gap: 14 }}>
+          <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
             <label style={{ display: "grid", gap: 6 }}>
-              <span style={{ fontSize: 12, color: "#9b9889" }}>ARX workout history CSV</span>
-              <div
-                style={{
-                  border: `2px dashed ${fileName ? "rgba(201,240,85,0.5)" : "rgba(255,255,255,0.15)"}`,
-                  borderRadius: 10,
-                  padding: "20px 16px",
-                  textAlign: "center",
-                  cursor: "pointer",
-                  transition: "border-color 0.2s",
-                }}
-                onClick={() => fileRef.current?.click()}
-              >
-                <div style={{ fontSize: 13, color: fileName ? "#c9f055" : "#9b9889" }}>
-                  {fileName || "Click to select CSV file"}
-                </div>
-                {!fileName && (
-                  <div style={{ fontSize: 11, color: "#6b6a5e", marginTop: 4 }}>
-                    or drag and drop your .csv file here
-                  </div>
-                )}
-              </div>
+              <span style={{ fontSize: 12, color: "#9b9889" }}>ARX username (email)</span>
               <input
-                ref={fileRef}
-                type="file"
-                accept=".csv,text/csv"
-                style={{ display: "none" }}
-                onChange={(e) => setFileName(e.target.files?.[0]?.name ?? "")}
+                type="email"
+                value={arxUsername}
+                onChange={(e) => setArxUsername(e.target.value)}
+                required
+                autoComplete="username"
+                placeholder="you@email.com"
+                style={{ background: "#181910", border: "1px solid rgba(255,255,255,0.14)", color: "#edeae0", borderRadius: 8, padding: "11px 12px" }}
               />
             </label>
-
+            <label style={{ display: "grid", gap: 6 }}>
+              <span style={{ fontSize: 12, color: "#9b9889" }}>
+                ARX password
+                {hasStoredUsername ? " (required each sync — credentials are not stored)" : ""}
+              </span>
+              <input
+                type="password"
+                value={arxPassword}
+                onChange={(e) => setArxPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                style={{ background: "#181910", border: "1px solid rgba(255,255,255,0.14)", color: "#edeae0", borderRadius: 8, padding: "11px 12px" }}
+              />
+            </label>
+            {hasStoredUsername && (
+              <div style={{ fontSize: 12, color: "#afbda5" }}>
+                Your ARX username is saved. Enter your password to sync your latest sessions.
+              </div>
+            )}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button
                 type="submit"
-                disabled={isUploading || !fileName}
+                disabled={isSyncing}
                 style={{
-                  background: isUploading || !fileName ? "rgba(201,240,85,0.4)" : "#c9f055",
+                  background: "#c9f055",
                   border: "1px solid #c9f055",
                   color: "#0b0c09",
                   borderRadius: 10,
                   padding: "10px 18px",
                   fontWeight: 600,
-                  cursor: isUploading || !fileName ? "not-allowed" : "pointer",
+                  cursor: isSyncing ? "not-allowed" : "pointer",
+                  opacity: isSyncing ? 0.7 : 1,
                   fontSize: 13,
                 }}
               >
-                {isUploading ? "Importing…" : "Import ARX Data"}
+                {isSyncing ? "Syncing…" : "Sync ARX Data"}
               </button>
               <Link
-                href="/dashboard?section=arx"
+                href="/dashboard"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -175,11 +154,11 @@ export function MemberConnectArxForm({ memberName }: Props) {
         {result && (
           <div style={{ border: "1px solid rgba(201,240,85,0.35)", background: "rgba(201,240,85,0.08)", color: "#edeae0", borderRadius: 8, padding: "14px 16px", display: "grid", gap: 8 }}>
             <div style={{ color: "#c9f055", fontWeight: 600, fontSize: 14 }}>
-              ✓ Successfully imported {result.imported} sets across {result.exercises.length} exercise{result.exercises.length !== 1 ? "s" : ""}.
+              ✓ Successfully synced {result.imported} sets across {result.pages} page{result.pages !== 1 ? "s" : ""}.
             </div>
             {result.exercises.length > 0 && (
               <div>
-                <div style={{ fontSize: 11, color: "#9b9889", marginBottom: 4 }}>Exercises imported:</div>
+                <div style={{ fontSize: 11, color: "#9b9889", marginBottom: 4 }}>Exercises synced:</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                   {result.exercises.map((ex) => (
                     <span key={ex} style={{ fontSize: 11, background: "rgba(201,240,85,0.1)", border: "1px solid rgba(201,240,85,0.25)", borderRadius: 4, padding: "2px 8px", color: "#c9f055" }}>
@@ -189,7 +168,7 @@ export function MemberConnectArxForm({ memberName }: Props) {
                 </div>
               </div>
             )}
-            <Link href="/dashboard?section=arx" style={{ fontSize: 12, color: "#c9f055", textDecoration: "underline", display: "inline-block", marginTop: 4 }}>
+            <Link href="/dashboard" style={{ fontSize: 12, color: "#c9f055", textDecoration: "underline", display: "inline-block", marginTop: 4 }}>
               View your ARX data →
             </Link>
           </div>
