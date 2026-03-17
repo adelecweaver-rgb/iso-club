@@ -315,7 +315,7 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
   ] = await Promise.all([
     supabase
       .from("carol_sessions")
-      .select("session_date,ride_number,ride_type,fitness_score,peak_power_watts,calories,max_hr,manp,avg_sprint_power,calories_incl_epoc,heart_rate_max,sequential_number")
+      .select("session_date,ride_number,ride_type,fitness_score,octane_score,peak_power_watts,calories,max_hr,manp,avg_sprint_power,calories_incl_epoc,heart_rate_max,sequential_number")
       .eq("member_id", memberId)
       .order("session_date", { ascending: false })
       .limit(60),
@@ -401,8 +401,20 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
 
   const arxLatest = arxRows[0] ?? null;
   const carolLatest = carolRows[0] ?? null;
-  payload.metrics.carolFitness = carolLatest && (hasValue(carolLatest.manp) || hasValue(carolLatest.fitness_score))
-    ? Math.round(numberOr(hasValue(carolLatest.manp) ? carolLatest.manp : carolLatest.fitness_score, 0)).toString()
+  const carolFitnessRow = carolRows.find(
+    (row) => hasValue(row.manp) || hasValue(row.fitness_score) || hasValue(row.octane_score),
+  );
+  payload.metrics.carolFitness = carolFitnessRow
+    ? Math.round(
+        numberOr(
+          hasValue(carolFitnessRow.manp)
+            ? carolFitnessRow.manp
+            : hasValue(carolFitnessRow.fitness_score)
+              ? carolFitnessRow.fitness_score
+              : carolFitnessRow.octane_score,
+          0,
+        ),
+      ).toString()
     : "--";
   payload.metrics.arxOutput =
     arxLatest && (hasValue(arxLatest.concentric_max) || hasValue(arxLatest.output))
@@ -429,7 +441,9 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       ? Math.round(numberOr(row.manp, 0)).toString()
       : hasValue(row.fitness_score)
         ? Math.round(numberOr(row.fitness_score, 0)).toString()
-        : "--",
+        : hasValue(row.octane_score)
+          ? Math.round(numberOr(row.octane_score, 0)).toString()
+          : "--",
   }));
   payload.carolSessions = carolRows.map((row) => ({
     sessionDate: stringOr(row.session_date, ""),
