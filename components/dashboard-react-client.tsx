@@ -54,6 +54,22 @@ type DashboardPayload = {
   carolHistory: Array<{ label: string; value: string }>;
   carolSessions: CarolSession[];
   arxHistory: Array<{ label: string; value: string }>;
+  vitalityAge: {
+    estimated: number | null;
+    chronological: number | null;
+    difference: number | null;
+    trend: number | null;
+    hasEnoughData: boolean;
+  };
+  wins: Array<{ label: string; isMilestone: boolean; icon: string }>;
+  goalDetails: {
+    gain_muscle: { sinceJoining: string; sinceJoiningDir: "up" | "down" | "none"; thisMonth: string; thisMonthDir: "up" | "down" | "none"; status: string; statusLabel: string; encouragement: string | null };
+    lose_fat: { sinceJoining: string; sinceJoiningDir: "up" | "down" | "none"; thisMonth: string; thisMonthDir: "up" | "down" | "none"; status: string; statusLabel: string; encouragement: string | null };
+    improve_cardio: { sinceJoining: string; sinceJoiningDir: "up" | "down" | "none"; thisMonth: string; thisMonthDir: "up" | "down" | "none"; status: string; statusLabel: string; encouragement: string | null };
+    attendance: { sinceJoining: string; sinceJoiningDir: "up" | "down" | "none"; thisMonth: string; thisMonthDir: "up" | "down" | "none"; status: string; statusLabel: string; encouragement: string | null };
+  };
+  sessionNote: { text: string; date: string; coachName: string } | null;
+  coachAtRisk: Array<{ id: string; name: string; reasons: string[]; recovery: string }>;
   arxSessions: Array<{
     sessionDate: string;
     exercise: string;
@@ -453,32 +469,7 @@ const PROTOCOL_REASONS: Record<string, string> = {
   "Strength Foundation": "Builds foundational muscle strength with targeted ARX sessions and progressive overload.",
 };
 
-function shortGoalDisplay(display: string): string {
-  return display
-    .replace(" since last scan", "")
-    .replace(" over last 30 days", "")
-    .replace(" completed this month", "")
-    .replace("Cardio power:", "Cardio")
-    .replace("Lean mass:", "Lean mass")
-    .replace("Body fat:", "Body fat");
-}
 
-function goalStatValue(display: string, direction: string): string {
-  if (direction === "no_data") return "—";
-  // Extract just the numeric/key part after the first colon, or use attendance "X/Y" form
-  const afterColon = display.match(/:\s*([^\s].+)/);
-  if (afterColon) {
-    return afterColon[1]
-      .replace(" since last scan", "")
-      .replace(" over last 30 days", "")
-      .replace(" completed this month", "")
-      .trim();
-  }
-  // attendance-style "12 of 16 sessions..." → "12 / 16"
-  const ofMatch = display.match(/(\d+) of (\d+)/);
-  if (ofMatch) return `${ofMatch[1]} / ${ofMatch[2]}`;
-  return shortGoalDisplay(display);
-}
 
 function recommendProtocol(activeGoals: string[]): string | null {
   const g = new Set(activeGoals);
@@ -679,6 +670,10 @@ export function DashboardReactClient({
   const [loadingMemberGoals, setLoadingMemberGoals] = useState(false);
   const [protocolRequested, setProtocolRequested] = useState(false);
   const [isRequestingProtocol, setIsRequestingProtocol] = useState(false);
+  const [coachNoteText, setCoachNoteText] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const [memberNotes, setMemberNotes] = useState<Array<{ id: string; note: string; created_at: string }>>([]);
+  const [notesForMember, setNotesForMember] = useState("");
   const [showProtocolModal, setShowProtocolModal] = useState(false);
   const [protocolRequestText, setProtocolRequestText] = useState("");
   const [sendingProtocolRequest, setSendingProtocolRequest] = useState(false);
@@ -743,6 +738,18 @@ export function DashboardReactClient({
       } catch { /* table may not exist yet */ }
     })();
   }, [isCoachAccount, notifLoaded, coachNotifs]);
+
+  useEffect(() => {
+    if (!isCoachAccount || !assignMemberId || assignMemberId === notesForMember) return;
+    setNotesForMember(assignMemberId);
+    setMemberNotes([]);
+    void (async () => {
+      try {
+        const res = await getJson<{ notes: typeof memberNotes }>(`/api/coach/session-notes?member_id=${assignMemberId}`);
+        if (Array.isArray(res.notes)) setMemberNotes(res.notes);
+      } catch { /* table may not exist yet */ }
+    })();
+  }, [assignMemberId, isCoachAccount, notesForMember]);
 
   useEffect(() => {
     if (!isCoachAccount || mode !== "coach" || coachView !== "protocols" || !assignMemberId) return;
@@ -1144,213 +1151,160 @@ export function DashboardReactClient({
         </div>
 
         <div id="view-dashboard" className="content" style={{ display: mode === "member" && memberView === "dashboard" ? "block" : "none" }}>
-          <div className="grid-4">
-            {(() => {
-              const anyGoalActive = Object.values(localGoals).some(Boolean);
-              const GOAL_ORDER = ["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const;
-              const ANIM = ["anim d1", "anim d2", "anim d3", "anim d4"];
 
-              if (anyGoalActive) {
-                return GOAL_ORDER.map((gt, i) => {
-                  const isOn = localGoals[gt] ?? false;
-                  const prog = payload.goals.progress[gt];
-                  const color = isOn ? goalStatusColor(prog.direction) : "var(--text3)";
-                  const compactVal = isOn ? goalStatValue(prog.display, prog.direction) : "—";
-                  const statusText = isOn ? goalStatusLabel(prog.status) : "Not active";
-                  return (
-                    <button
-                      key={gt}
-                      type="button"
-                      className={`stat-card ${ANIM[i]}`}
-                      onClick={() => setMemberSection("goals")}
-                      style={{ textAlign: "left", cursor: "pointer", opacity: isOn ? 1 : 0.45, background: isOn ? `${color}10` : undefined, border: isOn ? `1px solid ${color}40` : undefined }}
-                    >
-                      <div className="stat-label" style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: color, display: "inline-block", flexShrink: 0 }} />
-                        {GOAL_DEFS[gt]?.name ?? gt}
-                      </div>
-                      <div className="stat-val" style={{ color, fontSize: 22 }}>{compactVal}</div>
-                      <div style={{ fontSize: 10, color, marginTop: 2, fontWeight: 500 }}>{statusText}</div>
-                    </button>
-                  );
-                });
-              }
-
-              // Default metrics when no goals are set
-              return (
-                <>
-                  <div className="stat-card anim d1">
-                    <div className="stat-label">CAROL fitness score</div>
-                    <div className="stat-val">{payload.metrics.carolFitness}</div>
+          {/* ── Section 1: Vitality Age ─────────────────────────────────── */}
+          <div style={{ background: "linear-gradient(135deg, rgba(157,204,58,0.06) 0%, rgba(157,204,58,0.02) 100%)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r)", padding: "28px 28px 24px", marginBottom: 20 }}>
+            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(157,204,58,0.7)", marginBottom: 12 }}>Your Vitality Age</div>
+            {payload.vitalityAge.hasEnoughData && payload.vitalityAge.estimated !== null ? (
+              <>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 10 }}>
+                  <div style={{ fontSize: 72, fontWeight: 800, color: "var(--text)", lineHeight: 1, fontFamily: "Georgia, serif" }}>{payload.vitalityAge.estimated}</div>
+                  <div style={{ paddingBottom: 8, color: "var(--text3)", fontSize: 13 }}>years old (functionally)</div>
+                </div>
+                {payload.vitalityAge.difference !== null && payload.vitalityAge.difference !== 0 && (
+                  <div style={{ fontSize: 14, color: payload.vitalityAge.difference > 0 ? "#9dcc3a" : "#e05252", fontWeight: 500, marginBottom: 6 }}>
+                    {payload.vitalityAge.difference > 0
+                      ? `You're functioning ${payload.vitalityAge.difference} year${payload.vitalityAge.difference !== 1 ? "s" : ""} younger than your age`
+                      : `Vitality age is ${Math.abs(payload.vitalityAge.difference)} year${Math.abs(payload.vitalityAge.difference) !== 1 ? "s" : ""} above chronological age`}
                   </div>
-                  <div className="stat-card amber anim d2">
-                    <div className="stat-label">ARX leg press output</div>
-                    <div className="stat-val">{payload.metrics.arxOutput}</div>
+                )}
+                {payload.vitalityAge.trend !== null && payload.vitalityAge.trend !== 0 && (
+                  <div style={{ fontSize: 12, color: payload.vitalityAge.trend > 0 ? "#9dcc3a" : "#e05252" }}>
+                    {payload.vitalityAge.trend > 0 ? `↑ Improved ${payload.vitalityAge.trend} year${payload.vitalityAge.trend !== 1 ? "s" : ""} since last calculation` : `↓ Up ${Math.abs(payload.vitalityAge.trend)} year${Math.abs(payload.vitalityAge.trend) !== 1 ? "s" : ""} since last calculation`}
                   </div>
-                  <div className="stat-card blue anim d3">
-                    <div className="stat-label">Lean mass</div>
-                    <div className="stat-val">{payload.metrics.leanMass}</div>
-                  </div>
-                  <div className="stat-card teal anim d4">
-                    <div className="stat-label">Whoop recovery</div>
-                    <div className="stat-val">{payload.metrics.whoopRecovery}</div>
-                  </div>
-                </>
-              );
-            })()}
+                )}
+              </>
+            ) : (
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text3)", marginBottom: 8 }}>—</div>
+                <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
+                  Complete your first Fit3D scan and CAROL session to calculate your Vitality Age.
+                </p>
+                <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
+                  <button type="button" className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setMemberSection("carol")}>Connect CAROL →</button>
+                  <button type="button" className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setMemberSection("scans")}>View Scans →</button>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Goals Progress section */}
-          {payload.goals.activeGoals.length > 0 && (
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.12em", marginBottom: 10 }}>Goals Progress</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10 }}>
-                {payload.goals.activeGoals.map((gt) => {
-                  const prog = payload.goals.progress[gt as keyof typeof payload.goals.progress];
-                  const color = goalStatusColor(prog?.direction ?? "no_data");
-                  const short = prog?.direction !== "no_data" ? shortGoalDisplay(prog?.display ?? "") : "No data yet";
-                  return (
-                    <button
-                      key={gt}
-                      type="button"
-                      onClick={() => setMemberSection("goals")}
-                      style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 12px", cursor: "pointer", textAlign: "left" }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{GOAL_DEFS[gt]?.name ?? gt}</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.4 }}>{short}</div>
-                    </button>
-                  );
-                })}
+          {/* ── Section 2: This Week's Wins ─────────────────────────────── */}
+          {payload.wins.length > 0 && (
+            <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "18px 20px", marginBottom: 20 }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(220,180,100,0.7)", marginBottom: 14 }}>This week&apos;s wins</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {payload.wins.map((win, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                    <span style={{ fontSize: win.isMilestone ? 16 : 13, flexShrink: 0, marginTop: win.isMilestone ? -1 : 0 }}>{win.icon}</span>
+                    <span style={{ fontSize: 13, color: win.isMilestone ? "var(--text)" : "var(--text2)", fontWeight: win.isMilestone ? 600 : 400, lineHeight: 1.5 }}>{win.label}</span>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          <div className="grid-21">
-            <div className="card">
-              <div className="track-hero">
-                <div style={{ flex: 1 }}>
-                  <div className="track-name">{payload.protocol.name || "Strength Foundation Track"}</div>
-                  <div className="track-meta">
-                    Prescribed by <b>Dustin</b>
-                    {payload.protocol.targetSystem
-                      ? ` · ${formatTargetSystem(payload.protocol.targetSystem)}`
-                      : ` · Week ${payload.protocol.weekCurrent} of ${payload.protocol.weekTotal}`}
-                  </div>
+          {/* ── Section 3: Goal Progress Cards ──────────────────────────── */}
+          {(() => {
+            const activeGoalTypes = (["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).filter((gt) => localGoals[gt]);
+            if (activeGoalTypes.length === 0) {
+              return (
+                <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 10 }}>No goals set yet.</div>
+                  <button type="button" className="btn btn-sm" onClick={() => setMemberSection("goals")}>Set your goals →</button>
                 </div>
-                <span className="tag tag-lime">Active</span>
-              </div>
-              {payload.protocol.targetSystem ? (
-                // New-style: interactive weekly checklist directly on dashboard
-                (() => {
-                  const cl = generateChecklist(payload.protocol);
-                  const c = payload.checklistCompletions;
-                  const doneCount = cl.filter((item) => isChecklistItemDone(item, c, checklistChecked)).length;
-                  const groups = [
-                    { key: "strength", label: "Strength", items: cl.filter((i) => i.category === "strength") },
-                    { key: "cardio", label: "Cardio", items: cl.filter((i) => i.category === "cardio") },
-                    { key: "recovery", label: "Recovery", items: cl.filter((i) => i.category === "recovery") },
-                  ].filter((g) => g.items.length > 0);
+              );
+            }
+            const GOAL_NAMES_LONG: Record<string, string> = { gain_muscle: "Gain Muscle", lose_fat: "Lose Body Fat", improve_cardio: "Improve Cardio Fitness", attendance: "Stay Consistent" };
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
+                {activeGoalTypes.map((gt) => {
+                  const det = payload.goalDetails[gt];
+                  const upColor = "#9dcc3a"; const downColor = "#e05252"; const neutColor = "#e8a838";
+                  const statusColor = det.status === "on_track" || det.status === "improving" ? upColor : det.status === "maintaining" || det.status === "behind" ? neutColor : det.status === "declining" || det.status === "off_track" ? downColor : "var(--text3)";
+                  const dirIcon = (d: string) => d === "up" ? " ↑" : d === "down" ? " ↓" : "";
                   return (
-                    <div style={{ padding: "0 20px 14px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                        <div style={{ fontSize: 11, color: "var(--text3)" }}>This week</div>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: doneCount === cl.length && cl.length > 0 ? "#9dcc3a" : "var(--text2)" }}>
-                          {doneCount} of {cl.length} done
+                    <div key={gt} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "14px 16px" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>{GOAL_NAMES_LONG[gt]}</div>
+                      <div style={{ marginBottom: 6 }}>
+                        <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 2 }}>Since joining</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{det.sinceJoining}{dirIcon(det.sinceJoiningDir)}</div>
+                      </div>
+                      <div style={{ marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 2 }}>This month</div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{det.thisMonth}{dirIcon(det.thisMonthDir)}</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: statusColor, background: `${statusColor}18`, border: `1px solid ${statusColor}40`, borderRadius: 3, padding: "1px 6px" }}>{det.statusLabel}</span>
                         </div>
                       </div>
-                      <div style={{ height: 3, background: "var(--border)", borderRadius: 2, marginBottom: 14, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${cl.length > 0 ? (doneCount / cl.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 2, transition: "width 0.3s ease" }} />
-                      </div>
-                      {groups.map((group) => (
-                        <div key={group.key} style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 6 }}>{group.label}</div>
-                          {group.items.map((item) => {
-                            const done = isChecklistItemDone(item, c, checklistChecked);
-                            const blockedToday = isChecklistBlockedToday(item, c, checklistChecked);
-                            const isLogging = checklistLogging === item.id;
-                            return (
-                              <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
-                                <button
-                                  type="button"
-                                  onClick={() => { void handleChecklistItem(item, c); }}
-                                  disabled={isLogging || (blockedToday && !done)}
-                                  style={{
-                                    width: 22, height: 22, borderRadius: "50%", flexShrink: 0, padding: 0,
-                                    background: done ? "#9dcc3a" : "transparent",
-                                    border: `2px solid ${done ? "#9dcc3a" : blockedToday ? "var(--border)" : "rgba(157,204,58,0.5)"}`,
-                                    cursor: done || (blockedToday && !done) ? "default" : "pointer",
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    transition: "all 0.2s", opacity: isLogging ? 0.5 : 1,
-                                  }}
-                                >
-                                  {done && <span style={{ color: "#0b0c09", fontSize: 10, fontWeight: 800, lineHeight: 1 }}>✓</span>}
-                                  {isLogging && <span style={{ color: "var(--text3)", fontSize: 9 }}>…</span>}
-                                </button>
-                                <span style={{ fontSize: 12.5, color: done ? "var(--text3)" : "var(--text2)", textDecoration: done ? "line-through" : "none", transition: "all 0.2s" }}>
-                                  {item.label}
-                                </span>
-                                {blockedToday && !done && (
-                                  <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: "auto" }}>today ✓</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ))}
+                      {det.encouragement && (
+                        <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.5, fontStyle: "italic", borderTop: "1px solid var(--border)", paddingTop: 8 }}>{det.encouragement}</div>
+                      )}
                     </div>
                   );
-                })()
-              ) : payload.protocol.sessions.length ? (
-                payload.protocol.sessions.map((session, index) => (
-                  <div key={`${session.name}-${index}`} className="session-item">
-                    <div className="s-num">{index + 1}</div>
-                    <div className="s-info">
-                      <div className="s-name">{session.name}</div>
-                      <div className="s-detail">{session.detail}</div>
-                    </div>
-                    <div className="s-dur">{session.duration} min</div>
-                  </div>
-                ))
-              ) : (
-                <div className="card-body">
-                  <p style={{ color: "var(--text3)" }}>No protocol sessions assigned yet.</p>
-                </div>
-              )}
-            </div>
+                })}
+              </div>
+            );
+          })()}
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div className="card">
-                <div className="card-header">
-                  <div>
-                    <div className="card-title">Healthspan OS</div>
+          {/* ── Section 4: This Week's Checklist ────────────────────────── */}
+          {payload.protocol.targetSystem && (() => {
+            const cl = generateChecklist(payload.protocol);
+            const c = payload.checklistCompletions;
+            const doneCount = cl.filter((item) => isChecklistItemDone(item, c, checklistChecked)).length;
+            const groups = [
+              { key: "strength", label: "Strength", items: cl.filter((i) => i.category === "strength") },
+              { key: "cardio", label: "Cardio", items: cl.filter((i) => i.category === "cardio") },
+              { key: "recovery", label: "Recovery", items: cl.filter((i) => i.category === "recovery") },
+            ].filter((g) => g.items.length > 0);
+            return (
+              <div className="card" style={{ marginBottom: 20 }}>
+                <div style={{ padding: "14px 20px 0" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>This week — {doneCount} of {cl.length} completed</div>
+                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{c.weekStartDate}</div>
+                  </div>
+                  <div style={{ height: 3, background: "var(--border)", borderRadius: 2, marginBottom: 14, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${cl.length > 0 ? (doneCount / cl.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 2, transition: "width 0.3s" }} />
                   </div>
                 </div>
-                <div className="os-grid">
-                  <div className="os-item"><div className="os-item-top"><span className="os-item-label">Muscle</span><span className="os-item-score">{payload.healthspan.muscle}</span></div></div>
-                  <div className="os-item"><div className="os-item-top"><span className="os-item-label">Cardio</span><span className="os-item-score">{payload.healthspan.cardio}</span></div></div>
-                  <div className="os-item"><div className="os-item-top"><span className="os-item-label">Metabolic</span><span className="os-item-score">{payload.healthspan.metabolic}</span></div></div>
-                  <div className="os-item"><div className="os-item-top"><span className="os-item-label">Structural</span><span className="os-item-score">{payload.healthspan.structural}</span></div></div>
-                  <div className="os-item" style={{ gridColumn: "1 / -1" }}><div className="os-item-top"><span className="os-item-label">Recovery</span><span className="os-item-score">{payload.healthspan.recovery}</span></div></div>
+                <div style={{ padding: "0 20px 14px" }}>
+                  {groups.map((group) => (
+                    <div key={group.key} style={{ marginBottom: 12 }}>
+                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 6 }}>{group.label}</div>
+                      {group.items.map((item) => {
+                        const done = isChecklistItemDone(item, c, checklistChecked);
+                        const blocked = isChecklistBlockedToday(item, c, checklistChecked);
+                        const isLogging = checklistLogging === item.id;
+                        return (
+                          <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
+                            <button type="button" onClick={() => { void handleChecklistItem(item, c); }} disabled={isLogging || (blocked && !done)}
+                              style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, padding: 0, background: done ? "#9dcc3a" : "transparent", border: `2px solid ${done ? "#9dcc3a" : blocked ? "var(--border)" : "rgba(157,204,58,0.5)"}`, cursor: done || (blocked && !done) ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", opacity: isLogging ? 0.5 : 1 }}>
+                              {done && <span style={{ color: "#0b0c09", fontSize: 10, fontWeight: 800 }}>✓</span>}
+                              {isLogging && <span style={{ color: "var(--text3)", fontSize: 9 }}>…</span>}
+                            </button>
+                            <span style={{ fontSize: 12.5, color: done ? "var(--text3)" : "var(--text2)", textDecoration: done ? "line-through" : "none", transition: "all 0.2s" }}>{item.label}</span>
+                            {blocked && !done && <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: "auto" }}>today ✓</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div className="card">
-                <div className="card-header">
-                  <div className="card-title">From Dustin</div>
-                </div>
-                <div className="card-body">
-                  <p style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.7 }}>
-                    Your progress is updating in real time. Open messages to ask questions or get adjustments.
-                  </p>
-                  <button className="btn btn-sm" style={{ marginTop: 10 }} onClick={() => setMemberSection("messages")} type="button">
-                    Reply →
-                  </button>
-                </div>
+            );
+          })()}
+
+          {/* ── Section 5: Note from Dustin ─────────────────────────────── */}
+          {payload.sessionNote && (
+            <div style={{ background: "rgba(220,180,100,0.05)", border: "1px solid rgba(220,180,100,0.15)", borderRadius: "var(--r)", padding: "16px 20px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(220,180,100,0.8)" }}>Note from Dustin</div>
+                <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.sessionNote.date}</div>
               </div>
+              <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0, fontStyle: "italic" }}>&ldquo;{payload.sessionNote.text}&rdquo;</p>
             </div>
-          </div>
+          )}
+
         </div>
 
         <div id="view-goals" className="content" style={{ display: mode === "member" && memberView === "goals" ? "block" : "none" }}>
@@ -2351,6 +2305,21 @@ export function DashboardReactClient({
               <div className="cm-stat"><div className="cm-stat-val" style={{ color: "var(--lime)" }}>{payload.coach.readyCount}</div><div className="cm-stat-label">Ready to train</div></div>
             </div>
           </div>
+          {/* At-risk members */}
+          {payload.coachAtRisk.length > 0 && (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#e8a838", marginBottom: 10 }}>⚠ Members Needing Attention</div>
+              {payload.coachAtRisk.map((m) => (
+                <div key={m.id} style={{ background: "rgba(232,168,56,0.07)", border: "1px solid rgba(232,168,56,0.25)", borderRadius: "var(--r-sm)", padding: "12px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{m.name}</div>
+                    {m.reasons.map((r, i) => <div key={i} style={{ fontSize: 11, color: "#e8a838" }}>{r}</div>)}
+                  </div>
+                  <button type="button" className="btn btn-sm" style={{ fontSize: 10, flexShrink: 0 }} onClick={() => { setSelectedCoachRecipientId(m.id); setCoachView("messages"); setMode("coach"); void loadMessages(true, m.id); }}>Message →</button>
+                </div>
+              ))}
+            </div>
+          )}
           <div style={{ marginBottom: 20 }}>
             <div className="sec-header"><div className="sec-title">Flags to review</div></div>
             {(payload.coach.alerts.length ? payload.coach.alerts : ["No current alerts."]).map((alert, index) => (
@@ -2552,6 +2521,39 @@ export function DashboardReactClient({
                   })()}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Session notes — shown when a member is selected */}
+          {assignMemberId && (
+            <div className="card" style={{ marginTop: 16 }}>
+              <div className="card-header"><div className="card-title">Session Notes</div></div>
+              <div style={{ padding: "12px 20px 16px" }}>
+                <textarea className="form-input" style={{ width: "100%", minHeight: 80, resize: "vertical", marginBottom: 10, boxSizing: "border-box" }} placeholder="Add a session note for this member…" value={coachNoteText} onChange={(e) => setCoachNoteText(e.target.value)} />
+                <button type="button" className="btn btn-lime btn-sm" disabled={savingNote || !coachNoteText.trim()}
+                  onClick={async () => {
+                    if (!coachNoteText.trim() || savingNote) return;
+                    setSavingNote(true);
+                    try {
+                      await postJson("/api/coach/session-notes", { member_id: assignMemberId, note: coachNoteText.trim() });
+                      setMemberNotes((prev) => [{ id: Date.now().toString(), note: coachNoteText.trim(), created_at: new Date().toISOString() }, ...prev.slice(0, 4)]);
+                      setCoachNoteText("");
+                    } catch { /* silent */ } finally { setSavingNote(false); }
+                  }}>
+                  {savingNote ? "Saving…" : "Save Note"}
+                </button>
+                {memberNotes.length > 0 && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Recent notes</div>
+                    {memberNotes.map((n) => (
+                      <div key={n.id} style={{ borderBottom: "1px solid var(--border)", paddingBottom: 10, marginBottom: 10 }}>
+                        <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>{new Date(n.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</div>
+                        <p style={{ fontSize: 12.5, color: "var(--text2)", margin: 0, lineHeight: 1.55 }}>{n.note}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </div>

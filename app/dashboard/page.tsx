@@ -55,6 +55,22 @@ type DashboardPayload = {
     sequentialNumber: string;
   }>;
   arxHistory: Array<{ label: string; value: string }>;
+  vitalityAge: {
+    estimated: number | null;
+    chronological: number | null;
+    difference: number | null;
+    trend: number | null;
+    hasEnoughData: boolean;
+  };
+  wins: Array<{ label: string; isMilestone: boolean; icon: string }>;
+  goalDetails: {
+    gain_muscle: { sinceJoining: string; sinceJoiningDir: "up" | "down" | "none"; thisMonth: string; thisMonthDir: "up" | "down" | "none"; status: string; statusLabel: string; encouragement: string | null };
+    lose_fat: { sinceJoining: string; sinceJoiningDir: "up" | "down" | "none"; thisMonth: string; thisMonthDir: "up" | "down" | "none"; status: string; statusLabel: string; encouragement: string | null };
+    improve_cardio: { sinceJoining: string; sinceJoiningDir: "up" | "down" | "none"; thisMonth: string; thisMonthDir: "up" | "down" | "none"; status: string; statusLabel: string; encouragement: string | null };
+    attendance: { sinceJoining: string; sinceJoiningDir: "up" | "down" | "none"; thisMonth: string; thisMonthDir: "up" | "down" | "none"; status: string; statusLabel: string; encouragement: string | null };
+  };
+  sessionNote: { text: string; date: string; coachName: string } | null;
+  coachAtRisk: Array<{ id: string; name: string; reasons: string[]; recovery: string }>;
   arxSessions: Array<{
     sessionDate: string;
     exercise: string;
@@ -258,6 +274,16 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     carolSessions: [],
     arxHistory: [],
     arxSessions: [],
+    vitalityAge: { estimated: null, chronological: null, difference: null, trend: null, hasEnoughData: false },
+    wins: [],
+    goalDetails: {
+      gain_muscle: { sinceJoining: "--", sinceJoiningDir: "none", thisMonth: "--", thisMonthDir: "none", status: "no_data", statusLabel: "No data", encouragement: null },
+      lose_fat: { sinceJoining: "--", sinceJoiningDir: "none", thisMonth: "--", thisMonthDir: "none", status: "no_data", statusLabel: "No data", encouragement: null },
+      improve_cardio: { sinceJoining: "--", sinceJoiningDir: "none", thisMonth: "--", thisMonthDir: "none", status: "no_data", statusLabel: "No data", encouragement: null },
+      attendance: { sinceJoining: "--", sinceJoiningDir: "none", thisMonth: "--", thisMonthDir: "none", status: "no_data", statusLabel: "No data", encouragement: null },
+    },
+    sessionNote: null,
+    coachAtRisk: [],
     scan: {
       scanDate: "",
       bodyFatPct: "--",
@@ -401,6 +427,10 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     bookingRes,
     protocolRes,
     reportRes,
+    carolCountRes,
+    arxCountRes,
+    recoveryCountRes,
+    sessionNoteRes,
   ] = await Promise.all([
     supabase
       .from("carol_sessions")
@@ -478,6 +508,10 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
         .limit(1);
     })(),
     supabase.from("reports").select("title").eq("member_id", memberId).order("created_at", { ascending: false }).limit(3),
+    supabase.from("carol_sessions").select("id", { count: "exact", head: true }).eq("member_id", memberId),
+    supabase.from("arx_sessions").select("id", { count: "exact", head: true }).eq("member_id", memberId),
+    supabase.from("recovery_sessions").select("id", { count: "exact", head: true }).eq("member_id", memberId),
+    supabase.from("session_notes").select("note,created_at,coach_id").eq("member_id", memberId).order("created_at", { ascending: false }).limit(1),
   ]);
 
   const carolRows = Array.isArray(carolRes.data) ? (carolRes.data as Array<Record<string, unknown>>) : [];
@@ -789,6 +823,193 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
     }
   }
 
+  // ─── Session note ────────────────────────────────────────────────────────────
+  const noteRow = Array.isArray(sessionNoteRes.data) && sessionNoteRes.data.length
+    ? (sessionNoteRes.data[0] as Record<string, unknown>) : null;
+  if (noteRow) {
+    payload.sessionNote = {
+      text: stringOr(noteRow.note, ""),
+      date: formatDateForLabel(noteRow.created_at),
+      coachName: "Dustin",
+    };
+  }
+
+  // ─── Vitality age calculation ─────────────────────────────────────────────
+  const dob = stringOr(userRow?.date_of_birth, "");
+  const gender = stringOr(userRow?.gender, "").toLowerCase();
+  const chronologicalAge = dob ? Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000)) : null;
+  if (chronologicalAge !== null && chronologicalAge > 0) {
+    let adj = 0;
+    let markerCount = 0;
+    const leanPct = scanRow && hasValue(scanRow.lean_mass_lbs) && hasValue(scanRow.weight_lbs)
+      ? (numberOr(scanRow.lean_mass_lbs, 0) / Math.max(1, numberOr(scanRow.weight_lbs, 0))) * 100 : null;
+    if (leanPct !== null) {
+      markerCount++;
+      if (leanPct > 45) adj -= 3;
+      else if (leanPct >= 38) adj -= 1;
+      else if (leanPct >= 30) adj += 0;
+      else if (leanPct >= 22) adj += 1;
+      else adj += 3;
+    }
+    const bfPct = scanRow && hasValue(scanRow.body_fat_pct) ? numberOr(scanRow.body_fat_pct, 0) : null;
+    if (bfPct !== null) {
+      markerCount++;
+      const isMale = gender.startsWith("m");
+      if (isMale) { if (bfPct < 18) adj -= 3; else if (bfPct <= 24) adj -= 1; else if (bfPct <= 29) adj += 0; else if (bfPct <= 34) adj += 1; else adj += 3; }
+      else { if (bfPct < 25) adj -= 3; else if (bfPct <= 31) adj -= 1; else if (bfPct <= 37) adj += 0; else if (bfPct <= 42) adj += 1; else adj += 3; }
+    }
+    const thirtyDaysAgoIso2 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+    const recentCarol = carolRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= thirtyDaysAgoIso2);
+    const cardioVals = recentCarol.map((r) => hasValue(r.manp) ? numberOr(r.manp, 0) : hasValue(r.peak_power_watts) ? numberOr(r.peak_power_watts, 0) : null).filter((v): v is number => v !== null);
+    if (cardioVals.length > 0) {
+      markerCount++;
+      const avgCardio = cardioVals.reduce((a, b) => a + b, 0) / cardioVals.length;
+      const benchmark = chronologicalAge < 40 ? 380 : chronologicalAge < 50 ? 340 : chronologicalAge < 60 ? 300 : 260;
+      const ratio = avgCardio / benchmark;
+      if (ratio > 1.3) adj -= 3; else if (ratio > 1.0) adj -= 1; else if (ratio >= 0.85) adj += 0; else if (ratio >= 0.7) adj += 1; else adj += 3;
+    }
+    const arxMonthC = arxRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= monthStartIso).length;
+    const carolMonthC = carolRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= monthStartIso).length;
+    const totalMonthC = arxMonthC + carolMonthC + recoveryRows.length;
+    const monthTarget30 = Math.round((payload.protocol.arxPerWeek + payload.protocol.carolPerWeek) * 4 + payload.protocol.recoveryPerMonth);
+    if (monthTarget30 > 0) {
+      markerCount++;
+      const pct = (totalMonthC / monthTarget30) * 100;
+      if (pct >= 90) adj -= 2; else if (pct >= 75) adj -= 1; else if (pct >= 50) adj += 0; else adj += 2;
+    }
+    const estimated = chronologicalAge + adj;
+    payload.vitalityAge = { estimated, chronological: chronologicalAge, difference: chronologicalAge - estimated, trend: null, hasEnoughData: markerCount >= 2 };
+    // Store in healthspan_scores for trend tracking
+    if (markerCount >= 2) {
+      void supabase.from("healthspan_scores").insert({ member_id: memberId, vitality_age: estimated, chronological_age: chronologicalAge, recorded_at: new Date().toISOString() }).then(() => {});
+      // Compute trend from previous entry
+      const prevScoreRes = await supabase.from("healthspan_scores").select("vitality_age").eq("member_id", memberId).not("vitality_age", "is", null).order("recorded_at", { ascending: false }).limit(2);
+      if (!prevScoreRes.error && Array.isArray(prevScoreRes.data) && prevScoreRes.data.length >= 2) {
+        const prev = numberOr((prevScoreRes.data[1] as Record<string, unknown>).vitality_age, estimated);
+        payload.vitalityAge.trend = prev - estimated; // positive = improved (got younger)
+      }
+    }
+  }
+
+  // ─── Wins detection ───────────────────────────────────────────────────────
+  const carolTotal = carolCountRes.count ?? 0;
+  const arxTotal = arxCountRes.count ?? 0;
+  const recoveryTotal = recoveryCountRes.count ?? 0;
+  const wins: typeof payload.wins = [];
+  // New CAROL peak power PR
+  const carolPeaks = carolRows.map((r) => numberOr(r.peak_power_watts, 0)).filter((v) => v > 0);
+  if (carolPeaks.length >= 2 && carolPeaks[0] > Math.max(...carolPeaks.slice(1))) {
+    wins.push({ label: `New CAROL peak power — ${Math.round(carolPeaks[0])}W personal best`, isMilestone: false, icon: "↑" });
+  }
+  // New ARX per-exercise record
+  const arxByExercise: Record<string, number[]> = {};
+  for (const row of arxRows) {
+    const ex = stringOr(row.exercise, ""); const conc = numberOr(row.concentric_max, 0);
+    if (ex && conc > 0) { if (!arxByExercise[ex]) arxByExercise[ex] = []; arxByExercise[ex].push(conc); }
+  }
+  for (const [ex, vals] of Object.entries(arxByExercise)) {
+    if (vals.length >= 2 && vals[0] > Math.max(...vals.slice(1))) {
+      wins.push({ label: `New ARX ${ex.toLowerCase().replace(/_/g, " ")} record — ${Math.round(vals[0])} lbs`, isMilestone: false, icon: "↑" });
+    }
+  }
+  // Body composition wins
+  if (scanRows.length >= 2) {
+    const lD = numberOr(scanRows[0].lean_mass_lbs, 0) - numberOr(scanRows[1].lean_mass_lbs, 0);
+    if (lD > 0.2) wins.push({ label: `Lean mass up ${lD.toFixed(1)} lbs since last scan`, isMilestone: false, icon: "↑" });
+    const fD = numberOr(scanRows[1].body_fat_pct, 0) - numberOr(scanRows[0].body_fat_pct, 0);
+    if (fD > 0.1) wins.push({ label: `Body fat down ${fD.toFixed(1)}% since last scan`, isMilestone: false, icon: "↓" });
+  }
+  // Full protocol week
+  const lastWeekArx = arxRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= weekStartIso).length;
+  const lastWeekCarol = carolRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= weekStartIso).length;
+  if (payload.protocol.arxPerWeek > 0 && payload.protocol.carolPerWeek > 0 && lastWeekArx >= payload.protocol.arxPerWeek && lastWeekCarol >= payload.protocol.carolPerWeek) {
+    wins.push({ label: "Full protocol completed this week", isMilestone: false, icon: "✓" });
+  }
+  // Milestones
+  for (const m of [1, 5, 10, 25, 50, 100, 200]) {
+    if (carolTotal === m) { wins.push({ label: `${m} CAROL session${m > 1 ? "s" : ""} milestone`, isMilestone: true, icon: "🎯" }); break; }
+  }
+  for (const m of [1, 5, 10, 25, 50, 100]) {
+    if (arxTotal === m) { wins.push({ label: `${m} ARX session${m > 1 ? "s" : ""} milestone`, isMilestone: true, icon: "🎯" }); break; }
+  }
+  // Member duration milestones
+  const joinedAt = stringOr(userRow?.created_at, "");
+  if (joinedAt) {
+    const daysMember = Math.floor((Date.now() - new Date(joinedAt).getTime()) / (24 * 3600 * 1000));
+    for (const d of [30, 90, 180, 365]) {
+      if (daysMember === d || daysMember === d + 1) { wins.push({ label: `${d}-day member milestone — welcome to the club`, isMilestone: true, icon: "🎯" }); break; }
+    }
+  }
+  payload.wins = wins;
+
+  // ─── Goal details (since joining + this month) ────────────────────────────
+  const thirtyDaysAgoIso3 = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().slice(0, 10);
+  const dir = (v: number | null): "up" | "down" | "none" => v === null ? "none" : v > 0 ? "up" : v < 0 ? "down" : "none";
+  const sign = (v: number) => (v >= 0 ? "+" : "");
+  // Lean mass
+  const latestLean = scanRow && hasValue(scanRow.lean_mass_lbs) ? numberOr(scanRow.lean_mass_lbs, 0) : null;
+  const oldestLean = scanRows.length >= 2 && hasValue(scanRows[scanRows.length - 1].lean_mass_lbs) ? numberOr(scanRows[scanRows.length - 1].lean_mass_lbs, 0) : null;
+  const monthAgoScan = scanRows.find((r) => stringOr(r.scan_date, "").slice(0, 10) <= thirtyDaysAgoIso3);
+  const monthAgoLean = monthAgoScan && hasValue(monthAgoScan.lean_mass_lbs) ? numberOr(monthAgoScan.lean_mass_lbs, 0) : null;
+  const lSJ = latestLean !== null && oldestLean !== null ? latestLean - oldestLean : null;
+  const lTM = latestLean !== null && monthAgoLean !== null ? latestLean - monthAgoLean : null;
+  payload.goalDetails.gain_muscle = {
+    sinceJoining: lSJ !== null ? `${sign(lSJ)}${lSJ.toFixed(1)} lbs lean mass` : "--",
+    sinceJoiningDir: dir(lSJ), thisMonth: lTM !== null ? `${sign(lTM)}${lTM.toFixed(1)} lbs` : "--",
+    thisMonthDir: dir(lTM),
+    status: lTM === null ? "no_data" : lTM > 0.2 ? "on_track" : lTM >= -0.2 ? "maintaining" : "declining",
+    statusLabel: lTM === null ? "No data" : lTM > 0.2 ? "On Track" : lTM >= -0.2 ? "Maintaining" : "Declining",
+    encouragement: lTM !== null && lTM < -0.2 ? "Increase ARX frequency this week to protect muscle" : null,
+  };
+  // Body fat
+  const latestFat = scanRow && hasValue(scanRow.body_fat_pct) ? numberOr(scanRow.body_fat_pct, 0) : null;
+  const oldestFat = scanRows.length >= 2 && hasValue(scanRows[scanRows.length - 1].body_fat_pct) ? numberOr(scanRows[scanRows.length - 1].body_fat_pct, 0) : null;
+  const monthAgoFat = monthAgoScan && hasValue(monthAgoScan.body_fat_pct) ? numberOr(monthAgoScan.body_fat_pct, 0) : null;
+  const fSJ = latestFat !== null && oldestFat !== null ? oldestFat - latestFat : null; // positive = good (fat down)
+  const fTM = latestFat !== null && monthAgoFat !== null ? monthAgoFat - latestFat : null;
+  payload.goalDetails.lose_fat = {
+    sinceJoining: fSJ !== null ? `${sign(fSJ)}${Math.abs(fSJ).toFixed(1)}% body fat` : "--",
+    sinceJoiningDir: dir(fSJ), thisMonth: fTM !== null ? `${sign(fTM)}${Math.abs(fTM).toFixed(1)}%` : "--",
+    thisMonthDir: dir(fTM),
+    status: fTM === null ? "no_data" : fTM > 0.2 ? "on_track" : fTM >= -0.2 ? "maintaining" : "declining",
+    statusLabel: fTM === null ? "No data" : fTM > 0.2 ? "Improving" : fTM >= -0.2 ? "Maintaining" : "Increasing",
+    encouragement: fTM !== null && fTM < -0.2 ? "Your strength numbers are strong — let's focus on nutrition timing" : null,
+  };
+  // Cardio
+  const recentCardio = carolRows.filter((r) => stringOr(r.session_date, "").slice(0, 10) >= thirtyDaysAgoIso3);
+  const oldCarol = carolRows.slice(-10);
+  const getManp = (r: Record<string, unknown>) => hasValue(r.manp) ? numberOr(r.manp, 0) : hasValue(r.peak_power_watts) ? numberOr(r.peak_power_watts, 0) : null;
+  const recentCardioVals = recentCardio.map(getManp).filter((v): v is number => v !== null);
+  const oldCardioVals = oldCarol.map(getManp).filter((v): v is number => v !== null);
+  const cRecent = recentCardioVals.length ? recentCardioVals.reduce((a, b) => a + b) / recentCardioVals.length : null;
+  const cOld = oldCardioVals.length ? oldCardioVals.reduce((a, b) => a + b) / oldCardioVals.length : null;
+  const cSJpct = cRecent !== null && cOld !== null && cOld > 0 ? ((cRecent - cOld) / cOld) * 100 : null;
+  const monthAgoCarol = carolRows.find((r) => stringOr(r.session_date, "").slice(0, 10) <= thirtyDaysAgoIso3);
+  const cMonthAgoVal = monthAgoCarol ? getManp(monthAgoCarol) : null;
+  const cTMpct = cRecent !== null && cMonthAgoVal !== null && cMonthAgoVal > 0 ? ((cRecent - cMonthAgoVal) / cMonthAgoVal) * 100 : null;
+  payload.goalDetails.improve_cardio = {
+    sinceJoining: cSJpct !== null ? `${sign(cSJpct)}${cSJpct.toFixed(0)}% cardio power` : "--",
+    sinceJoiningDir: dir(cSJpct), thisMonth: cTMpct !== null ? `${sign(cTMpct)}${cTMpct.toFixed(0)}%` : "--",
+    thisMonthDir: dir(cTMpct),
+    status: cTMpct === null ? "no_data" : cTMpct > 2 ? "improving" : cTMpct >= -2 ? "maintaining" : "declining",
+    statusLabel: cTMpct === null ? "No data" : cTMpct > 2 ? "Improving" : cTMpct >= -2 ? "Maintaining" : "Declining",
+    encouragement: cTMpct !== null && cTMpct < -2 ? "One CAROL session this week gets you back on track" : null,
+  };
+  // Attendance
+  const attSinceJoining = carolTotal + arxTotal + recoveryTotal;
+  const attThisMonth = totalThisMonth;
+  const attTarget30 = Math.round((payload.protocol.arxPerWeek + payload.protocol.carolPerWeek) * 4 + payload.protocol.recoveryPerMonth);
+  const attPct = attTarget30 > 0 ? (attThisMonth / attTarget30) * 100 : null;
+  const attRemaining = attTarget30 > attThisMonth ? attTarget30 - attThisMonth : 0;
+  payload.goalDetails.attendance = {
+    sinceJoining: `${attSinceJoining} total sessions`, sinceJoiningDir: "up",
+    thisMonth: attTarget30 > 0 ? `${attThisMonth} of ${attTarget30} sessions` : `${attThisMonth} sessions`,
+    thisMonthDir: attPct !== null ? (attPct >= 80 ? "up" : attPct >= 50 ? "none" : "down") : "none",
+    status: attPct === null ? "no_data" : attPct >= 80 ? "on_track" : attPct >= 50 ? "behind" : "off_track",
+    statusLabel: attPct === null ? "No data" : attPct >= 80 ? "On Track" : attPct >= 50 ? "Behind" : "Off Track",
+    encouragement: attPct !== null && attPct < 80 ? `${attRemaining} session${attRemaining !== 1 ? "s" : ""} remaining this month — you've got this` : null,
+  };
+
   // Attendance goal: compare month sessions to protocol target
   const arxWeekTarget = payload.protocol.arxPerWeek || 0;
   const carolWeekTarget = payload.protocol.carolPerWeek || 0;
@@ -868,6 +1089,16 @@ async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise
       .filter((member) => Number(member.recovery) < 50)
       .slice(0, 3)
       .map((member) => `⚠ ${member.name} — recovery ${member.recovery}.`);
+
+    // At-risk members (recovery < 40 or no recent session data)
+    payload.coachAtRisk = payload.coach.members
+      .filter((member) => Number(member.recovery) < 40)
+      .map((member) => ({
+        id: member.id,
+        name: member.name,
+        reasons: [`Recovery ${member.recovery}% — flagged for follow-up`],
+        recovery: member.recovery,
+      }));
   }
 
   return payload;
