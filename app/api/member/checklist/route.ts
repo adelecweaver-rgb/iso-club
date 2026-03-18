@@ -111,3 +111,57 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const { context, error } = await getActorContext();
+    if (!context) {
+      return NextResponse.json({ success: false, error: error ?? "Unauthorized." }, { status: 401 });
+    }
+    const memberId = asString(context.dbUser.id);
+    const supabase = createSupabaseAdminClient();
+    if (!supabase) return NextResponse.json({ success: false, error: "Supabase unavailable." }, { status: 500 });
+
+    const body = (await request.json()) as Body;
+    const type = asString(body.type);
+    const subtype = asString(body.subtype);
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    if (type === "arx") {
+      const existing = await supabase
+        .from("arx_sessions").select("id")
+        .eq("member_id", memberId).eq("exercise", "ARX Session")
+        .gte("session_date", `${todayIso}T00:00:00`)
+        .order("session_date", { ascending: false }).limit(1);
+      if (existing.data?.[0]) {
+        await supabase.from("arx_sessions").delete().eq("id", (existing.data[0] as Record<string, unknown>).id);
+      }
+    } else if (type === "carol") {
+      const existing = await supabase
+        .from("carol_sessions").select("id")
+        .eq("member_id", memberId).eq("ride_type", subtype)
+        .like("external_id", "checkin-%")
+        .gte("session_date", `${todayIso}T00:00:00`)
+        .order("session_date", { ascending: false }).limit(1);
+      if (existing.data?.[0]) {
+        await supabase.from("carol_sessions").delete().eq("id", (existing.data[0] as Record<string, unknown>).id);
+      }
+    } else if (type === "recovery") {
+      const existing = await supabase
+        .from("recovery_sessions").select("id")
+        .eq("member_id", memberId).eq("modality", subtype)
+        .eq("session_date", todayIso)
+        .limit(1);
+      if (existing.data?.[0]) {
+        await supabase.from("recovery_sessions").delete().eq("id", (existing.data[0] as Record<string, unknown>).id);
+      }
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : "Failed to remove checklist item." },
+      { status: 500 },
+    );
+  }
+}

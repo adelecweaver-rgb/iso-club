@@ -639,8 +639,37 @@ export function DashboardReactClient({
   const [checklistLogging, setChecklistLogging] = useState<string | null>(null);
 
   const handleChecklistItem = useCallback(async (item: ChecklistItem, c: DashboardPayload["checklistCompletions"]) => {
-    if (isChecklistItemDone(item, c, checklistChecked)) return;
     if (checklistLogging) return;
+    const done = isChecklistItemDone(item, c, checklistChecked);
+
+    if (done) {
+      // Toggle off — undo the check
+      setChecklistLogging(item.id);
+      try {
+        setChecklistChecked((prev) => { const next = { ...prev }; delete next[item.id]; return next; });
+        // Roll back local completions data
+        if (item.type === "arx") {
+          const idx = c.arxWeekDates.lastIndexOf(c.todayDate);
+          if (idx !== -1) c.arxWeekDates.splice(idx, 1);
+          c.arxTodayLogged = c.arxWeekDates.includes(c.todayDate);
+        } else if (item.type === "carol") {
+          const idx = c.carolWeekTypes.lastIndexOf(item.subtype); if (idx !== -1) c.carolWeekTypes.splice(idx, 1);
+          const ti = c.carolTodayTypes.lastIndexOf(item.subtype); if (ti !== -1) c.carolTodayTypes.splice(ti, 1);
+        } else if (item.type === "recovery") {
+          const idx = c.recoveryWeekModalities.lastIndexOf(item.subtype); if (idx !== -1) c.recoveryWeekModalities.splice(idx, 1);
+          const ti = c.recoveryTodayModalities.lastIndexOf(item.subtype); if (ti !== -1) c.recoveryTodayModalities.splice(ti, 1);
+        }
+        await fetch("/api/member/checklist", {
+          method: "DELETE", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: item.type, subtype: item.subtype }),
+        });
+      } finally { setChecklistLogging(null); }
+      return;
+    }
+
+    // Blocked today but not done — do nothing
+    if (isChecklistBlockedToday(item, c, checklistChecked)) return;
+
     setChecklistLogging(item.id);
     try {
       const res = await fetch("/api/member/checklist", {
@@ -1292,8 +1321,8 @@ export function DashboardReactClient({
                         const isLogging = checklistLogging === item.id;
                         return (
                           <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
-                            <button type="button" onClick={() => { void handleChecklistItem(item, c); }} disabled={isLogging || (blocked && !done)}
-                              style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, padding: 0, background: done ? "#9dcc3a" : "transparent", border: `2px solid ${done ? "#9dcc3a" : blocked ? "var(--border)" : "rgba(157,204,58,0.5)"}`, cursor: done || (blocked && !done) ? "default" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", opacity: isLogging ? 0.5 : 1 }}>
+                            <button type="button" onClick={() => { void handleChecklistItem(item, c); }} disabled={isLogging || (blocked && !done && !checklistChecked[item.id])}
+                              style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, padding: 0, background: done ? "#9dcc3a" : "transparent", border: `2px solid ${done ? "#9dcc3a" : blocked ? "var(--border)" : "rgba(157,204,58,0.5)"}`, cursor: (blocked && !done) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", opacity: isLogging ? 0.5 : 1 }}>
                               {done && <span style={{ color: "#0b0c09", fontSize: 10, fontWeight: 800 }}>✓</span>}
                               {isLogging && <span style={{ color: "var(--text3)", fontSize: 9 }}>…</span>}
                             </button>
@@ -1538,7 +1567,7 @@ export function DashboardReactClient({
                                           borderRadius: "50%",
                                           background: done ? "#9dcc3a" : "transparent",
                                           border: `2px solid ${done ? "#9dcc3a" : blockedToday ? "var(--border)" : "rgba(157,204,58,0.5)"}`,
-                                          cursor: done || (blockedToday && !done) ? "default" : "pointer",
+                                          cursor: (blockedToday && !done) ? "not-allowed" : "pointer",
                                           display: "flex",
                                           alignItems: "center",
                                           justifyContent: "center",
