@@ -361,12 +361,12 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
   };
 }
 
-async function loadPrototypeStyles(): Promise<string> {
+export async function loadPrototypeStyles(): Promise<string> {
   const prototype = await loadPrototypeFromFiles(["iso-club-v2.html"], "Iso Club Dashboard");
   return prototype.styles;
 }
 
-async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise<DashboardPayload> {
+export async function loadDashboardLiveData(userId: string, authRole: AppRole): Promise<DashboardPayload> {
   const clerkUser = await safeCurrentUser();
   const email = clerkUser?.primaryEmailAddress?.emailAddress ?? "";
   const clerkName =

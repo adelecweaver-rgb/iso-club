@@ -674,6 +674,9 @@ export function DashboardReactClient({
   const [savingNote, setSavingNote] = useState(false);
   const [memberNotes, setMemberNotes] = useState<Array<{ id: string; note: string; created_at: string }>>([]);
   const [notesForMember, setNotesForMember] = useState("");
+  const [todayCheckin, setTodayCheckin] = useState<"low" | "normal" | "strong" | null>(null);
+  const [submittingCheckin, setSubmittingCheckin] = useState(false);
+  const [checkinLoaded, setCheckinLoaded] = useState(false);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
   const [protocolRequestText, setProtocolRequestText] = useState("");
   const [sendingProtocolRequest, setSendingProtocolRequest] = useState(false);
@@ -706,6 +709,18 @@ export function DashboardReactClient({
   const greetingName = useMemo(() => firstNameFromName(displayName), [displayName]);
   const userInitials = useMemo(() => initialsFromName(displayName), [displayName]);
   const isCoachAccount = role !== "member";
+
+  // Load today's check-in on mount for members
+  useEffect(() => {
+    if (isCoachAccount || checkinLoaded) return;
+    setCheckinLoaded(true);
+    void (async () => {
+      try {
+        const res = await getJson<{ feeling: string | null }>("/api/member/checkin");
+        if (res.feeling) setTodayCheckin(res.feeling as "low" | "normal" | "strong");
+      } catch { /* table may not exist */ }
+    })();
+  }, [isCoachAccount, checkinLoaded]);
 
   const handleGoalToggle = useCallback(async (goalType: string, forMemberId?: string) => {
     if (forMemberId) {
@@ -978,6 +993,9 @@ export function DashboardReactClient({
             <button className={activeMemberView("dashboard")} onClick={() => setMemberSection("dashboard")} type="button">
               Dashboard
             </button>
+            <Link className="nav-item" href="/member/progress">
+              Progress
+            </Link>
             <button className={activeMemberView("goals")} onClick={() => setMemberSection("goals")} type="button">
               My Goals
             </button>
@@ -1152,101 +1170,95 @@ export function DashboardReactClient({
 
         <div id="view-dashboard" className="content" style={{ display: mode === "member" && memberView === "dashboard" ? "block" : "none" }}>
 
-          {/* ── Section 1: Vitality Age ─────────────────────────────────── */}
-          <div style={{ background: "linear-gradient(135deg, rgba(157,204,58,0.06) 0%, rgba(157,204,58,0.02) 100%)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r)", padding: "28px 28px 24px", marginBottom: 20 }}>
-            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.18em", color: "rgba(157,204,58,0.7)", marginBottom: 12 }}>Your Vitality Age</div>
-            {payload.vitalityAge.hasEnoughData && payload.vitalityAge.estimated !== null ? (
-              <>
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 16, marginBottom: 10 }}>
-                  <div style={{ fontSize: 72, fontWeight: 800, color: "var(--text)", lineHeight: 1, fontFamily: "Georgia, serif" }}>{payload.vitalityAge.estimated}</div>
-                  <div style={{ paddingBottom: 8, color: "var(--text3)", fontSize: 13 }}>years old (functionally)</div>
-                </div>
-                {payload.vitalityAge.difference !== null && payload.vitalityAge.difference !== 0 && (
-                  <div style={{ fontSize: 14, color: payload.vitalityAge.difference > 0 ? "#9dcc3a" : "#e05252", fontWeight: 500, marginBottom: 6 }}>
-                    {payload.vitalityAge.difference > 0
-                      ? `You're functioning ${payload.vitalityAge.difference} year${payload.vitalityAge.difference !== 1 ? "s" : ""} younger than your age`
-                      : `Vitality age is ${Math.abs(payload.vitalityAge.difference)} year${Math.abs(payload.vitalityAge.difference) !== 1 ? "s" : ""} above chronological age`}
-                  </div>
-                )}
-                {payload.vitalityAge.trend !== null && payload.vitalityAge.trend !== 0 && (
-                  <div style={{ fontSize: 12, color: payload.vitalityAge.trend > 0 ? "#9dcc3a" : "#e05252" }}>
-                    {payload.vitalityAge.trend > 0 ? `↑ Improved ${payload.vitalityAge.trend} year${payload.vitalityAge.trend !== 1 ? "s" : ""} since last calculation` : `↓ Up ${Math.abs(payload.vitalityAge.trend)} year${Math.abs(payload.vitalityAge.trend) !== 1 ? "s" : ""} since last calculation`}
-                  </div>
-                )}
-              </>
-            ) : (
-              <div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: "var(--text3)", marginBottom: 8 }}>—</div>
-                <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
-                  Complete your first Fit3D scan and CAROL session to calculate your Vitality Age.
-                </p>
-                <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-                  <button type="button" className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setMemberSection("carol")}>Connect CAROL →</button>
-                  <button type="button" className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setMemberSection("scans")}>View Scans →</button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ── Section 2: This Week's Wins ─────────────────────────────── */}
-          {payload.wins.length > 0 && (
-            <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "18px 20px", marginBottom: 20 }}>
-              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(220,180,100,0.7)", marginBottom: 14 }}>This week&apos;s wins</div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {payload.wins.map((win, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                    <span style={{ fontSize: win.isMilestone ? 16 : 13, flexShrink: 0, marginTop: win.isMilestone ? -1 : 0 }}>{win.icon}</span>
-                    <span style={{ fontSize: 13, color: win.isMilestone ? "var(--text)" : "var(--text2)", fontWeight: win.isMilestone ? 600 : 400, lineHeight: 1.5 }}>{win.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── Section 3: Goal Progress Cards ──────────────────────────── */}
+          {/* ── Section 1: Daily Briefing ────────────────────────────────── */}
           {(() => {
-            const activeGoalTypes = (["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).filter((gt) => localGoals[gt]);
-            if (activeGoalTypes.length === 0) {
-              return (
-                <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 20 }}>
-                  <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 10 }}>No goals set yet.</div>
-                  <button type="button" className="btn btn-sm" onClick={() => setMemberSection("goals")}>Set your goals →</button>
-                </div>
-              );
+            const now = new Date();
+            const yestIso = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
+            const twoDaysIso = new Date(now.getTime() - 2 * 86400000).toISOString().slice(0, 10);
+            const recentRehit = payload.carolSessions.find((s) => normalizeCarolTabKey(s.rideType) === "rehit" && s.sessionDate.slice(0, 10) >= twoDaysIso);
+            const recentArxYest = payload.arxSessions.find((s) => s.sessionDate.slice(0, 10) >= yestIso);
+            const lastCarolDays = payload.carolSessions.length > 0 ? Math.floor((now.getTime() - new Date(payload.carolSessions[0].sessionDate).getTime()) / 86400000) : null;
+            let rec = { label: "CAROL REHIT", reason: "Your most impactful cardio session" };
+            if (todayCheckin === "low") rec = { label: "Rest or Recovery", reason: "You're feeling low — rest is training too" };
+            else if (recentArxYest && !recentRehit) rec = { label: "CAROL Fat Burn", reason: "ARX done recently — cardio today" };
+            else if (recentRehit && !recentArxYest) rec = { label: "ARX Session", reason: "REHIT done recently — strength training today" };
+            else if (recentRehit && recentArxYest) rec = { label: "Recovery Session", reason: "Strength and cardio done — time to recover" };
+            if (!recentRehit && !recentArxYest && todayCheckin !== "low") {
+              const cl0 = generateChecklist(payload.protocol);
+              const c0 = payload.checklistCompletions;
+              const remArx0 = cl0.filter((i) => i.type === "arx" && !isChecklistItemDone(i, c0, checklistChecked)).length;
+              const remCarol0 = cl0.filter((i) => i.type === "carol" && !isChecklistItemDone(i, c0, checklistChecked)).length;
+              if (remArx0 > 0 && remArx0 >= remCarol0) rec = { label: "ARX Session", reason: "Strength session is a priority this week" };
             }
-            const GOAL_NAMES_LONG: Record<string, string> = { gain_muscle: "Gain Muscle", lose_fat: "Lose Body Fat", improve_cardio: "Improve Cardio Fitness", attendance: "Stay Consistent" };
+            const checkinLabel = todayCheckin === "low" ? "😴 Low energy" : todayCheckin === "normal" ? "😐 Normal" : todayCheckin === "strong" ? "⚡ Feeling strong" : null;
+            const cl1 = generateChecklist(payload.protocol);
+            const c1 = payload.checklistCompletions;
+            const done1 = cl1.filter((i) => isChecklistItemDone(i, c1, checklistChecked)).length;
             return (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
-                {activeGoalTypes.map((gt) => {
-                  const det = payload.goalDetails[gt];
-                  const upColor = "#9dcc3a"; const downColor = "#e05252"; const neutColor = "#e8a838";
-                  const statusColor = det.status === "on_track" || det.status === "improving" ? upColor : det.status === "maintaining" || det.status === "behind" ? neutColor : det.status === "declining" || det.status === "off_track" ? downColor : "var(--text3)";
-                  const dirIcon = (d: string) => d === "up" ? " ↑" : d === "down" ? " ↓" : "";
-                  return (
-                    <div key={gt} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "14px 16px" }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}>{GOAL_NAMES_LONG[gt]}</div>
-                      <div style={{ marginBottom: 6 }}>
-                        <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 2 }}>Since joining</div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{det.sinceJoining}{dirIcon(det.sinceJoiningDir)}</div>
+              <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 16 }}>
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>Good morning, {greetingName}.</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{todayDateLabel()}</div>
+                </div>
+                <div style={{ background: "rgba(157,204,58,0.05)", border: "1px solid rgba(157,204,58,0.15)", borderRadius: "var(--r-sm)", padding: "12px 14px", marginBottom: 14 }}>
+                  <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 6 }}>Today&apos;s recommendation</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 3 }}>{rec.label}</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)" }}>
+                    {rec.reason}
+                    {lastCarolDays !== null && rec.label.toLowerCase().includes("carol") && (
+                      <span> — last CAROL was {lastCarolDays === 0 ? "today" : lastCarolDays === 1 ? "yesterday" : `${lastCarolDays} days ago`}</span>
+                    )}
+                  </div>
+                </div>
+                <div style={{ marginBottom: 14 }}>
+                  {checkinLabel ? (
+                    <div style={{ fontSize: 13, color: "var(--text2)" }}>Today you felt: <strong>{checkinLabel}</strong></div>
+                  ) : (
+                    <div>
+                      <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>How are you feeling today?</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {([{ key: "low", label: "😴 Low energy" }, { key: "normal", label: "😐 Normal" }, { key: "strong", label: "⚡ Feeling strong" }] as const).map((opt) => (
+                          <button key={opt.key} type="button" disabled={submittingCheckin}
+                            style={{ padding: "8px 14px", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, cursor: "pointer", fontSize: 12.5, color: "var(--text2)", opacity: submittingCheckin ? 0.6 : 1 }}
+                            onClick={async () => {
+                              setSubmittingCheckin(true);
+                              try {
+                                await fetch("/api/member/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feeling: opt.key }) });
+                                setTodayCheckin(opt.key as "low" | "normal" | "strong");
+                              } catch { /* silent */ } finally { setSubmittingCheckin(false); }
+                            }}>
+                            {opt.label}
+                          </button>
+                        ))}
                       </div>
-                      <div style={{ marginBottom: 10 }}>
-                        <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 2 }}>This month</div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{det.thisMonth}{dirIcon(det.thisMonthDir)}</span>
-                          <span style={{ fontSize: 9, fontWeight: 700, color: statusColor, background: `${statusColor}18`, border: `1px solid ${statusColor}40`, borderRadius: 3, padding: "1px 6px" }}>{det.statusLabel}</span>
-                        </div>
-                      </div>
-                      {det.encouragement && (
-                        <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.5, fontStyle: "italic", borderTop: "1px solid var(--border)", paddingTop: 8 }}>{det.encouragement}</div>
-                      )}
                     </div>
-                  );
-                })}
+                  )}
+                </div>
+                {cl1.length > 0 && (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, color: "var(--text3)" }}>This week</span>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: done1 === cl1.length ? "#9dcc3a" : "var(--text2)" }}>{done1} of {cl1.length} sessions</span>
+                    </div>
+                    <div style={{ height: 6, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${cl1.length > 0 ? (done1 / cl1.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 3, transition: "width 0.3s" }} />
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })()}
 
-          {/* ── Section 4: This Week's Checklist ────────────────────────── */}
+          {/* ── Section 2: Latest win ────────────────────────────────────── */}
+          {payload.wins.length > 0 && (
+            <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 16 }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(220,180,100,0.7)", marginBottom: 10 }}>Latest win 🏆</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: payload.wins[0].isMilestone ? 4 : 0 }}>{payload.wins[0].label}</div>
+              {payload.wins[0].isMilestone && <div style={{ fontSize: 11, color: "rgba(220,180,100,0.7)" }}>Milestone achieved</div>}
+            </div>
+          )}
+
+          {/* ── Section 3: Weekly checklist ──────────────────────────────── */}
           {payload.protocol.targetSystem && (() => {
             const cl = generateChecklist(payload.protocol);
             const c = payload.checklistCompletions;
@@ -1290,6 +1302,34 @@ export function DashboardReactClient({
                     </div>
                   ))}
                 </div>
+              </div>
+            );
+          })()}
+
+          {/* ── Section 4: Quick stats strip ─────────────────────────────── */}
+          {(() => {
+            const peakPow = payload.carolSessions.length ? Math.max(...payload.carolSessions.map((s) => Number(s.peakPowerWatts || 0))) : 0;
+            type SI = { label: string; value: string; sub: string | null; subLabel: string; subColor: string; href: string | null; tab: string | null };
+            const strip: SI[] = [
+              { label: "Vitality Age", value: payload.vitalityAge.estimated !== null ? String(payload.vitalityAge.estimated) : "—", sub: payload.vitalityAge.difference !== null ? (payload.vitalityAge.difference > 0 ? `-${payload.vitalityAge.difference} yrs` : `+${Math.abs(payload.vitalityAge.difference)} yrs`) : null, subLabel: "vs real age", subColor: (payload.vitalityAge.difference ?? 0) > 0 ? "#9dcc3a" : "#e05252", href: "/member/progress", tab: null },
+              { label: "Lean Mass", value: payload.scan.leanMassLbs !== "--" ? `${payload.scan.leanMassLbs} lbs` : "—", sub: payload.goalDetails.gain_muscle.sinceJoining !== "--" ? payload.goalDetails.gain_muscle.sinceJoining.replace(" lean mass", "").replace(" lbs lean mass", "") : null, subLabel: "since joining", subColor: payload.goalDetails.gain_muscle.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "scans" },
+              { label: "Body Fat", value: payload.scan.bodyFatPct !== "--" ? `${payload.scan.bodyFatPct}%` : "—", sub: payload.goalDetails.lose_fat.sinceJoining !== "--" ? payload.goalDetails.lose_fat.sinceJoining.replace(" body fat", "") : null, subLabel: "since joining", subColor: payload.goalDetails.lose_fat.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "scans" },
+              { label: "Peak Power", value: peakPow > 0 ? `${Math.round(peakPow)}W` : "—", sub: payload.goalDetails.improve_cardio.sinceJoining !== "--" ? payload.goalDetails.improve_cardio.sinceJoining.replace(" cardio power", "") : null, subLabel: "since joining", subColor: payload.goalDetails.improve_cardio.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "carol" },
+            ];
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
+                {strip.map((item) => {
+                  const inner = (
+                    <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 8px 8px", textAlign: "center", height: "100%" }}>
+                      <div style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 4, lineHeight: 1.2 }}>{item.label}</div>
+                      <div style={{ fontSize: item.value.length > 5 ? 13 : 18, fontWeight: 700, color: "var(--text)", lineHeight: 1.1, marginBottom: 2 }}>{item.value}</div>
+                      {item.sub && <div style={{ fontSize: 10, color: item.subColor, fontWeight: 500 }}>{item.sub}</div>}
+                      <div style={{ fontSize: 8, color: "var(--text3)" }}>{item.subLabel}</div>
+                    </div>
+                  );
+                  if (item.href) return <a key={item.label} href={item.href} style={{ textDecoration: "none", display: "block" }}>{inner}</a>;
+                  return <button key={item.label} type="button" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }} onClick={() => item.tab && setMemberSection(item.tab as MemberSection)}>{inner}</button>;
+                })}
               </div>
             );
           })()}
