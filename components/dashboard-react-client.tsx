@@ -996,14 +996,14 @@ export function DashboardReactClient({
             <button className={activeMemberView("dashboard")} onClick={() => setMemberSection("dashboard")} type="button">
               Dashboard
             </button>
+            <button className={activeMemberView("protocol")} onClick={() => setMemberSection("protocol")} type="button">
+              My Protocol
+            </button>
             <Link className="nav-item" href="/member/progress">
               Healthspan Progress
             </Link>
             <button className={activeMemberView("goals")} onClick={() => setMemberSection("goals")} type="button">
               My Goals
-            </button>
-            <button className={activeMemberView("protocol")} onClick={() => setMemberSection("protocol")} type="button">
-              My Protocol
             </button>
           </div>
           <div className="nav-group">
