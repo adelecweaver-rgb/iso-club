@@ -71,6 +71,7 @@ type DashboardPayload = {
   sessionNote: { text: string; date: string; coachName: string } | null;
   coachAtRisk: Array<{ id: string; name: string; reasons: string[]; recovery: string }>;
   memberSince: string;
+  bonusActivitiesThisWeek: number;
   longestStreakWeeks: number;
   milestones: Array<{ dateLabel: string; icon: string; label: string }>;
   arxSessions: Array<{
@@ -485,6 +486,20 @@ function recommendProtocol(activeGoals: string[]): string | null {
   return "Strength Foundation";
 }
 
+// ─── Bonus activity definitions ──────────────────────────────────────────────
+
+const BONUS_ACTIVITIES = [
+  { key: "katalyst", label: "Katalyst EMS" },
+  { key: "quickboard", label: "Quickboard" },
+  { key: "vasper", label: "Vasper" },
+  { key: "nxpro", label: "NxPro / Red Light" },
+  { key: "walk", label: "Walk" },
+  { key: "stretching", label: "Stretching" },
+  { key: "extra_sauna", label: "Extra sauna" },
+  { key: "extra_cold_plunge", label: "Extra cold plunge" },
+  { key: "other_cardio", label: "Other cardio" },
+] as const;
+
 // ─── Checklist helpers ────────────────────────────────────────────────────────
 
 type ChecklistItem = {
@@ -707,6 +722,11 @@ export function DashboardReactClient({
   const [memberNotes, setMemberNotes] = useState<Array<{ id: string; note: string; created_at: string }>>([]);
   const [notesForMember, setNotesForMember] = useState("");
   const [todayCheckin, setTodayCheckin] = useState<"low" | "normal" | "strong" | null>(null);
+  const [selectedProtocol, setSelectedProtocol] = useState<Record<string, boolean>>({});
+  const [selectedBonus, setSelectedBonus] = useState<Record<string, boolean>>({});
+  const [savingActivity, setSavingActivity] = useState(false);
+  const [activitySavedMsg, setActivitySavedMsg] = useState("");
+  const [localBonusCount, setLocalBonusCount] = useState(0);
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinLoaded, setCheckinLoaded] = useState(false);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
@@ -741,6 +761,17 @@ export function DashboardReactClient({
   const greetingName = useMemo(() => firstNameFromName(displayName), [displayName]);
   const userInitials = useMemo(() => initialsFromName(displayName), [displayName]);
   const isCoachAccount = role !== "member";
+
+  // Initialize selectedProtocol from server completion data on mount
+  useEffect(() => {
+    if (isCoachAccount) return;
+    const checklist = generateChecklist(payload.protocol);
+    const c = payload.checklistCompletions;
+    const init: Record<string, boolean> = {};
+    for (const item of checklist) init[item.id] = isChecklistItemDone(item, c, {});
+    setSelectedProtocol(init);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Load today's check-in on mount for members
   useEffect(() => {
@@ -1290,49 +1321,158 @@ export function DashboardReactClient({
             </div>
           )}
 
-          {/* ── Section 3: Weekly checklist ──────────────────────────────── */}
-          {payload.protocol.targetSystem && (() => {
+          {/* ── Section 3: Log today's activity ──────────────────────────── */}
+          {(() => {
             const cl = generateChecklist(payload.protocol);
             const c = payload.checklistCompletions;
-            const doneCount = cl.filter((item) => isChecklistItemDone(item, c, checklistChecked)).length;
+            const protocolDoneCount = cl.filter((item) => isChecklistItemDone(item, c, checklistChecked) || selectedProtocol[item.id]).length;
             const groups = [
               { key: "strength", label: "Strength", items: cl.filter((i) => i.category === "strength") },
               { key: "cardio", label: "Cardio", items: cl.filter((i) => i.category === "cardio") },
               { key: "recovery", label: "Recovery", items: cl.filter((i) => i.category === "recovery") },
             ].filter((g) => g.items.length > 0);
+            const totalBonusThisWeek = (payload.bonusActivitiesThisWeek ?? 0) + localBonusCount;
+
+            async function handleSave() {
+              if (savingActivity) return;
+              setSavingActivity(true);
+              try {
+                // Compute diff from initial server state
+                const initState: Record<string, boolean> = {};
+                for (const item of cl) initState[item.id] = isChecklistItemDone(item, c, {});
+
+                const toAdd = cl.filter((item) => selectedProtocol[item.id] && !initState[item.id])
+                  .map((item) => ({ type: item.type as "arx" | "carol" | "recovery", subtype: item.subtype }));
+                const toRemove = cl.filter((item) => !selectedProtocol[item.id] && initState[item.id])
+                  .map((item) => ({ type: item.type as "arx" | "carol" | "recovery", subtype: item.subtype }));
+                const bonusKeys = Object.entries(selectedBonus).filter(([, v]) => v).map(([k]) => k);
+
+                await fetch("/api/member/activity-log", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ to_add: toAdd, to_remove: toRemove, bonus: bonusKeys }),
+                });
+
+                // Update local checklist state
+                for (const item of cl) {
+                  if (selectedProtocol[item.id] && !initState[item.id]) {
+                    setChecklistChecked((prev) => ({ ...prev, [item.id]: true }));
+                    if (item.type === "arx") { c.arxWeekDates.push(c.todayDate); c.arxTodayLogged = true; }
+                    else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); c.carolTodayTypes.push(item.subtype); }
+                    else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); c.recoveryTodayModalities.push(item.subtype); }
+                  }
+                  if (!selectedProtocol[item.id] && initState[item.id]) {
+                    setChecklistChecked((prev) => { const n = { ...prev }; delete n[item.id]; return n; });
+                  }
+                }
+
+                if (bonusKeys.length > 0) setLocalBonusCount((n) => n + bonusKeys.length);
+
+                // Build save message
+                const protocolLabels = toAdd.map((i) => i.type === "arx" ? "ARX" : i.subtype.replace(/_/g, " ")).slice(0, 2).join(", ");
+                const bonusLabels = bonusKeys.map((k) => BONUS_ACTIVITIES.find((b) => b.key === k)?.label ?? k).slice(0, 3).join(" + ");
+                if (toAdd.length > 0 && bonusKeys.length > 0) {
+                  setActivitySavedMsg(`✓ Protocol: ${protocolLabels} logged\n✓ Bonus: ${bonusLabels} — every session counts`);
+                } else if (toAdd.length > 0) {
+                  setActivitySavedMsg("✓ Logged — great work today");
+                } else if (bonusKeys.length > 0) {
+                  setActivitySavedMsg(`✓ Bonus: ${bonusLabels} — every session counts`);
+                } else if (toRemove.length > 0) {
+                  setActivitySavedMsg("✓ Updated");
+                } else {
+                  setActivitySavedMsg("✓ Nothing new to log");
+                }
+                setSelectedBonus({});
+              } catch { setActivitySavedMsg("Something went wrong — please try again"); }
+              finally { setSavingActivity(false); }
+            }
+
             return (
-              <div className="card" style={{ marginBottom: 20 }}>
-                <div style={{ padding: "14px 20px 0" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>This week — {doneCount} of {cl.length} completed</div>
-                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{c.weekStartDate}</div>
+              <div className="card" style={{ marginBottom: 16 }}>
+                {/* Header */}
+                <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Log today&apos;s activity</div>
+                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.checklistCompletions.todayDate}</div>
                   </div>
-                  <div style={{ height: 3, background: "var(--border)", borderRadius: 2, marginBottom: 14, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${cl.length > 0 ? (doneCount / cl.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 2, transition: "width 0.3s" }} />
+                  {cl.length > 0 && (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
+                        <span style={{ fontSize: 11, color: "var(--text3)" }}>This week</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: protocolDoneCount === cl.length ? "#9dcc3a" : "var(--text2)" }}>{protocolDoneCount} of {cl.length} completed</span>
+                      </div>
+                      <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
+                        <div style={{ height: "100%", width: `${cl.length > 0 ? (protocolDoneCount / cl.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 2, transition: "width 0.3s" }} />
+                      </div>
+                      {totalBonusThisWeek > 0 && (
+                        <div style={{ fontSize: 10, color: "#2ec8c8", marginTop: 5 }}>+ {totalBonusThisWeek} bonus activit{totalBonusThisWeek === 1 ? "y" : "ies"} this week</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Part 1 — Protocol activities */}
+                {groups.length > 0 && (
+                  <div style={{ padding: "14px 20px 0" }}>
+                    {groups.map((group) => (
+                      <div key={group.key} style={{ marginBottom: 16 }}>
+                        <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 10 }}>{group.label}</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+                          {group.items.map((item) => {
+                            const serverDone = isChecklistItemDone(item, c, {});
+                            const sel = selectedProtocol[item.id] ?? serverDone;
+                            return (
+                              <div key={item.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}
+                                onClick={() => setSelectedProtocol((prev) => ({ ...prev, [item.id]: !sel }))}>
+                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: sel ? "#9dcc3a" : "transparent", border: `2.5px solid ${sel ? "#9dcc3a" : "rgba(157,204,58,0.4)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s", flexShrink: 0 }}>
+                                  {sel && <span style={{ color: "#0b0c09", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                                </div>
+                                <span style={{ fontSize: 10.5, color: sel ? "#9dcc3a" : "var(--text2)", textAlign: "center", maxWidth: 64, lineHeight: 1.3, textDecoration: sel ? "line-through" : "none", transition: "all 0.18s" }}>
+                                  {item.label}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Part 2 — Bonus activities */}
+                <div style={{ padding: "0 20px 14px" }}>
+                  <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 10 }}>Additional activities</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {BONUS_ACTIVITIES.map(({ key, label }) => {
+                      const sel = selectedBonus[key] ?? false;
+                      return (
+                        <button key={key} type="button"
+                          onClick={() => setSelectedBonus((prev) => ({ ...prev, [key]: !sel }))}
+                          style={{ padding: "7px 14px", borderRadius: 20, border: `1.5px solid ${sel ? "#2ec8c8" : "var(--border)"}`, background: sel ? "rgba(46,200,200,0.12)" : "transparent", color: sel ? "#2ec8c8" : "var(--text3)", fontSize: 12.5, cursor: "pointer", transition: "all 0.15s", fontWeight: sel ? 600 : 400 }}>
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
-                <div style={{ padding: "0 20px 14px" }}>
-                  {groups.map((group) => (
-                    <div key={group.key} style={{ marginBottom: 12 }}>
-                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 6 }}>{group.label}</div>
-                      {group.items.map((item) => {
-                        const done = isChecklistItemDone(item, c, checklistChecked);
-                        const blocked = isChecklistBlockedToday(item, c, checklistChecked);
-                        const isLogging = checklistLogging === item.id;
-                        return (
-                          <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderBottom: "1px solid var(--border)" }}>
-                            <button type="button" onClick={() => { void handleChecklistItem(item, c); }} disabled={isLogging || (blocked && !done && !checklistChecked[item.id])}
-                              style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, padding: 0, background: done ? "#9dcc3a" : "transparent", border: `2px solid ${done ? "#9dcc3a" : blocked ? "var(--border)" : "rgba(157,204,58,0.5)"}`, cursor: (blocked && !done) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.2s", opacity: isLogging ? 0.5 : 1 }}>
-                              {done && <span style={{ color: "#0b0c09", fontSize: 10, fontWeight: 800 }}>✓</span>}
-                              {isLogging && <span style={{ color: "var(--text3)", fontSize: 9 }}>…</span>}
-                            </button>
-                            <span style={{ fontSize: 12.5, color: done ? "var(--text3)" : "var(--text2)", textDecoration: done ? "line-through" : "none", transition: "all 0.2s" }}>{item.label}</span>
-                            {blocked && !done && <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: "auto" }}>today ✓</span>}
-                          </div>
-                        );
-                      })}
+
+                {/* Part 3 — Save button */}
+                <div style={{ padding: "0 20px 16px" }}>
+                  {activitySavedMsg ? (
+                    <div style={{ padding: "10px 14px", background: "rgba(157,204,58,0.07)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r-sm)" }}>
+                      {activitySavedMsg.split("\n").map((line, i) => (
+                        <div key={i} style={{ fontSize: 13, color: "#9dcc3a", fontWeight: 500, lineHeight: 1.6 }}>{line}</div>
+                      ))}
+                      <button type="button" style={{ marginTop: 8, fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                        onClick={() => setActivitySavedMsg("")}>Log more →</button>
                     </div>
-                  ))}
+                  ) : (
+                    <button type="button" className="btn btn-lime" disabled={savingActivity}
+                      style={{ width: "100%", fontSize: 13, fontWeight: 600, opacity: savingActivity ? 0.7 : 1 }}
+                      onClick={() => { void handleSave(); }}>
+                      {savingActivity ? "Saving…" : "Save today's activity"}
+                    </button>
+                  )}
                 </div>
               </div>
             );

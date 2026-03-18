@@ -72,6 +72,7 @@ type DashboardPayload = {
   sessionNote: { text: string; date: string; coachName: string } | null;
   coachAtRisk: Array<{ id: string; name: string; reasons: string[]; recovery: string }>;
   memberSince: string;
+  bonusActivitiesThisWeek: number;
   longestStreakWeeks: number;
   milestones: Array<{ dateLabel: string; icon: string; label: string }>;
   arxSessions: Array<{
@@ -288,6 +289,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     sessionNote: null,
     coachAtRisk: [],
     memberSince: "",
+    bonusActivitiesThisWeek: 0,
     longestStreakWeeks: 0,
     milestones: [],
     scan: {
@@ -484,7 +486,7 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
       .lt("session_date", monthEndIso),
     supabase
       .from("manual_workout_sessions")
-      .select("equipment")
+      .select("equipment,is_bonus,session_date")
       .eq("member_id", memberId)
       .gte("session_date", monthStartIso)
       .lt("session_date", monthEndIso),
@@ -709,6 +711,9 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     carolThisWeek,
     recoveryThisMonth: recoveryRows.length,
   };
+  payload.bonusActivitiesThisWeek = manualRows.filter(
+    (row) => (row.is_bonus as boolean) === true && stringOr(row.session_date, "").slice(0, 10) >= weekStartIso,
+  ).length;
 
   const todayIso = todayDate.toISOString().slice(0, 10);
   const arxWeekDates = arxRows
