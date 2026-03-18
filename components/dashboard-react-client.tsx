@@ -72,6 +72,22 @@ type DashboardPayload = {
   coachAtRisk: Array<{ id: string; name: string; reasons: string[]; recovery: string }>;
   memberSince: string;
   bonusActivitiesThisWeek: number;
+  todaysPlan: {
+    hasProtocol: boolean;
+    protocolName: string;
+    dayName: string;
+    dayTheme: string;
+    dayDescription: string;
+    isRestDay: boolean;
+    activities: Array<{
+      id: string; order: number; type: string; name: string; durationMinutes: number;
+      description: string; whyItMatters: string; steps: string[];
+      isBookable: boolean; bookingUrl: string | null;
+      isOptional: boolean; alternativeActivity: string | null;
+    }>;
+    totalMinutes: number;
+    sessionsThisWeek: number;
+  } | null;
   longestStreakWeeks: number;
   milestones: Array<{ dateLabel: string; icon: string; label: string }>;
   arxSessions: Array<{
@@ -486,6 +502,27 @@ function recommendProtocol(activeGoals: string[]): string | null {
   return "Strength Foundation";
 }
 
+// ─── Plan activity → log item mapping ────────────────────────────────────────
+type PlanAct = { type: string; name: string };
+function planActToLog(a: PlanAct): { to_add?: Array<{ type: string; subtype: string }>; bonus?: string[] } {
+  const n = a.name.toLowerCase();
+  if (a.type === "strength" && n.includes("arx")) return { to_add: [{ type: "arx", subtype: "manual_checkin" }] };
+  if (a.type === "cardio" && n.includes("carol")) {
+    if (n.includes("rehit")) return { to_add: [{ type: "carol", subtype: "REHIT" }] };
+    if (n.includes("norwegian")) return { to_add: [{ type: "carol", subtype: "FAT_BURN_60" }] };
+    return { to_add: [{ type: "carol", subtype: "FAT_BURN_45" }] };
+  }
+  if (a.type === "recovery") {
+    if (n.includes("cold plunge") || n.includes("cold")) return { to_add: [{ type: "recovery", subtype: "cold_plunge" }] };
+    if (n.includes("sauna")) return { to_add: [{ type: "recovery", subtype: "sauna" }] };
+    if (n.includes("vasper")) return { bonus: ["vasper"] };
+  }
+  if (n.includes("katalyst")) return { bonus: ["katalyst"] };
+  if (n.includes("proteus")) return { bonus: ["other_cardio"] };
+  if (a.type === "coaching") return { bonus: ["nxpro"] };
+  return {};
+}
+
 // ─── Bonus activity definitions ──────────────────────────────────────────────
 
 const BONUS_ACTIVITIES = [
@@ -722,6 +759,13 @@ export function DashboardReactClient({
   const [memberNotes, setMemberNotes] = useState<Array<{ id: string; note: string; created_at: string }>>([]);
   const [notesForMember, setNotesForMember] = useState("");
   const [todayCheckin, setTodayCheckin] = useState<"low" | "normal" | "strong" | null>(null);
+  const [sessionGuideOpen, setSessionGuideOpen] = useState(false);
+  const [sessionStep, setSessionStep] = useState(0);
+  const [sessionCompleted, setSessionCompleted] = useState<Set<number>>(new Set());
+  const [weekViewOpen, setWeekViewOpen] = useState(false);
+  type WeekDay = { dayOfWeek: number; dayName: string; dayTheme: string; dayDescription: string; activities: Array<{ id: string; order: number; type: string; name: string; durationMinutes: number; description: string; whyItMatters: string; steps: string[]; isBookable: boolean; bookingUrl: string | null; isOptional: boolean; alternativeActivity: string | null }>; totalMinutes: number };
+  const [weekPlan, setWeekPlan] = useState<WeekDay[]>([]);
+  const [weekViewDay, setWeekViewDay] = useState<number | null>(null);
   const [selectedProtocol, setSelectedProtocol] = useState<Record<string, boolean>>({});
   const [selectedBonus, setSelectedBonus] = useState<Record<string, boolean>>({});
   const [savingActivity, setSavingActivity] = useState(false);
@@ -1233,81 +1277,103 @@ export function DashboardReactClient({
 
         <div id="view-dashboard" className="content" style={{ display: mode === "member" && memberView === "dashboard" ? "block" : "none" }}>
 
-          {/* ── Section 1: Daily Briefing ────────────────────────────────── */}
+          {/* ── Section 1: Today's Plan ───────────────────────────────────── */}
           {(() => {
-            const now = new Date();
-            const yestIso = new Date(now.getTime() - 86400000).toISOString().slice(0, 10);
-            const twoDaysIso = new Date(now.getTime() - 2 * 86400000).toISOString().slice(0, 10);
-            const recentRehit = payload.carolSessions.find((s) => normalizeCarolTabKey(s.rideType) === "rehit" && s.sessionDate.slice(0, 10) >= twoDaysIso);
-            const recentArxYest = payload.arxSessions.find((s) => s.sessionDate.slice(0, 10) >= yestIso);
-            const lastCarolDays = payload.carolSessions.length > 0 ? Math.floor((now.getTime() - new Date(payload.carolSessions[0].sessionDate).getTime()) / 86400000) : null;
-            let rec = { label: "CAROL REHIT", reason: "Your most impactful cardio session" };
-            if (todayCheckin === "low") rec = { label: "Rest or Recovery", reason: "You're feeling low — rest is training too" };
-            else if (recentArxYest && !recentRehit) rec = { label: "CAROL Fat Burn", reason: "ARX done recently — cardio today" };
-            else if (recentRehit && !recentArxYest) rec = { label: "ARX Session", reason: "REHIT done recently — strength training today" };
-            else if (recentRehit && recentArxYest) rec = { label: "Recovery Session", reason: "Strength and cardio done — time to recover" };
-            if (!recentRehit && !recentArxYest && todayCheckin !== "low") {
-              const cl0 = generateChecklist(payload.protocol);
-              const c0 = payload.checklistCompletions;
-              const remArx0 = cl0.filter((i) => i.type === "arx" && !isChecklistItemDone(i, c0, checklistChecked)).length;
-              const remCarol0 = cl0.filter((i) => i.type === "carol" && !isChecklistItemDone(i, c0, checklistChecked)).length;
-              if (remArx0 > 0 && remArx0 >= remCarol0) rec = { label: "ARX Session", reason: "Strength session is a priority this week" };
-            }
-            const checkinLabel = todayCheckin === "low" ? "😴 Low energy" : todayCheckin === "normal" ? "😐 Normal" : todayCheckin === "strong" ? "⚡ Feeling strong" : null;
+            const tp = payload.todaysPlan;
             const cl1 = generateChecklist(payload.protocol);
             const c1 = payload.checklistCompletions;
             const done1 = cl1.filter((i) => isChecklistItemDone(i, c1, checklistChecked)).length;
+            const checkinLabel = todayCheckin === "low" ? "😴 Low energy" : todayCheckin === "normal" ? "😐 Normal" : todayCheckin === "strong" ? "⚡ Feeling strong" : null;
+            const weekTotal = tp?.sessionsThisWeek ?? done1;
+
             return (
               <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 16 }}>
-                <div style={{ marginBottom: 18 }}>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>Good morning, {greetingName}.</div>
-                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{todayDateLabel()}</div>
-                </div>
-                <div style={{ background: "rgba(157,204,58,0.05)", border: "1px solid rgba(157,204,58,0.15)", borderRadius: "var(--r-sm)", padding: "12px 14px", marginBottom: 14 }}>
-                  <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 6 }}>Today&apos;s recommendation</div>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 3 }}>{rec.label}</div>
-                  <div style={{ fontSize: 12, color: "var(--text3)" }}>
-                    {rec.reason}
-                    {lastCarolDays !== null && rec.label.toLowerCase().includes("carol") && (
-                      <span> — last CAROL was {lastCarolDays === 0 ? "today" : lastCarolDays === 1 ? "yesterday" : `${lastCarolDays} days ago`}</span>
-                    )}
+                {/* Header */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 4 }}>Today&apos;s Plan</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
+                      {tp?.dayName ? `${tp.dayName} — ${tp.dayTheme}` : todayDateLabel()}
+                    </div>
                   </div>
-                </div>
-                <div style={{ marginBottom: 14 }}>
+                  {/* Check-in pill */}
                   {checkinLabel ? (
-                    <div style={{ fontSize: 13, color: "var(--text2)" }}>Today you felt: <strong>{checkinLabel}</strong></div>
+                    <div style={{ fontSize: 12, color: "var(--text3)", background: "var(--border)", borderRadius: 20, padding: "4px 10px" }}>{checkinLabel}</div>
                   ) : (
-                    <div>
-                      <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>How are you feeling today?</div>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {([{ key: "low", label: "😴 Low energy" }, { key: "normal", label: "😐 Normal" }, { key: "strong", label: "⚡ Feeling strong" }] as const).map((opt) => (
-                          <button key={opt.key} type="button" disabled={submittingCheckin}
-                            style={{ padding: "8px 14px", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 20, cursor: "pointer", fontSize: 12.5, color: "var(--text2)", opacity: submittingCheckin ? 0.6 : 1 }}
-                            onClick={async () => {
-                              setSubmittingCheckin(true);
-                              try {
-                                await fetch("/api/member/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feeling: opt.key }) });
-                                setTodayCheckin(opt.key as "low" | "normal" | "strong");
-                              } catch { /* silent */ } finally { setSubmittingCheckin(false); }
-                            }}>
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      {([{k:"low",l:"😴"},{k:"normal",l:"😐"},{k:"strong",l:"⚡"}] as const).map(opt=>(
+                        <button key={opt.k} type="button" disabled={submittingCheckin}
+                          style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--border)", border: "none", cursor: "pointer", fontSize: 15 }}
+                          onClick={async()=>{setSubmittingCheckin(true);try{await fetch("/api/member/checkin",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({feeling:opt.k})});setTodayCheckin(opt.k as "low"|"normal"|"strong")}catch{/**/}finally{setSubmittingCheckin(false)}}}>
+                          {opt.l}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
-                {cl1.length > 0 && (
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, color: "var(--text3)" }}>This week</span>
-                      <span style={{ fontSize: 12, fontWeight: 600, color: done1 === cl1.length ? "#9dcc3a" : "var(--text2)" }}>{done1} of {cl1.length} sessions</span>
-                    </div>
-                    <div style={{ height: 6, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${cl1.length > 0 ? (done1 / cl1.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 3, transition: "width 0.3s" }} />
-                    </div>
+
+                {/* Plan content */}
+                {!tp || !tp.hasProtocol ? (
+                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Your plan is being prepared</div>
+                    <p style={{ fontSize: 12.5, color: "var(--text3)", margin: "0 0 12px 0", lineHeight: 1.6 }}>Dustin will assign your protocol after your first session.</p>
+                    <a href="https://theiso.club/book" target="_blank" rel="noreferrer" className="btn btn-lime btn-sm" style={{ fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Book your first session →</a>
                   </div>
+                ) : tp.isRestDay ? (
+                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
+                    <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 10px 0", lineHeight: 1.65 }}>
+                      Rest is where your results are made. Every adaptation from this week&apos;s training happens today. Protect your sleep, eat well, and hydrate.
+                    </p>
+                    <div style={{ fontSize: 12, color: "var(--text3)" }}>You completed {weekTotal} session{weekTotal !== 1 ? "s" : ""} this week.</div>
+                  </div>
+                ) : tp.activities.length === 0 ? (
+                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-sm)", padding: "14px 18px", marginBottom: 14 }}>
+                    <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>{tp.dayDescription || "Your day plan will appear here once seeded."}</p>
+                  </div>
+                ) : (
+                  <>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, marginBottom: 14 }}>
+                      {tp.dayDescription.length > 160 ? tp.dayDescription.slice(0, 160) + "…" : tp.dayDescription}
+                    </p>
+                    {/* Activity list */}
+                    <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 14 }}>
+                      {tp.activities.map((act, i) => (
+                        <div key={act.id} style={{ display: "flex", alignItems: "center", padding: "9px 14px", borderBottom: i < tp.activities.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                          <span style={{ fontSize: 11, color: "var(--text3)", width: 20, flexShrink: 0 }}>{i + 1}</span>
+                          <span style={{ flex: 1, fontSize: 13.5, color: "var(--text2)", fontWeight: 500 }}>{act.name}</span>
+                          <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>Total: ~{tp.totalMinutes} minutes</div>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <button type="button" className="btn btn-lime btn-sm" style={{ fontSize: 12 }}
+                        onClick={() => { setSessionStep(0); setSessionCompleted(new Set()); setSessionGuideOpen(true); }}>
+                        Start today&apos;s plan →
+                      </button>
+                      <button type="button" className="btn btn-sm" style={{ fontSize: 12 }}
+                        onClick={async () => {
+                          if (!weekPlan.length) {
+                            try { const r = await getJson<{ days: typeof weekPlan }>("/api/member/week-plan"); if (r.days) setWeekPlan(r.days); } catch { /* */ }
+                          }
+                          setWeekViewDay(null); setWeekViewOpen(true);
+                        }}>
+                        View this week&apos;s plan →
+                      </button>
+                    </div>
+                  </>
                 )}
+
+                {/* Weekly progress */}
+                <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 12, color: "var(--text3)" }}>This week</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: done1 === cl1.length && cl1.length > 0 ? "#9dcc3a" : "var(--text2)" }}>{done1} of {cl1.length} sessions complete</span>
+                  </div>
+                  <div style={{ height: 5, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${cl1.length > 0 ? (done1 / cl1.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 3, transition: "width 0.3s" }} />
+                  </div>
+                </div>
               </div>
             );
           })()}
@@ -2774,6 +2840,165 @@ export function DashboardReactClient({
             </div>
           )}
         </div>
+
+        {/* ── Session Guide modal ────────────────────────────────────────── */}
+        {sessionGuideOpen && payload.todaysPlan && payload.todaysPlan.activities.length > 0 && (() => {
+          const acts = payload.todaysPlan.activities;
+          const act = acts[sessionStep];
+          const allDone = sessionCompleted.size >= acts.length;
+          const isDone = sessionCompleted.has(sessionStep);
+
+          async function markComplete() {
+            if (!act) return;
+            const logData = planActToLog(act);
+            try { await fetch("/api/member/activity-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to_add: logData.to_add ?? [], bonus: logData.bonus ?? [] }) }); } catch { /* */ }
+            setSessionCompleted((prev) => new Set([...prev, sessionStep]));
+          }
+
+          return (
+            <div style={{ position: "fixed", inset: 0, background: "#0b0c09", zIndex: 2000, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+              {/* Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+                <div style={{ fontSize: 12, color: "#9b9889" }}>{payload.todaysPlan.dayName} — {payload.todaysPlan.dayTheme}</div>
+                <button type="button" style={{ background: "none", border: "none", color: "#9b9889", cursor: "pointer", fontSize: 20, padding: 0 }} onClick={() => setSessionGuideOpen(false)}>✕</button>
+              </div>
+              {/* Progress dots */}
+              <div style={{ display: "flex", gap: 6, padding: "12px 20px", flexShrink: 0 }}>
+                {acts.map((_, i) => (
+                  <div key={i} style={{ height: 4, flex: 1, borderRadius: 2, background: sessionCompleted.has(i) ? "#9dcc3a" : i === sessionStep ? "rgba(157,204,58,0.4)" : "rgba(255,255,255,0.1)" }} />
+                ))}
+              </div>
+
+              {allDone ? (
+                /* Completion screen */
+                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" }}>
+                  <div style={{ fontSize: 48, marginBottom: 16 }}>✓</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: "#edeae0", marginBottom: 10, fontFamily: "Georgia, serif" }}>Today&apos;s plan complete</div>
+                  <p style={{ fontSize: 14, color: "#9b9889", lineHeight: 1.6, maxWidth: 320 }}>Great work. Your body is doing the work now. Rest, eat well, and come back tomorrow.</p>
+                  <button type="button" className="btn btn-lime" style={{ marginTop: 24, fontSize: 13 }} onClick={() => setSessionGuideOpen(false)}>Back to dashboard</button>
+                </div>
+              ) : act ? (
+                /* Activity screen */
+                <div style={{ flex: 1, padding: "20px 24px", maxWidth: 600, margin: "0 auto", width: "100%" }}>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#9b9889", marginBottom: 8 }}>Activity {sessionStep + 1} of {acts.length}</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: "#edeae0", fontFamily: "Georgia, serif", lineHeight: 1.2 }}>{act.name}</div>
+                    <div style={{ fontSize: 13, color: "#9b9889", flexShrink: 0, marginLeft: 12 }}>{act.durationMinutes} min</div>
+                  </div>
+                  <p style={{ fontSize: 14, color: "#c4c0b4", lineHeight: 1.65, marginBottom: 16 }}>{act.description}</p>
+                  <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "#9b9889", marginBottom: 8 }}>Why it matters</div>
+                    <p style={{ fontSize: 13, color: "#9b9889", lineHeight: 1.6, margin: 0 }}>{act.whyItMatters}</p>
+                  </div>
+                  {act.steps.length > 0 && (
+                    <div style={{ marginBottom: 20 }}>
+                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "#9b9889", marginBottom: 10 }}>How to do it</div>
+                      {act.steps.map((step, i) => (
+                        <div key={i} style={{ display: "flex", gap: 12, marginBottom: 10 }}>
+                          <span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(157,204,58,0.15)", color: "#9dcc3a", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{i + 1}</span>
+                          <span style={{ fontSize: 13.5, color: "#c4c0b4", lineHeight: 1.5 }}>{step}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {act.isOptional && act.alternativeActivity && (
+                    <div style={{ fontSize: 12, color: "#9b9889", marginBottom: 14 }}>Can&apos;t make it in? <span style={{ color: "#9dcc3a", textDecoration: "underline", cursor: "pointer" }}>{act.alternativeActivity}</span></div>
+                  )}
+                  {/* Action buttons */}
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    {act.isBookable && act.bookingUrl ? (
+                      <a href={act.bookingUrl} target="_blank" rel="noreferrer" className="btn btn-lime" style={{ fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Book with Dustin →</a>
+                    ) : (
+                      <button type="button" className="btn btn-lime" style={{ fontSize: 13 }} disabled={isDone}
+                        onClick={() => { void markComplete(); }}>
+                        {isDone ? "✓ Marked complete" : "Mark complete"}
+                      </button>
+                    )}
+                    {isDone && sessionStep < acts.length - 1 && (
+                      <button type="button" className="btn btn-sm" style={{ fontSize: 13 }} onClick={() => setSessionStep(sessionStep + 1)}>
+                        Next activity →
+                      </button>
+                    )}
+                    {isDone && sessionStep >= acts.length - 1 && !allDone && (
+                      <button type="button" className="btn btn-lime" style={{ fontSize: 13 }} onClick={() => setSessionCompleted(new Set(acts.map((_, i) => i)))}>
+                        Complete session ✓
+                      </button>
+                    )}
+                  </div>
+                  {/* Prev/Next nav */}
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <button type="button" style={{ background: "none", border: "none", color: "#9b9889", cursor: sessionStep > 0 ? "pointer" : "not-allowed", opacity: sessionStep > 0 ? 1 : 0.3, fontSize: 13 }}
+                      disabled={sessionStep === 0} onClick={() => setSessionStep(sessionStep - 1)}>← Previous</button>
+                    <button type="button" style={{ background: "none", border: "none", color: "#9b9889", cursor: sessionStep < acts.length - 1 ? "pointer" : "not-allowed", opacity: sessionStep < acts.length - 1 ? 1 : 0.3, fontSize: 13 }}
+                      disabled={sessionStep >= acts.length - 1} onClick={() => setSessionStep(sessionStep + 1)}>Next →</button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          );
+        })()}
+
+        {/* ── Week View modal ────────────────────────────────────────────── */}
+        {weekViewOpen && (
+          <div style={{ position: "fixed", inset: 0, background: "#0b0c09", zIndex: 2000, overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#edeae0" }}>This week&apos;s plan</div>
+              <button type="button" style={{ background: "none", border: "none", color: "#9b9889", cursor: "pointer", fontSize: 20, padding: 0 }} onClick={() => { setWeekViewOpen(false); setWeekViewDay(null); }}>✕</button>
+            </div>
+            {weekPlan.length === 0 ? (
+              <div style={{ padding: 32, color: "#9b9889", fontSize: 13 }}>Run protocol_days.sql in Supabase to load your week plan.</div>
+            ) : weekViewDay !== null ? (
+              /* Single day expanded */
+              (() => {
+                const day = weekPlan.find((d) => d.dayOfWeek === weekViewDay);
+                if (!day) return null;
+                return (
+                  <div style={{ padding: "20px 24px", maxWidth: 600, margin: "0 auto" }}>
+                    <button type="button" style={{ background: "none", border: "none", color: "#9dcc3a", cursor: "pointer", fontSize: 12, padding: "0 0 16px 0", display: "block" }} onClick={() => setWeekViewDay(null)}>← Back to week</button>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#edeae0", marginBottom: 4, fontFamily: "Georgia, serif" }}>{day.dayName} — {day.dayTheme}</div>
+                    <p style={{ fontSize: 13, color: "#9b9889", lineHeight: 1.6, marginBottom: 20 }}>{day.dayDescription}</p>
+                    {day.activities.map((act, i) => (
+                      <div key={act.id} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "#edeae0" }}>{i + 1}. {act.name}</span>
+                          <span style={{ fontSize: 12, color: "#9b9889" }}>{act.durationMinutes} min</span>
+                        </div>
+                        <p style={{ fontSize: 12.5, color: "#9b9889", margin: 0, lineHeight: 1.5 }}>{act.description}</p>
+                        {act.isOptional && <div style={{ fontSize: 11, color: "rgba(157,204,58,0.6)", marginTop: 6 }}>Optional</div>}
+                      </div>
+                    ))}
+                    <div style={{ fontSize: 12, color: "#9b9889", marginTop: 12 }}>Total: ~{day.totalMinutes} minutes</div>
+                  </div>
+                );
+              })()
+            ) : (
+              /* Week overview */
+              <div style={{ padding: "8px 0" }}>
+                {weekPlan.map((day) => {
+                  const isToday = day.dayOfWeek === (new Date().getDay() === 0 ? 7 : new Date().getDay());
+                  const actSummary = day.activities.map((a) => a.name).join(" · ");
+                  return (
+                    <button key={day.dayOfWeek} type="button"
+                      onClick={() => setWeekViewDay(day.dayOfWeek)}
+                      style={{ width: "100%", textAlign: "left", background: isToday ? "rgba(157,204,58,0.06)" : "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "14px 20px", cursor: "pointer" }}>
+                      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
+                        <div style={{ width: 32, flexShrink: 0 }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: isToday ? "#9dcc3a" : "#edeae0" }}>{day.dayName.slice(0, 3)}</div>
+                          {isToday && <div style={{ fontSize: 8, color: "#9dcc3a", textTransform: "uppercase" }}>Today</div>}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#edeae0", marginBottom: 3 }}>{day.dayTheme}</div>
+                          <div style={{ fontSize: 11, color: "#9b9889" }}>{actSummary || "Rest"}</div>
+                        </div>
+                        <div style={{ marginLeft: "auto", fontSize: 11, color: "#9b9889", flexShrink: 0 }}>{day.totalMinutes > 0 ? `~${day.totalMinutes}m` : ""}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Protocol request modal */}
         {showProtocolModal && (

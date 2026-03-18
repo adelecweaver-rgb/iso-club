@@ -73,6 +73,22 @@ type DashboardPayload = {
   coachAtRisk: Array<{ id: string; name: string; reasons: string[]; recovery: string }>;
   memberSince: string;
   bonusActivitiesThisWeek: number;
+  todaysPlan: {
+    hasProtocol: boolean;
+    protocolName: string;
+    dayName: string;
+    dayTheme: string;
+    dayDescription: string;
+    isRestDay: boolean;
+    activities: Array<{
+      id: string; order: number; type: string; name: string; durationMinutes: number;
+      description: string; whyItMatters: string; steps: string[];
+      isBookable: boolean; bookingUrl: string | null;
+      isOptional: boolean; alternativeActivity: string | null;
+    }>;
+    totalMinutes: number;
+    sessionsThisWeek: number;
+  } | null;
   longestStreakWeeks: number;
   milestones: Array<{ dateLabel: string; icon: string; label: string }>;
   arxSessions: Array<{
@@ -290,6 +306,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     coachAtRisk: [],
     memberSince: "",
     bonusActivitiesThisWeek: 0,
+    todaysPlan: null,
     longestStreakWeeks: 0,
     milestones: [],
     scan: {
@@ -735,6 +752,9 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     todayDate: todayIso,
     weekStartDate: weekStartIso,
   };
+  if (payload.todaysPlan) {
+    payload.todaysPlan.sessionsThisWeek = arxDatesThisWeek.size + carolThisWeek + recoveryWeekRows.length;
+  }
 
   // ─── Goal progress ───────────────────────────────────────────────────────────
   // member_goals query (after main Promise.all to avoid blocking)
@@ -1020,6 +1040,34 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     statusLabel: attPct === null ? "No data" : attPct >= 80 ? "On Track" : attPct >= 50 ? "Behind" : "Off Track",
     encouragement: attPct !== null && attPct < 80 ? `${attRemaining} session${attRemaining !== 1 ? "s" : ""} remaining this month — you've got this` : null,
   };
+
+  // ─── Today's plan ────────────────────────────────────────────────────────
+  {
+    const hasProto = !!payload.protocol.id;
+    payload.todaysPlan = { hasProtocol: hasProto, protocolName: payload.protocol.name, dayName: "", dayTheme: "", dayDescription: "", isRestDay: false, activities: [], totalMinutes: 0, sessionsThisWeek: 0 };
+    if (hasProto) {
+      try {
+        const jsDay = new Date().getDay();
+        const dowSunday7 = jsDay === 0 ? 7 : jsDay;
+        const dayRes = await supabase.from("protocol_days").select("id,day_name,day_theme,day_description").eq("protocol_id", payload.protocol.id).eq("day_of_week", dowSunday7).limit(1);
+        if (!dayRes.error && dayRes.data?.length) {
+          const dr = dayRes.data[0] as Record<string, unknown>;
+          const actRes = await supabase.from("protocol_day_activities").select("*").eq("protocol_day_id", dr.id).order("activity_order");
+          payload.todaysPlan.dayName = stringOr(dr.day_name, "");
+          payload.todaysPlan.dayTheme = stringOr(dr.day_theme, "");
+          payload.todaysPlan.dayDescription = stringOr(dr.day_description, "");
+          payload.todaysPlan.isRestDay = stringOr(dr.day_theme, "").toLowerCase().includes("rest");
+          if (!actRes.error) {
+            payload.todaysPlan.activities = (actRes.data ?? []).map((row) => {
+              const r = row as Record<string, unknown>;
+              return { id: stringOr(r.id, ""), order: numberOr(r.activity_order, 0), type: stringOr(r.activity_type, ""), name: stringOr(r.activity_name, ""), durationMinutes: Math.round(numberOr(r.duration_minutes, 0)), description: stringOr(r.description, ""), whyItMatters: stringOr(r.why_it_matters, ""), steps: Array.isArray(r.steps) ? (r.steps as string[]) : [], isBookable: r.is_bookable === true, bookingUrl: r.booking_url ? stringOr(r.booking_url, "") : null, isOptional: r.is_optional === true, alternativeActivity: r.alternative_activity ? stringOr(r.alternative_activity, "") : null };
+            });
+            payload.todaysPlan.totalMinutes = payload.todaysPlan.activities.reduce((s, a) => s + a.durationMinutes, 0);
+          }
+        }
+      } catch { /* tables may not exist yet */ }
+    }
+  }
 
   // ─── Member since + milestones + streak ──────────────────────────────────
   payload.memberSince = joinedAt
