@@ -70,6 +70,9 @@ type DashboardPayload = {
   };
   sessionNote: { text: string; date: string; coachName: string } | null;
   coachAtRisk: Array<{ id: string; name: string; reasons: string[]; recovery: string }>;
+  memberSince: string;
+  longestStreakWeeks: number;
+  milestones: Array<{ dateLabel: string; icon: string; label: string }>;
   arxSessions: Array<{
     sessionDate: string;
     exercise: string;
@@ -994,7 +997,7 @@ export function DashboardReactClient({
               Dashboard
             </button>
             <Link className="nav-item" href="/member/progress">
-              Progress
+              Healthspan Progress
             </Link>
             <button className={activeMemberView("goals")} onClick={() => setMemberSection("goals")} type="button">
               My Goals
@@ -1333,6 +1336,11 @@ export function DashboardReactClient({
               </div>
             );
           })()}
+
+          {/* View full progress link */}
+          <div style={{ textAlign: "right", marginBottom: 16, marginTop: -8 }}>
+            <a href="/member/progress" style={{ fontSize: 11, color: "var(--text3)", textDecoration: "none" }}>View full progress →</a>
+          </div>
 
           {/* ── Section 5: Note from Dustin ─────────────────────────────── */}
           {payload.sessionNote && (

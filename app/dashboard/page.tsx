@@ -71,6 +71,9 @@ type DashboardPayload = {
   };
   sessionNote: { text: string; date: string; coachName: string } | null;
   coachAtRisk: Array<{ id: string; name: string; reasons: string[]; recovery: string }>;
+  memberSince: string;
+  longestStreakWeeks: number;
+  milestones: Array<{ dateLabel: string; icon: string; label: string }>;
   arxSessions: Array<{
     sessionDate: string;
     exercise: string;
@@ -284,6 +287,9 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     },
     sessionNote: null,
     coachAtRisk: [],
+    memberSince: "",
+    longestStreakWeeks: 0,
+    milestones: [],
     scan: {
       scanDate: "",
       bodyFatPct: "--",
@@ -1009,6 +1015,61 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     statusLabel: attPct === null ? "No data" : attPct >= 80 ? "On Track" : attPct >= 50 ? "Behind" : "Off Track",
     encouragement: attPct !== null && attPct < 80 ? `${attRemaining} session${attRemaining !== 1 ? "s" : ""} remaining this month — you've got this` : null,
   };
+
+  // ─── Member since + milestones + streak ──────────────────────────────────
+  payload.memberSince = joinedAt
+    ? new Date(joinedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : "";
+
+  // Combined sessions ascending (for milestone dates and streak)
+  const combined = [
+    ...carolRows.map((r) => ({ dateIso: stringOr(r.session_date, "").slice(0, 10), type: "carol", power: numberOr(r.peak_power_watts, 0) })),
+    ...arxRows.map((r) => ({ dateIso: stringOr(r.session_date, "").slice(0, 10), type: "arx", power: 0 })),
+  ].filter((s) => s.dateIso).sort((a, b) => a.dateIso.localeCompare(b.dateIso));
+
+  // Longest weekly streak
+  let maxStreak = 0; let currentStreak = 0;
+  const nowMs = Date.now();
+  for (let w = 51; w >= 0; w--) {
+    const ws = new Date(nowMs - (w + 1) * 7 * 86400000).toISOString().slice(0, 10);
+    const we = new Date(nowMs - w * 7 * 86400000).toISOString().slice(0, 10);
+    const has = combined.some((s) => s.dateIso >= ws && s.dateIso < we);
+    if (has) { currentStreak++; maxStreak = Math.max(maxStreak, currentStreak); } else currentStreak = 0;
+  }
+  payload.longestStreakWeeks = maxStreak;
+
+  // Milestones
+  const mlabelDate = (iso: string) =>
+    iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "";
+  const mls: typeof payload.milestones = [];
+  // Member duration
+  if (joinedAt) {
+    const jd = new Date(joinedAt);
+    for (const [days, icon, label] of [[365, "📅", "1 year as a member"], [180, "📅", "6 month member"], [90, "📅", "90 day member"], [30, "📅", "30 day member"]] as [number, string, string][]) {
+      const diffDays = Math.floor((nowMs - jd.getTime()) / 86400000);
+      if (diffDays >= days) mls.push({ dateLabel: mlabelDate(new Date(jd.getTime() + days * 86400000).toISOString()), icon, label });
+    }
+  }
+  // Session count milestones
+  for (const [n, icon] of [[100, "🏋️"], [50, "🏋️"], [25, "🏋️"], [10, "🏋️"]] as [number, string][]) {
+    if (combined.length >= n) mls.push({ dateLabel: mlabelDate(combined[n - 1].dateIso), icon, label: `${n}th session completed` });
+  }
+  // CAROL peak power all-time record
+  const allPowers = carolRows.map((r) => ({ val: numberOr(r.peak_power_watts, 0), date: stringOr(r.session_date, "").slice(0, 10) })).filter((p) => p.val > 0);
+  if (allPowers.length) {
+    const pr = allPowers.reduce((best, p) => (p.val > best.val ? p : best));
+    mls.push({ dateLabel: mlabelDate(pr.date), icon: "↑", label: `New CAROL peak power ${Math.round(pr.val)}W` });
+  }
+  // First scan
+  if (scanRows.length > 0) {
+    const firstScan = scanRows[scanRows.length - 1];
+    mls.push({ dateLabel: mlabelDate(stringOr(firstScan.scan_date, "")), icon: "📊", label: "First Fit3D body scan" });
+  }
+  // Sort most recent first (best effort — dateLabel format "Jan 2025")
+  payload.milestones = mls
+    .filter((m, i, arr) => arr.findIndex((x) => x.label === m.label) === i) // dedupe
+    .sort((a, b) => b.dateLabel.localeCompare(a.dateLabel))
+    .slice(0, 8);
 
   // Attendance goal: compare month sessions to protocol target
   const arxWeekTarget = payload.protocol.arxPerWeek || 0;
