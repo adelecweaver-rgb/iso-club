@@ -758,7 +758,7 @@ export function DashboardReactClient({
   const [savingNote, setSavingNote] = useState(false);
   const [memberNotes, setMemberNotes] = useState<Array<{ id: string; note: string; created_at: string }>>([]);
   const [notesForMember, setNotesForMember] = useState("");
-  const [todayCheckin, setTodayCheckin] = useState<"low" | "normal" | "strong" | null>(null);
+  const [todayCheckin, setTodayCheckin] = useState<"low" | "normal" | "strong" | "hurt" | null>(null);
   const [sessionGuideOpen, setSessionGuideOpen] = useState(false);
   const [sessionStep, setSessionStep] = useState(0);
   const [sessionCompleted, setSessionCompleted] = useState<Set<number>>(new Set());
@@ -1283,37 +1283,117 @@ export function DashboardReactClient({
             const cl1 = generateChecklist(payload.protocol);
             const c1 = payload.checklistCompletions;
             const done1 = cl1.filter((i) => isChecklistItemDone(i, c1, checklistChecked)).length;
-            const checkinLabel = todayCheckin === "low" ? "😴 Low energy" : todayCheckin === "normal" ? "😐 Normal" : todayCheckin === "strong" ? "⚡ Feeling strong" : null;
+            // Adjust target down when member chose recovery/hurt (not penalised for rest)
+            const isAdaptedDay = todayCheckin === "low" || todayCheckin === "hurt";
+            const adjustedTotal = isAdaptedDay ? Math.max(0, cl1.length - (tp?.activities.length ?? 1)) : cl1.length;
             const weekTotal = tp?.sessionsThisWeek ?? done1;
+
+            // Check-in submit helper
+            async function submitCheckin(feeling: "strong" | "low" | "hurt") {
+              if (submittingCheckin) return;
+              setSubmittingCheckin(true);
+              try {
+                await fetch("/api/member/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feeling }) });
+                setTodayCheckin(feeling);
+              } catch { /* silent */ } finally { setSubmittingCheckin(false); }
+            }
+
+            const RECOVERY_ACTS = [
+              { n: "Infrared Sauna", m: 20 }, { n: "Cold Plunge", m: 3 }, { n: "Compression Boots", m: 20 },
+            ];
+            const PAIN_ACTS = [
+              { n: "Infrared Sauna — heat therapy for inflammation", m: 20 },
+              { n: "Compression Boots — circulation and recovery", m: 20 },
+            ];
 
             return (
               <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 16 }}>
                 {/* Header */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                  <div>
-                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 4 }}>Today&apos;s Plan</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
-                      {tp?.dayName ? `${tp.dayName} — ${tp.dayTheme}` : todayDateLabel()}
-                    </div>
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 4 }}>Today&apos;s Plan</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
+                    {todayCheckin === "low" ? "Recovery Day" : todayCheckin === "hurt" ? "Listen to Your Body" : tp?.dayName ? `${tp.dayName} — ${tp.dayTheme}` : todayDateLabel()}
                   </div>
-                  {/* Check-in pill */}
-                  {checkinLabel ? (
-                    <div style={{ fontSize: 12, color: "var(--text3)", background: "var(--border)", borderRadius: 20, padding: "4px 10px" }}>{checkinLabel}</div>
-                  ) : (
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {([{k:"low",l:"😴"},{k:"normal",l:"😐"},{k:"strong",l:"⚡"}] as const).map(opt=>(
-                        <button key={opt.k} type="button" disabled={submittingCheckin}
-                          style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--border)", border: "none", cursor: "pointer", fontSize: 15 }}
-                          onClick={async()=>{setSubmittingCheckin(true);try{await fetch("/api/member/checkin",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({feeling:opt.k})});setTodayCheckin(opt.k as "low"|"normal"|"strong")}catch{/**/}finally{setSubmittingCheckin(false)}}}>
-                          {opt.l}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                 </div>
 
-                {/* Plan content */}
-                {!tp || !tp.hasProtocol ? (
+                {/* Feeling check-in — 3 large buttons or selected state */}
+                {!todayCheckin ? (
+                  <div style={{ marginBottom: 18 }}>
+                    <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>How are you feeling today?</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                      <button type="button" disabled={submittingCheckin}
+                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #9dcc3a", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        onClick={() => { void submitCheckin("strong"); }}>
+                        ⚡<br />Feeling strong
+                      </button>
+                      <button type="button" disabled={submittingCheckin}
+                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #e8a838", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        onClick={() => { void submitCheckin("low"); }}>
+                        😴<br />Low energy
+                      </button>
+                      <button type="button" disabled={submittingCheckin}
+                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #e05252", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        onClick={() => { void submitCheckin("hurt"); }}>
+                        🤕<br />Something hurts
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, color: "var(--text3)" }}>
+                      Today you chose:{" "}
+                      <strong style={{ color: todayCheckin === "strong" ? "#9dcc3a" : todayCheckin === "low" ? "#e8a838" : "#e05252" }}>
+                        {todayCheckin === "strong" ? "⚡ Full plan" : todayCheckin === "low" ? "😴 Recovery day" : "🤕 Rest today"}
+                      </strong>
+                    </div>
+                    <button type="button" style={{ background: "none", border: "none", fontSize: 10, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                      onClick={() => setTodayCheckin(null)}>change</button>
+                  </div>
+                )}
+
+                {/* Plan content — adapts to feeling */}
+                {todayCheckin === "low" ? (
+                  <div>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 14 }}>
+                      Listening to your body is part of the protocol. Rest and recovery today sets you up for a stronger session tomorrow.
+                    </p>
+                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Today&apos;s recovery plan</div>
+                    <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 10 }}>
+                      {RECOVERY_ACTS.map((a, i) => (
+                        <div key={i} style={{ display: "flex", padding: "9px 14px", borderBottom: i < RECOVERY_ACTS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                          <span style={{ fontSize: 11, color: "var(--text3)", width: 20 }}>{i + 1}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: "var(--text2)" }}>{a.n}</span>
+                          <span style={{ fontSize: 11, color: "var(--text3)" }}>{a.m} min</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>Optional: Easy walk outside — 20–30 minutes</div>
+                  </div>
+                ) : todayCheckin === "hurt" ? (
+                  <div>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 12 }}>
+                      Pain is important information. Do not push through it.
+                    </p>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 14 }}>
+                      We recommend booking a private session with Dustin to assess and adjust your plan.
+                    </p>
+                    <a href="https://theiso.club/book" target="_blank" rel="noreferrer"
+                      style={{ display: "inline-flex", alignItems: "center", background: "#e05252", color: "white", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
+                      Book NxPro session with Dustin →
+                    </a>
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>In the meantime, gentle recovery only:</div>
+                    <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "var(--r-sm)", padding: "4px 0" }}>
+                      {PAIN_ACTS.map((a, i) => (
+                        <div key={i} style={{ display: "flex", padding: "9px 14px", borderBottom: i < PAIN_ACTS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                          <span style={{ fontSize: 11, color: "var(--text3)", width: 20 }}>{i + 1}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: "var(--text2)" }}>{a.n}</span>
+                          <span style={{ fontSize: 11, color: "var(--text3)" }}>{a.m} min</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: "rgba(224,82,82,0.7)", marginTop: 10 }}>No cold plunge, no training today.</div>
+                  </div>
+                ) : !tp || !tp.hasProtocol ? (
                   <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Your plan is being prepared</div>
                     <p style={{ fontSize: 12.5, color: "var(--text3)", margin: "0 0 12px 0", lineHeight: 1.6 }}>Dustin will assign your protocol after your first session.</p>
@@ -1321,9 +1401,7 @@ export function DashboardReactClient({
                   </div>
                 ) : tp.isRestDay ? (
                   <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
-                    <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 10px 0", lineHeight: 1.65 }}>
-                      Rest is where your results are made. Every adaptation from this week&apos;s training happens today. Protect your sleep, eat well, and hydrate.
-                    </p>
+                    <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 10px 0", lineHeight: 1.65 }}>Rest is where your results are made. Protect your sleep, eat well, and hydrate.</p>
                     <div style={{ fontSize: 12, color: "var(--text3)" }}>You completed {weekTotal} session{weekTotal !== 1 ? "s" : ""} this week.</div>
                   </div>
                 ) : tp.activities.length === 0 ? (
@@ -1335,7 +1413,6 @@ export function DashboardReactClient({
                     <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, marginBottom: 14 }}>
                       {tp.dayDescription.length > 160 ? tp.dayDescription.slice(0, 160) + "…" : tp.dayDescription}
                     </p>
-                    {/* Activity list */}
                     <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 14 }}>
                       {tp.activities.map((act, i) => (
                         <div key={act.id} style={{ display: "flex", alignItems: "center", padding: "9px 14px", borderBottom: i < tp.activities.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
@@ -1364,14 +1441,17 @@ export function DashboardReactClient({
                   </>
                 )}
 
-                {/* Weekly progress */}
+                {/* Weekly progress — target adjusted for recovery/hurt days */}
                 <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                     <span style={{ fontSize: 12, color: "var(--text3)" }}>This week</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: done1 === cl1.length && cl1.length > 0 ? "#9dcc3a" : "var(--text2)" }}>{done1} of {cl1.length} sessions complete</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: done1 >= adjustedTotal && adjustedTotal > 0 ? "#9dcc3a" : "var(--text2)" }}>
+                      {done1} of {adjustedTotal} sessions complete
+                      {isAdaptedDay && <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: 6 }}>· rest day</span>}
+                    </span>
                   </div>
                   <div style={{ height: 5, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${cl1.length > 0 ? (done1 / cl1.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 3, transition: "width 0.3s" }} />
+                    <div style={{ height: "100%", width: `${adjustedTotal > 0 ? Math.min(100, (done1 / adjustedTotal) * 100) : 0}%`, background: "#9dcc3a", borderRadius: 3, transition: "width 0.3s" }} />
                   </div>
                 </div>
               </div>
