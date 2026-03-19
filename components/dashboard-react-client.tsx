@@ -2620,69 +2620,6 @@ export function DashboardReactClient({
                     })}
                   </div>
 
-                  {/* Exercise history panel */}
-                  {selectedArxExercise && (() => {
-                    const exSessions = payload.arxSessions
-                      .filter((s) => s.exercise === selectedArxExercise)
-                      .slice(0, 200);
-                    // Group by date — best set per day
-                    const byDate = new Map<string, { conc: number | null; ecc: number | null; date: string }>();
-                    for (const s of exSessions) {
-                      const d = s.sessionDate.slice(0, 10);
-                      const cur = byDate.get(d);
-                      if (!cur || (s.concentricMax ?? 0) > (cur.conc ?? 0)) {
-                        byDate.set(d, { conc: s.concentricMax, ecc: s.eccentricMax, date: d });
-                      }
-                    }
-                    const rows = Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
-                    const rowsAsc = [...rows].reverse();
-                    const sparkValsH = rowsAsc.map((r) => r.conc);
-                    const pathH = sparklinePath(sparkValsH, 200, 40);
-                    const allConc = rows.map((r) => r.conc ?? 0).filter((v) => v > 0);
-                    const prConc = allConc.length ? Math.max(...allConc) : 0;
-                    return (
-                      <div className="card" style={{ marginBottom: 16 }}>
-                        <div style={{ padding: "14px 18px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{selectedArxExercise} — Full History</div>
-                          <button type="button" style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 16, padding: 0 }} onClick={() => setSelectedArxExercise(null)}>✕</button>
-                        </div>
-                        {/* Progress chart */}
-                        {pathH && (
-                          <div style={{ padding: "14px 18px 8px" }}>
-                            <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Concentric progression</div>
-                            <svg viewBox="0 0 200 40" style={{ width: "100%", height: 40, display: "block", marginBottom: 4 }}>
-                              <path d={pathH} fill="none" stroke="#9dcc3a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                            <div style={{ display: "flex", justifyContent: "space-between" }}>
-                              <span style={{ fontSize: 9, color: "var(--text3)" }}>{rowsAsc[0]?.conc != null ? `${Math.round(rowsAsc[0].conc)} lbs` : ""}</span>
-                              <span style={{ fontSize: 10, fontWeight: 600, color: "#9dcc3a" }}>PR: {prConc > 0 ? `${Math.round(prConc)} lbs` : "--"}</span>
-                              <span style={{ fontSize: 9, color: "var(--text3)" }}>{rows[0]?.conc != null ? `${Math.round(rows[0].conc)} lbs` : ""}</span>
-                            </div>
-                          </div>
-                        )}
-                        {/* Session table */}
-                        <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                          {rows.map((r, i) => {
-                            const ratio = r.conc && r.ecc ? r.ecc / r.conc : null;
-                            const isPR = r.conc != null && r.conc === prConc;
-                            const dateLabel = new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-                            return (
-                              <div key={r.date} style={{ display: "flex", alignItems: "center", padding: "9px 18px", borderTop: i === 0 ? "1px solid var(--border)" : "1px solid rgba(255,255,255,0.04)", background: isPR ? "rgba(157,204,58,0.04)" : "transparent" }}>
-                                <div style={{ width: 90, fontSize: 11.5, color: "var(--text3)", flexShrink: 0 }}>{dateLabel}</div>
-                                <div style={{ flex: 1, display: "flex", gap: 16 }}>
-                                  {r.conc != null && <span style={{ fontSize: 12, color: "var(--text2)" }}>Conc <b style={{ color: isPR ? "#9dcc3a" : "var(--text)" }}>{Math.round(r.conc)} lbs</b></span>}
-                                  {r.ecc != null && <span style={{ fontSize: 12, color: "var(--text2)" }}>Ecc <b style={{ color: "var(--text)" }}>{Math.round(r.ecc)} lbs</b></span>}
-                                  {ratio != null && <span style={{ fontSize: 11, color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}×</span>}
-                                </div>
-                                {isPR && <span style={{ fontSize: 9, color: "#9dcc3a", fontWeight: 700 }}>PR</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        <div style={{ padding: "8px 18px 12px", fontSize: 10, color: "var(--text3)" }}>{rows.length} session{rows.length !== 1 ? "s" : ""} total</div>
-                      </div>
-                    );
-                  })()}
                   </>
                 ) : (
                   <div className="card" style={{ textAlign: "center", padding: "32px 24px" }}>
@@ -3589,6 +3526,92 @@ export function DashboardReactClient({
             )}
           </div>
         )}
+
+        {/* ARX exercise history overlay */}
+        {selectedArxExercise && (() => {
+          const exSessions = payload.arxSessions.filter((s) => s.exercise === selectedArxExercise).slice(0, 200);
+          const byDate = new Map<string, { conc: number | null; ecc: number | null; date: string }>();
+          for (const s of exSessions) {
+            const d = s.sessionDate.slice(0, 10);
+            const cur = byDate.get(d);
+            if (!cur || (s.concentricMax ?? 0) > (cur.conc ?? 0)) byDate.set(d, { conc: s.concentricMax, ecc: s.eccentricMax, date: d });
+          }
+          const rows = Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
+          const rowsAsc = [...rows].reverse();
+          const sparkValsH = rowsAsc.map((r) => r.conc);
+          const pathH = sparklinePath(sparkValsH, 200, 40);
+          const allConc = rows.map((r) => r.conc ?? 0).filter((v) => v > 0);
+          const prConc = allConc.length ? Math.max(...allConc) : 0;
+          return (
+            <div style={{ position: "fixed", inset: 0, background: "var(--bg2)", zIndex: 2000, display: "flex", flexDirection: "column", overflowY: "auto" }}>
+              {/* Header */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--border)", flexShrink: 0, background: "var(--bg2)" }}>
+                <div>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 3 }}>Exercise History</div>
+                  <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)" }}>{selectedArxExercise}</div>
+                </div>
+                <button type="button" style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 22, padding: "4px 8px", lineHeight: 1 }} onClick={() => setSelectedArxExercise(null)}>✕</button>
+              </div>
+
+              <div style={{ flex: 1, padding: "20px 20px 32px", maxWidth: 600, margin: "0 auto", width: "100%" }}>
+                {/* Stats row */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
+                  <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>PR</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#9dcc3a" }}>{prConc > 0 ? `${Math.round(prConc)} lbs` : "—"}</div>
+                    <div style={{ fontSize: 9, color: "var(--text3)" }}>concentric</div>
+                  </div>
+                  <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Sessions</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{rows.length}</div>
+                    <div style={{ fontSize: 9, color: "var(--text3)" }}>total</div>
+                  </div>
+                  <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
+                    <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Last</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{rows[0]?.conc != null ? `${Math.round(rows[0].conc)}` : "—"}</div>
+                    <div style={{ fontSize: 9, color: "var(--text3)" }}>lbs conc</div>
+                  </div>
+                </div>
+
+                {/* Progression chart */}
+                {pathH && (
+                  <div style={{ background: "var(--bg3)", borderRadius: "var(--r)", padding: "14px 16px", marginBottom: 20 }}>
+                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>Concentric max progression</div>
+                    <svg viewBox="0 0 200 40" style={{ width: "100%", height: 44, display: "block", marginBottom: 6 }}>
+                      <path d={pathH} fill="none" stroke="#9dcc3a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ fontSize: 10, color: "var(--text3)" }}>{rowsAsc[0]?.conc != null ? `${Math.round(rowsAsc[0].conc)} lbs` : ""}</span>
+                      <span style={{ fontSize: 10, color: "var(--text3)" }}>→</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#9dcc3a" }}>{rows[0]?.conc != null ? `${Math.round(rows[0].conc)} lbs today` : ""}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Session log */}
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>Session log</div>
+                <div style={{ background: "var(--bg3)", borderRadius: "var(--r)" }}>
+                  {rows.map((r, i) => {
+                    const ratio = r.conc && r.ecc ? r.ecc / r.conc : null;
+                    const isPR = r.conc != null && r.conc === prConc;
+                    const dateLabel = new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+                    return (
+                      <div key={r.date} style={{ display: "flex", alignItems: "center", padding: "11px 16px", borderTop: i > 0 ? "1px solid var(--border)" : "none", background: isPR ? "rgba(157,204,58,0.04)" : "transparent" }}>
+                        <div style={{ fontSize: 12, color: "var(--text3)", flexShrink: 0, width: 110 }}>{dateLabel}</div>
+                        <div style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                          {r.conc != null && <span style={{ fontSize: 13, color: "var(--text2)" }}>Conc <b style={{ color: isPR ? "#9dcc3a" : "var(--text)" }}>{Math.round(r.conc)} lbs</b></span>}
+                          {r.ecc != null && <span style={{ fontSize: 13, color: "var(--text2)" }}>Ecc <b style={{ color: "var(--text)" }}>{Math.round(r.ecc)} lbs</b></span>}
+                          {ratio != null && <span style={{ fontSize: 12, color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}×</span>}
+                        </div>
+                        {isPR && <span style={{ fontSize: 10, fontWeight: 700, color: "#9dcc3a", flexShrink: 0 }}>PR</span>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Core activity guardrail modal */}
         {guardrailItem && (
