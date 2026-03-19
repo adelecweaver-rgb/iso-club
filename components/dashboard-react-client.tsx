@@ -1136,9 +1136,6 @@ export function DashboardReactClient({
             <Link className="nav-item" href="/member/progress">
               Healthspan Progress
             </Link>
-            <button className={activeMemberView("goals")} onClick={() => setMemberSection("goals")} type="button">
-              My Goals
-            </button>
           </div>
           <div className="nav-group">
             <div className="nav-group-label">Machine Data</div>
@@ -1724,7 +1721,7 @@ export function DashboardReactClient({
 
         </div>
 
-        <div id="view-goals" className="content" style={{ display: mode === "member" && memberView === "goals" ? "block" : "none" }}>
+        <div id="view-goals" className="content" style={{ display: "none" }}>
           <div className="sec-header"><div className="sec-title">My Goals</div></div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginBottom: 20 }}>
             {(["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).map((goalType) => {
@@ -2019,6 +2016,88 @@ export function DashboardReactClient({
                     )}
                   </div>
                 )}
+
+                {/* ── Goals (moved from My Goals tab) ─────────────────────── */}
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 14 }}>My Goals</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12, marginBottom: 16 }}>
+                    {(["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).map((goalType) => {
+                      const def = GOAL_DEFS[goalType];
+                      const prog = payload.goals.progress[goalType];
+                      const isActive = localGoals[goalType] ?? false;
+                      const isSaving = savingGoal === goalType;
+                      const color = goalStatusColor(prog.direction);
+                      const progTarget = (prog as { target?: number }).target ?? 0;
+                      const progCurrent = (prog as { current?: number }).current ?? 0;
+                      const barPct = goalType === "attendance" && progTarget > 0
+                        ? Math.min(100, (progCurrent / progTarget) * 100)
+                        : prog.direction === "positive" ? 80 : prog.direction === "neutral" ? 50 : prog.direction === "negative" ? 20 : 0;
+                      return (
+                        <div key={goalType} className="card" style={{ padding: "14px 16px", opacity: isActive ? 1 : 0.55 }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
+                            <div>
+                              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>{def.name}</div>
+                              <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{def.category}</div>
+                            </div>
+                            <button type="button" onClick={() => { void handleGoalToggle(goalType); }} disabled={isSaving}
+                              style={{ width: 40, height: 22, borderRadius: 11, background: isActive ? "#9dcc3a" : "var(--bg3)", border: `2px solid ${isActive ? "#9dcc3a" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0, opacity: isSaving ? 0.5 : 1 }}>
+                              <div style={{ width: 14, height: 14, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: isActive ? 20 : 2, transition: "left 0.2s" }} />
+                            </button>
+                          </div>
+                          <p style={{ fontSize: 11.5, color: "var(--text3)", lineHeight: 1.5, marginBottom: isActive ? 10 : 0 }}>{def.description}</p>
+                          {isActive && (
+                            <>
+                              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
+                                <div style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                                <span style={{ fontSize: 11.5, fontWeight: 600, color }}>{goalStatusLabel(prog.status)}</span>
+                              </div>
+                              <div style={{ fontSize: 11.5, color: "var(--text2)", marginBottom: 8 }}>{prog.display}</div>
+                              <div style={{ height: 3, background: "var(--bg3)", borderRadius: 2, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${barPct}%`, background: color, borderRadius: 2, transition: "width 0.4s ease" }} />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Protocol recommendation */}
+                  {(() => {
+                    const active = Object.entries(localGoals).filter(([, v]) => v).map(([k]) => k);
+                    const rec = recommendProtocol(active);
+                    if (!rec || active.length === 0) return null;
+                    const reason = PROTOCOL_REASONS[rec] ?? "Matched to your current goal combination.";
+                    async function handleAskCoachHere() {
+                      if (isRequestingProtocol || protocolRequested) return;
+                      setIsRequestingProtocol(true);
+                      try {
+                        let resolvedPeerId = peerId;
+                        if (!resolvedPeerId) {
+                          const inbox = await getJson<{ peer?: { id?: string }; coach?: { id?: string } }>("/api/messages/inbox");
+                          resolvedPeerId = String(inbox.peer?.id || inbox.coach?.id || "");
+                        }
+                        if (!resolvedPeerId) throw new Error("no peer");
+                        const goalNames = active.map((g) => GOAL_DEFS[g]?.name ?? g).join(", ");
+                        await postJson("/api/messages/send", { recipient_id: resolvedPeerId, body: `Hi Dustin — the dashboard is recommending the ${rec} protocol based on my current goals (${goalNames}). Could you assign this when you have a chance? Thanks!` });
+                        setProtocolRequested(true);
+                      } catch { /* silent */ } finally { setIsRequestingProtocol(false); }
+                    }
+                    return (
+                      <div style={{ background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.25)", borderRadius: "var(--r)", padding: "16px 20px" }}>
+                        <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(157,204,58,0.7)", marginBottom: 8 }}>Protocol Recommendation</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Based on your goals: <span style={{ color: "#9dcc3a" }}>{rec}</span></div>
+                        <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.6, margin: "0 0 12px 0" }}>{reason}</p>
+                        {protocolRequested ? (
+                          <span style={{ fontSize: 12, color: "#9dcc3a", fontWeight: 500 }}>✓ Request sent to Dustin</span>
+                        ) : (
+                          <button type="button" className="btn btn-lime btn-sm" style={{ fontSize: 12 }} disabled={isRequestingProtocol} onClick={() => { void handleAskCoachHere(); }}>
+                            {isRequestingProtocol ? "Sending…" : "Ask coach to assign this protocol"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               </>
             );
           })()}
