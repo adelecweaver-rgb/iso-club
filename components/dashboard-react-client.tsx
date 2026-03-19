@@ -781,6 +781,7 @@ export function DashboardReactClient({
   const [dayPickerOpen, setDayPickerOpen] = useState<{ day: WeekDay | null; }>({ day: null });
   const [movingDay, setMovingDay] = useState(false);
   const [bonusCelebration, setBonusCelebration] = useState("");
+  const [selectedArxExercise, setSelectedArxExercise] = useState<string | null>(null);
   type DayActivity = { date: string; arx: Array<{ exercise: string; concentricMax: number | null; eccentricMax: number | null }>; carol: Array<{ rideType: string; manp: number | null; peakPower: number | null }>; recovery: Array<{ modality: string }>; manual: Array<{ equipment: string }> };
   const [historyDays, setHistoryDays] = useState<DayActivity[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -2503,6 +2504,46 @@ export function DashboardReactClient({
                   <div className="stat-card"><div className="stat-label">Top exercise</div><div className="stat-val" style={{ fontSize: 13 }}>{peakExercise}</div></div>
                 </div>
 
+                {/* Last workout summary */}
+                {(() => {
+                  const latestDate = payload.arxSessions[0]?.sessionDate?.slice(0, 10);
+                  if (!latestDate) return null;
+                  const lastSessions = payload.arxSessions.filter((s) => s.sessionDate.slice(0, 10) === latestDate);
+                  // Best set per exercise that day
+                  const byEx = new Map<string, { conc: number | null; ecc: number | null }>();
+                  for (const s of lastSessions) {
+                    const cur = byEx.get(s.exercise);
+                    if (!cur || (s.concentricMax ?? 0) > (cur.conc ?? 0)) {
+                      byEx.set(s.exercise, { conc: s.concentricMax, ecc: s.eccentricMax });
+                    }
+                  }
+                  const dateLabel = new Date(latestDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                  return (
+                    <div className="card" style={{ marginBottom: 16 }}>
+                      <div style={{ padding: "12px 18px 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Last workout</div>
+                        <div style={{ fontSize: 11, color: "var(--text3)" }}>{dateLabel}</div>
+                      </div>
+                      {Array.from(byEx.entries()).map(([ex, vals]) => {
+                        const ratio = vals.conc && vals.ecc ? vals.ecc / vals.conc : null;
+                        return (
+                          <div key={ex} style={{ display: "flex", alignItems: "center", padding: "8px 18px", borderTop: "1px solid var(--border)" }}>
+                            <div style={{ flex: 1, fontSize: 13, color: "var(--text2)", fontWeight: 500 }}>{ex}</div>
+                            <div style={{ display: "flex", gap: 16, fontSize: 11, color: "var(--text3)" }}>
+                              {vals.conc != null && <span>Conc <b style={{ color: "var(--text)" }}>{Math.round(vals.conc)} lbs</b></span>}
+                              {vals.ecc != null && <span>Ecc <b style={{ color: "var(--text)" }}>{Math.round(vals.ecc)} lbs</b></span>}
+                              {ratio != null && <span style={{ color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}×</span>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div style={{ padding: "8px 18px 12px", fontSize: 10, color: "var(--text3)" }}>
+                        {byEx.size} exercise{byEx.size !== 1 ? "s" : ""} · tap an exercise card below for full history
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Coaching insight */}
                 {totalSessions > 0 && (
                   <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
@@ -2511,8 +2552,9 @@ export function DashboardReactClient({
                   </div>
                 )}
 
-                {/* Per-exercise cards */}
+                {/* Per-exercise cards — click to view history */}
                 {arxGroups.length > 0 ? (
+                  <>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginBottom: 16 }}>
                     {arxGroups.map(({ exercise, sessions }) => {
                       const latest = sessions[0];
@@ -2522,19 +2564,21 @@ export function DashboardReactClient({
                       const ratioInfo = ratio !== null ? eccRatioLabel(ratio) : null;
                       const pr = conc !== null ? Math.max(...sessions.map((s) => s.concentricMax ?? 0)) : 0;
                       const isPR = conc !== null && conc >= pr && sessions.length > 1;
-                      // Sparkline: last 12 sessions ascending
                       const sparkVals = sessions.slice(0, 12).reverse().map((s) => s.concentricMax);
                       const sparkFirst = sparkVals.find((v) => v !== null) ?? null;
                       const sparkLast = [...sparkVals].reverse().find((v) => v !== null) ?? null;
                       const trending = sparkFirst !== null && sparkLast !== null && sparkLast > sparkFirst;
                       const path = sparklinePath(sparkVals, 100, 32);
+                      const isSelected = selectedArxExercise === exercise;
 
                       return (
-                        <div key={exercise} className="card" style={{ padding: "16px 18px" }}>
+                        <div key={exercise} className="card"
+                          style={{ padding: "16px 18px", cursor: "pointer", border: isSelected ? "1px solid rgba(157,204,58,0.4)" : undefined, background: isSelected ? "rgba(157,204,58,0.04)" : undefined }}
+                          onClick={() => setSelectedArxExercise(isSelected ? null : exercise)}>
                           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
                             <div>
                               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", letterSpacing: "0.04em", textTransform: "uppercase" }}>{exercise}</div>
-                              <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 2 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""}</div>
+                              <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 2 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""} · {isSelected ? "tap to close" : "tap for history"}</div>
                             </div>
                             {isPR && <span style={{ fontSize: 9, background: "rgba(157,204,58,0.15)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.3)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
                           </div>
@@ -2575,6 +2619,71 @@ export function DashboardReactClient({
                       );
                     })}
                   </div>
+
+                  {/* Exercise history panel */}
+                  {selectedArxExercise && (() => {
+                    const exSessions = payload.arxSessions
+                      .filter((s) => s.exercise === selectedArxExercise)
+                      .slice(0, 200);
+                    // Group by date — best set per day
+                    const byDate = new Map<string, { conc: number | null; ecc: number | null; date: string }>();
+                    for (const s of exSessions) {
+                      const d = s.sessionDate.slice(0, 10);
+                      const cur = byDate.get(d);
+                      if (!cur || (s.concentricMax ?? 0) > (cur.conc ?? 0)) {
+                        byDate.set(d, { conc: s.concentricMax, ecc: s.eccentricMax, date: d });
+                      }
+                    }
+                    const rows = Array.from(byDate.values()).sort((a, b) => b.date.localeCompare(a.date));
+                    const rowsAsc = [...rows].reverse();
+                    const sparkValsH = rowsAsc.map((r) => r.conc);
+                    const pathH = sparklinePath(sparkValsH, 200, 40);
+                    const allConc = rows.map((r) => r.conc ?? 0).filter((v) => v > 0);
+                    const prConc = allConc.length ? Math.max(...allConc) : 0;
+                    return (
+                      <div className="card" style={{ marginBottom: 16 }}>
+                        <div style={{ padding: "14px 18px 10px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--border)" }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{selectedArxExercise} — Full History</div>
+                          <button type="button" style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 16, padding: 0 }} onClick={() => setSelectedArxExercise(null)}>✕</button>
+                        </div>
+                        {/* Progress chart */}
+                        {pathH && (
+                          <div style={{ padding: "14px 18px 8px" }}>
+                            <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Concentric progression</div>
+                            <svg viewBox="0 0 200 40" style={{ width: "100%", height: 40, display: "block", marginBottom: 4 }}>
+                              <path d={pathH} fill="none" stroke="#9dcc3a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                            <div style={{ display: "flex", justifyContent: "space-between" }}>
+                              <span style={{ fontSize: 9, color: "var(--text3)" }}>{rowsAsc[0]?.conc != null ? `${Math.round(rowsAsc[0].conc)} lbs` : ""}</span>
+                              <span style={{ fontSize: 10, fontWeight: 600, color: "#9dcc3a" }}>PR: {prConc > 0 ? `${Math.round(prConc)} lbs` : "--"}</span>
+                              <span style={{ fontSize: 9, color: "var(--text3)" }}>{rows[0]?.conc != null ? `${Math.round(rows[0].conc)} lbs` : ""}</span>
+                            </div>
+                          </div>
+                        )}
+                        {/* Session table */}
+                        <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                          {rows.map((r, i) => {
+                            const ratio = r.conc && r.ecc ? r.ecc / r.conc : null;
+                            const isPR = r.conc != null && r.conc === prConc;
+                            const dateLabel = new Date(r.date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                            return (
+                              <div key={r.date} style={{ display: "flex", alignItems: "center", padding: "9px 18px", borderTop: i === 0 ? "1px solid var(--border)" : "1px solid rgba(255,255,255,0.04)", background: isPR ? "rgba(157,204,58,0.04)" : "transparent" }}>
+                                <div style={{ width: 90, fontSize: 11.5, color: "var(--text3)", flexShrink: 0 }}>{dateLabel}</div>
+                                <div style={{ flex: 1, display: "flex", gap: 16 }}>
+                                  {r.conc != null && <span style={{ fontSize: 12, color: "var(--text2)" }}>Conc <b style={{ color: isPR ? "#9dcc3a" : "var(--text)" }}>{Math.round(r.conc)} lbs</b></span>}
+                                  {r.ecc != null && <span style={{ fontSize: 12, color: "var(--text2)" }}>Ecc <b style={{ color: "var(--text)" }}>{Math.round(r.ecc)} lbs</b></span>}
+                                  {ratio != null && <span style={{ fontSize: 11, color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}×</span>}
+                                </div>
+                                {isPR && <span style={{ fontSize: 9, color: "#9dcc3a", fontWeight: 700 }}>PR</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{ padding: "8px 18px 12px", fontSize: 10, color: "var(--text3)" }}>{rows.length} session{rows.length !== 1 ? "s" : ""} total</div>
+                      </div>
+                    );
+                  })()}
+                  </>
                 ) : (
                   <div className="card" style={{ textAlign: "center", padding: "32px 24px" }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>No ARX data yet</div>
