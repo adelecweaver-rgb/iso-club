@@ -19,7 +19,8 @@ type MemberSection =
   | "messages"
   | "reports"
   | "schedule"
-  | "goals";
+  | "goals"
+  | "history";
 
 type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 
@@ -249,7 +250,8 @@ function normalizeMemberSection(input: string | undefined): MemberSection {
     value === "messages" ||
     value === "reports" ||
     value === "schedule" ||
-    value === "goals"
+    value === "goals" ||
+    value === "history"
   ) {
     return value;
   }

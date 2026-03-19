@@ -15,7 +15,8 @@ type MemberSection =
   | "messages"
   | "reports"
   | "schedule"
-  | "goals";
+  | "goals"
+  | "history";
 
 type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 type ActorRole = "member" | "coach" | "admin" | "staff" | "unknown";
@@ -780,6 +781,13 @@ export function DashboardReactClient({
   const [dayPickerOpen, setDayPickerOpen] = useState<{ day: WeekDay | null; }>({ day: null });
   const [movingDay, setMovingDay] = useState(false);
   const [bonusCelebration, setBonusCelebration] = useState("");
+  type DayActivity = { date: string; arx: Array<{ exercise: string; concentricMax: number | null; eccentricMax: number | null }>; carol: Array<{ rideType: string; manp: number | null; peakPower: number | null }>; recovery: Array<{ modality: string }>; manual: Array<{ equipment: string }> };
+  const [historyDays, setHistoryDays] = useState<DayActivity[]>([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyLoadingMore, setHistoryLoadingMore] = useState(false);
+  const [historySelectedDate, setHistorySelectedDate] = useState<string | null>(null);
+  const [historyViewMonth, setHistoryViewMonth] = useState(() => new Date().getMonth());
+  const [historyViewYear, setHistoryViewYear] = useState(() => new Date().getFullYear());
   const [sessionStep, setSessionStep] = useState(0);
   const [sessionCompleted, setSessionCompleted] = useState<Set<number>>(new Set());
   const [weekViewOpen, setWeekViewOpen] = useState(false);
@@ -1134,6 +1142,9 @@ export function DashboardReactClient({
           </div>
           <div className="nav-group">
             <div className="nav-group-label">Machine Data</div>
+            <button className={activeMemberView("history")} onClick={() => setMemberSection("history")} type="button">
+              Workout History
+            </button>
             <button className={activeMemberView("carol")} onClick={() => setMemberSection("carol")} type="button">
               CAROL
             </button>
@@ -2007,6 +2018,207 @@ export function DashboardReactClient({
                       <div className="card-body"><p style={{ color: "var(--text3)" }}>No protocol assigned yet. Ask your coach to assign one.</p></div>
                     )}
                   </div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+
+        {/* ── Workout History ──────────────────────────────────────────── */}
+        <div id="view-history" className="content" style={{ display: mode === "member" && memberView === "history" ? "block" : "none" }}>
+          {(() => {
+            // Load data when tab opens
+            if (memberView === "history" && !historyLoaded && !historyLoadingMore) {
+              setHistoryLoadingMore(true);
+              void getJson<{ days: DayActivity[] }>("/api/member/activity-history?months=3")
+                .then((r) => { setHistoryDays(r.days ?? []); setHistoryLoaded(true); })
+                .catch(() => { setHistoryLoaded(true); })
+                .finally(() => setHistoryLoadingMore(false));
+            }
+
+            const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+            const DOW_LABELS = ["Mo","Tu","We","Th","Fr","Sa","Su"];
+            const today = new Date().toISOString().slice(0, 10);
+
+            // Build day index from history data
+            const dayIndex = new Map<string, DayActivity>();
+            for (const d of historyDays) dayIndex.set(d.date, d);
+
+            // Calendar grid for current view month
+            const firstDay = new Date(historyViewYear, historyViewMonth, 1).getDay();
+            const daysInMonth = new Date(historyViewYear, historyViewMonth + 1, 0).getDate();
+            const firstDayMon = firstDay === 0 ? 6 : firstDay - 1;
+            const cells: Array<{ date: string | null; dayNum: number | null }> = [];
+            for (let i = 0; i < firstDayMon; i++) cells.push({ date: null, dayNum: null });
+            for (let d = 1; d <= daysInMonth; d++) {
+              const date = `${historyViewYear}-${String(historyViewMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+              cells.push({ date, dayNum: d });
+            }
+
+            const getActivityDots = (data: DayActivity | undefined): Array<{ color: string; label: string }> => {
+              if (!data) return [];
+              const dots: Array<{ color: string; label: string }> = [];
+              if (data.arx.length > 0) dots.push({ color: "#9dcc3a", label: "Strength" });
+              if (data.carol.length > 0) dots.push({ color: "#38bdf8", label: "Cardio" });
+              if (data.recovery.length > 0) dots.push({ color: "#a78bfa", label: "Recovery" });
+              if (data.manual.length > 0 && dots.length < 3) dots.push({ color: "#2ec8c8", label: "Activity" });
+              return dots.slice(0, 3);
+            };
+
+            const MODALITY_LABELS: Record<string, string> = { cold_plunge: "Cold plunge", sauna: "Sauna", compression: "Compression", infrared_sauna: "Infrared sauna", nxpro: "NxPro", vasper: "Vasper", quickboard: "Quickboard", katalyst: "Katalyst EMS", walk: "Walk", stretching: "Stretching", other_cardio: "Other cardio" };
+            const RIDE_LABELS: Record<string, string> = { REHIT: "REHIT", FAT_BURN_30: "Fat Burn 30", FAT_BURN_45: "Fat Burn 45", FAT_BURN_60: "Fat Burn 60", ENERGISER: "Energiser" };
+
+            const selectedData = historySelectedDate ? dayIndex.get(historySelectedDate) : null;
+            const totalDaysWithActivity = historyDays.length;
+
+            return (
+              <>
+                <div className="sec-header">
+                  <div className="sec-title">Workout History</div>
+                  {totalDaysWithActivity > 0 && (
+                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{totalDaysWithActivity} active days</div>
+                  )}
+                </div>
+
+                {historyLoadingMore && !historyLoaded ? (
+                  <div className="card"><div className="card-body" style={{ color: "var(--text3)", fontSize: 13 }}>Loading history…</div></div>
+                ) : (
+                  <>
+                    {/* Calendar */}
+                    <div className="card" style={{ marginBottom: 14 }}>
+                      {/* Month navigation */}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px 12px" }}>
+                        <button type="button" style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 18, padding: "0 8px" }}
+                          onClick={() => { const d = new Date(historyViewYear, historyViewMonth - 1, 1); setHistoryViewMonth(d.getMonth()); setHistoryViewYear(d.getFullYear()); setHistorySelectedDate(null); }}>‹</button>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>{MONTHS[historyViewMonth]} {historyViewYear}</div>
+                        <button type="button" style={{ background: "none", border: "none", color: new Date(historyViewYear, historyViewMonth + 1) > new Date() ? "var(--text3)" : "var(--text3)", cursor: "pointer", fontSize: 18, padding: "0 8px" }}
+                          onClick={() => { const d = new Date(historyViewYear, historyViewMonth + 1, 1); if (d <= new Date()) { setHistoryViewMonth(d.getMonth()); setHistoryViewYear(d.getFullYear()); setHistorySelectedDate(null); } }}>›</button>
+                      </div>
+
+                      {/* Day of week headers */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", padding: "0 12px 6px" }}>
+                        {DOW_LABELS.map((d) => (
+                          <div key={d} style={{ textAlign: "center", fontSize: 10, color: "var(--text3)", fontWeight: 600, letterSpacing: "0.05em" }}>{d}</div>
+                        ))}
+                      </div>
+
+                      {/* Calendar grid */}
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, padding: "0 12px 14px" }}>
+                        {cells.map((cell, i) => {
+                          if (!cell.date || !cell.dayNum) return <div key={i} />;
+                          const data = dayIndex.get(cell.date);
+                          const dots = getActivityDots(data);
+                          const isToday = cell.date === today;
+                          const isSelected = cell.date === historySelectedDate;
+                          const hasActivity = dots.length > 0;
+                          return (
+                            <button key={cell.date} type="button"
+                              onClick={() => setHistorySelectedDate(isSelected ? null : cell.date)}
+                              style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "6px 2px", borderRadius: 8, background: isSelected ? "rgba(157,204,58,0.12)" : hasActivity ? "rgba(255,255,255,0.04)" : "transparent", border: isToday ? "1.5px solid rgba(157,204,58,0.4)" : isSelected ? "1.5px solid rgba(157,204,58,0.5)" : "1.5px solid transparent", cursor: "pointer", minHeight: 44 }}>
+                              <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? "#9dcc3a" : "var(--text2)" }}>{cell.dayNum}</span>
+                              <div style={{ display: "flex", gap: 2, marginTop: 3 }}>
+                                {dots.map((dot, di) => (
+                                  <div key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: dot.color }} />
+                                ))}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Legend */}
+                      <div style={{ display: "flex", gap: 14, padding: "0 20px 14px", flexWrap: "wrap" }}>
+                        {[{ color: "#9dcc3a", label: "Strength" }, { color: "#38bdf8", label: "Cardio" }, { color: "#a78bfa", label: "Recovery" }, { color: "#2ec8c8", label: "Activity" }].map(({ color, label }) => (
+                          <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                            <div style={{ width: 7, height: 7, borderRadius: "50%", background: color }} />
+                            <span style={{ fontSize: 10, color: "var(--text3)" }}>{label}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Day detail panel */}
+                    {historySelectedDate && (
+                      <div className="card" style={{ marginBottom: 14 }}>
+                        <div style={{ padding: "14px 20px 4px" }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 12 }}>
+                            {new Date(historySelectedDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
+                          </div>
+                          {!selectedData ? (
+                            <p style={{ fontSize: 13, color: "var(--text3)", margin: "0 0 14px 0" }}>Rest day — no sessions logged.</p>
+                          ) : (
+                            <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 14 }}>
+                              {selectedData.arx.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#9dcc3a", marginBottom: 8 }}>Strength (ARX)</div>
+                                  {selectedData.arx.map((a, i) => (
+                                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                                      <span style={{ fontSize: 13, color: "var(--text2)" }}>{a.exercise}</span>
+                                      <div style={{ display: "flex", gap: 14 }}>
+                                        {a.concentricMax != null && <span style={{ fontSize: 11, color: "var(--text3)" }}>Conc <b style={{ color: "var(--text)" }}>{Math.round(a.concentricMax)} lbs</b></span>}
+                                        {a.eccentricMax != null && <span style={{ fontSize: 11, color: "var(--text3)" }}>Ecc <b style={{ color: "var(--text)" }}>{Math.round(a.eccentricMax)} lbs</b></span>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {selectedData.carol.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#38bdf8", marginBottom: 8 }}>Cardio (CAROL)</div>
+                                  {selectedData.carol.map((c, i) => (
+                                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                                      <span style={{ fontSize: 13, color: "var(--text2)" }}>{RIDE_LABELS[c.rideType] ?? c.rideType.replace(/_/g, " ")}</span>
+                                      <div style={{ display: "flex", gap: 14 }}>
+                                        {c.manp != null && c.manp > 0 && <span style={{ fontSize: 11, color: "var(--text3)" }}>MANP <b style={{ color: "var(--text)" }}>{Math.round(c.manp)}W</b></span>}
+                                        {c.peakPower != null && c.peakPower > 0 && <span style={{ fontSize: 11, color: "var(--text3)" }}>Peak <b style={{ color: "var(--text)" }}>{Math.round(c.peakPower)}W</b></span>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {selectedData.recovery.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#a78bfa", marginBottom: 8 }}>Recovery</div>
+                                  {selectedData.recovery.map((r, i) => (
+                                    <div key={i} style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                                      <span style={{ fontSize: 13, color: "var(--text2)" }}>{MODALITY_LABELS[r.modality] ?? r.modality.replace(/_/g, " ")}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              {selectedData.manual.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#2ec8c8", marginBottom: 8 }}>Activities</div>
+                                  {selectedData.manual.map((m, i) => (
+                                    <div key={i} style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
+                                      <span style={{ fontSize: 13, color: "var(--text2)" }}>{MODALITY_LABELS[m.equipment] ?? m.equipment.replace(/_/g, " ")}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Load more */}
+                    {historyLoaded && historyDays.length === 0 && (
+                      <div className="card"><div className="card-body"><p style={{ color: "var(--text3)" }}>No sessions logged yet. Start logging activities to see your history here.</p></div></div>
+                    )}
+                    {historyLoaded && (
+                      <div style={{ textAlign: "center", marginTop: 4 }}>
+                        <button type="button" className="btn btn-sm" style={{ fontSize: 11 }} disabled={historyLoadingMore}
+                          onClick={async () => {
+                            setHistoryLoadingMore(true);
+                            try { const r = await getJson<{ days: DayActivity[] }>("/api/member/activity-history?months=12"); setHistoryDays(r.days ?? []); } catch { /* */ }
+                            finally { setHistoryLoadingMore(false); }
+                          }}>
+                          {historyLoadingMore ? "Loading…" : "Load full year →"}
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </>
             );
