@@ -520,7 +520,7 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     (async () => {
       const newRes = await supabase
         .from("member_protocols")
-        .select("id,start_date,coach_notes,customization_notes,protocols(id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
+        .select("id,start_date,coach_notes,protocols(id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
         .eq("member_id", memberId)
         .eq("status", "active")
         .order("assigned_at", { ascending: false })
@@ -831,8 +831,14 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     payload.protocol.carolRideTypes = Array.isArray(protocolLib.carol_ride_types) ? (protocolLib.carol_ride_types as string[]) : [];
     payload.protocol.arxExercises = Array.isArray(protocolLib.arx_exercises) ? (protocolLib.arx_exercises as string[]) : [];
     payload.protocol.coachNotes = stringOr(protocolRow!.coach_notes, "");
-    payload.protocol.customizationNotes = stringOr(protocolRow!.customization_notes, "");
     payload.protocol.startDate = stringOr(protocolRow!.start_date, "");
+    // Fetch customization_notes separately — column may not exist if migration hasn't run
+    try {
+      const cnRes = await supabase.from("member_protocols").select("customization_notes").eq("id", stringOr(protocolRow!.id, "")).limit(1);
+      if (!cnRes.error && cnRes.data?.length) {
+        payload.protocol.customizationNotes = stringOr((cnRes.data[0] as Record<string, unknown>).customization_notes, "");
+      }
+    } catch { /* column may not exist */ }
   } else if (protocolRow) {
     // Legacy: old per-member protocols table
     payload.protocol.name = stringOr(protocolRow.name, "");
