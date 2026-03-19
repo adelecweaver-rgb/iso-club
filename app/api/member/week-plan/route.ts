@@ -22,19 +22,26 @@ export async function GET() {
     // Get member's active protocol
     const mpRes = await supabase
       .from("member_protocols")
-      .select("protocol_id,protocols(id,name)")
+      .select("protocol_id,customization_notes,protocols(id,name)")
       .eq("member_id", memberId)
       .eq("status", "active")
       .order("assigned_at", { ascending: false })
       .limit(1);
     if (mpRes.error || !mpRes.data?.length) {
-      return NextResponse.json({ success: true, days: [], protocolName: "" });
+      return NextResponse.json({ success: true, days: [], protocolName: "", customizationNotes: null });
     }
     const mp = mpRes.data[0] as Record<string, unknown>;
     const proto = mp.protocols as Record<string, unknown> | null;
     const protocolId = asStr(proto?.id ?? "");
     const protocolName = asStr(proto?.name ?? "");
-    if (!protocolId) return NextResponse.json({ success: true, days: [], protocolName: "" });
+    const customizationNotes = asStr(mp.customization_notes ?? "") || null;
+    if (!protocolId) return NextResponse.json({ success: true, days: [], protocolName: "", customizationNotes: null });
+    // Current week overrides
+    const nowD = new Date(); const dowd = nowD.getDay(); const diffW = dowd === 0 ? -6 : 1 - dowd;
+    nowD.setDate(nowD.getDate() + diffW); nowD.setHours(0,0,0,0);
+    const weekStartStr = nowD.toISOString().slice(0, 10);
+    const overrideRes = await supabase.from("member_schedule_overrides").select("protocol_day_id,original_day_of_week,override_day_of_week").eq("member_id", memberId).eq("week_start", weekStartStr);
+    const overrides = (overrideRes.data ?? []) as Array<Record<string, unknown>>;
 
     // Fetch all 7 days
     const daysRes = await supabase
@@ -85,7 +92,7 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ success: true, days: result, protocolName });
+    return NextResponse.json({ success: true, days: result, protocolName, customizationNotes, overrides: overrides.map(o => ({ protocolDayId: asStr(o.protocol_day_id), originalDow: asNum(o.original_day_of_week), overrideDow: asNum(o.override_day_of_week) })) });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : "Failed.", days: [], protocolName: "" }, { status: 500 });
   }

@@ -157,6 +157,7 @@ type DashboardPayload = {
     carolRideTypes: string[];
     arxExercises: string[];
     coachNotes: string;
+    customizationNotes: string;
     startDate: string;
     compliance: { arxThisWeek: number; carolThisWeek: number; recoveryThisMonth: number };
   };
@@ -352,6 +353,7 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       carolRideTypes: [],
       arxExercises: [],
       coachNotes: "",
+      customizationNotes: "",
       startDate: "",
       compliance: { arxThisWeek: 0, carolThisWeek: 0, recoveryThisMonth: 0 },
     },
@@ -518,7 +520,7 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     (async () => {
       const newRes = await supabase
         .from("member_protocols")
-        .select("id,start_date,coach_notes,protocols(id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
+        .select("id,start_date,coach_notes,customization_notes,protocols(id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
         .eq("member_id", memberId)
         .eq("status", "active")
         .order("assigned_at", { ascending: false })
@@ -829,6 +831,7 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     payload.protocol.carolRideTypes = Array.isArray(protocolLib.carol_ride_types) ? (protocolLib.carol_ride_types as string[]) : [];
     payload.protocol.arxExercises = Array.isArray(protocolLib.arx_exercises) ? (protocolLib.arx_exercises as string[]) : [];
     payload.protocol.coachNotes = stringOr(protocolRow!.coach_notes, "");
+    payload.protocol.customizationNotes = stringOr(protocolRow!.customization_notes, "");
     payload.protocol.startDate = stringOr(protocolRow!.start_date, "");
   } else if (protocolRow) {
     // Legacy: old per-member protocols table
@@ -1049,7 +1052,20 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
       try {
         const jsDay = new Date().getDay();
         const dowSunday7 = jsDay === 0 ? 7 : jsDay;
-        const dayRes = await supabase.from("protocol_days").select("id,day_name,day_theme,day_description").eq("protocol_id", payload.protocol.id).eq("day_of_week", dowSunday7).limit(1);
+        // Check for schedule overrides for this week
+        const d = new Date(); const ddow = d.getDay(); const diff = ddow === 0 ? -6 : 1 - ddow;
+        d.setDate(d.getDate() + diff); d.setHours(0,0,0,0);
+        const weekStartStr = d.toISOString().slice(0, 10);
+        let targetDayRes: Awaited<ReturnType<typeof supabase.from>> | null = null;
+        const overrideRes = await supabase.from("member_schedule_overrides").select("protocol_day_id,override_day_of_week").eq("member_id", memberId).eq("week_start", weekStartStr).eq("override_day_of_week", dowSunday7).limit(1);
+        if (!overrideRes.error && overrideRes.data?.length) {
+          // Today has an override — fetch the overridden day directly by protocol_day_id
+          const overriddenDayId = stringOr((overrideRes.data[0] as Record<string, unknown>).protocol_day_id, "");
+          if (overriddenDayId) {
+            targetDayRes = await supabase.from("protocol_days").select("id,day_name,day_theme,day_description").eq("id", overriddenDayId).limit(1) as unknown as typeof targetDayRes;
+          }
+        }
+        const dayRes = targetDayRes ?? await supabase.from("protocol_days").select("id,day_name,day_theme,day_description").eq("protocol_id", payload.protocol.id).eq("day_of_week", dowSunday7).limit(1);
         if (!dayRes.error && dayRes.data?.length) {
           const dr = dayRes.data[0] as Record<string, unknown>;
           const actRes = await supabase.from("protocol_day_activities").select("*").eq("protocol_day_id", dr.id).order("activity_order");

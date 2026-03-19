@@ -156,6 +156,7 @@ type DashboardPayload = {
     carolRideTypes: string[];
     arxExercises: string[];
     coachNotes: string;
+    customizationNotes: string;
     startDate: string;
     compliance: { arxThisWeek: number; carolThisWeek: number; recoveryThisMonth: number };
   };
@@ -502,6 +503,13 @@ function recommendProtocol(activeGoals: string[]): string | null {
   return "Strength Foundation";
 }
 
+// ─── Core activity guardrail ─────────────────────────────────────────────────
+function isCoreActivity(item: { type: string; subtype: string }): boolean {
+  return item.type === "arx" || (item.type === "carol" && item.subtype === "REHIT");
+}
+
+const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
 // ─── Plan activity → log item mapping ────────────────────────────────────────
 type PlanAct = { type: string; name: string };
 function planActToLog(a: PlanAct): { to_add?: Array<{ type: string; subtype: string }>; bonus?: string[] } {
@@ -695,6 +703,12 @@ export function DashboardReactClient({
     const done = isChecklistItemDone(item, c, checklistChecked);
 
     if (done) {
+      // Guardrail: block silent removal of ARX / CAROL REHIT
+      if (isCoreActivity(item)) {
+        setGuardrailItem(item);
+        setGuardrailSent(false);
+        return;
+      }
       // Toggle off — undo the check
       setChecklistLogging(item.id);
       try {
@@ -760,12 +774,20 @@ export function DashboardReactClient({
   const [notesForMember, setNotesForMember] = useState("");
   const [todayCheckin, setTodayCheckin] = useState<"low" | "normal" | "strong" | "hurt" | null>(null);
   const [sessionGuideOpen, setSessionGuideOpen] = useState(false);
+  const [guardrailItem, setGuardrailItem] = useState<ChecklistItem | null>(null);
+  const [sendingGuardrail, setSendingGuardrail] = useState(false);
+  const [guardrailSent, setGuardrailSent] = useState(false);
+  const [dayPickerOpen, setDayPickerOpen] = useState<{ day: WeekDay | null; }>({ day: null });
+  const [movingDay, setMovingDay] = useState(false);
+  const [bonusCelebration, setBonusCelebration] = useState("");
   const [sessionStep, setSessionStep] = useState(0);
   const [sessionCompleted, setSessionCompleted] = useState<Set<number>>(new Set());
   const [weekViewOpen, setWeekViewOpen] = useState(false);
-  type WeekDay = { dayOfWeek: number; dayName: string; dayTheme: string; dayDescription: string; activities: Array<{ id: string; order: number; type: string; name: string; durationMinutes: number; description: string; whyItMatters: string; steps: string[]; isBookable: boolean; bookingUrl: string | null; isOptional: boolean; alternativeActivity: string | null }>; totalMinutes: number };
+  type WeekDay = { id: string; dayOfWeek: number; dayName: string; dayTheme: string; dayDescription: string; activities: Array<{ id: string; order: number; type: string; name: string; durationMinutes: number; description: string; whyItMatters: string; steps: string[]; isBookable: boolean; bookingUrl: string | null; isOptional: boolean; alternativeActivity: string | null }>; totalMinutes: number };
+  type WeekOverride = { protocolDayId: string; originalDow: number; overrideDow: number };
   const [weekPlan, setWeekPlan] = useState<WeekDay[]>([]);
   const [weekViewDay, setWeekViewDay] = useState<number | null>(null);
+  const [weekPlanMeta, setWeekPlanMeta] = useState<{ customizationNotes: string | null; overrides: WeekOverride[] }>({ customizationNotes: null, overrides: [] });
   const [selectedProtocol, setSelectedProtocol] = useState<Record<string, boolean>>({});
   const [selectedBonus, setSelectedBonus] = useState<Record<string, boolean>>({});
   const [savingActivity, setSavingActivity] = useState(false);
@@ -1431,13 +1453,23 @@ export function DashboardReactClient({
                       <button type="button" className="btn btn-sm" style={{ fontSize: 12 }}
                         onClick={async () => {
                           if (!weekPlan.length) {
-                            try { const r = await getJson<{ days: typeof weekPlan }>("/api/member/week-plan"); if (r.days) setWeekPlan(r.days); } catch { /* */ }
+                            try { const r = await getJson<{ days: typeof weekPlan; customizationNotes: string | null; overrides: WeekOverride[] }>("/api/member/week-plan"); if (r.days) setWeekPlan(r.days); setWeekPlanMeta({ customizationNotes: r.customizationNotes ?? null, overrides: r.overrides ?? [] }); } catch { /* */ }
                           }
                           setWeekViewDay(null); setWeekViewOpen(true);
                         }}>
                         View this week&apos;s plan →
                       </button>
                     </div>
+                    {/* Rest day escape hatch — only when showing full plan */}
+                    {(todayCheckin === "strong" || !todayCheckin) && tp && tp.activities.length > 0 && (
+                      <div style={{ marginTop: 12 }}>
+                        <span style={{ fontSize: 11, color: "var(--text3)" }}>Need a rest day?{" "}</span>
+                        <button type="button" style={{ background: "none", border: "none", fontSize: 11, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                          onClick={() => setTodayCheckin(null)}>
+                          Adjust today&apos;s plan →
+                        </button>
+                      </div>
+                    )}
                   </>
                 )}
 
@@ -1512,7 +1544,12 @@ export function DashboardReactClient({
                   }
                 }
 
-                if (bonusKeys.length > 0) setLocalBonusCount((n) => n + bonusKeys.length);
+                if (bonusKeys.length > 0) {
+                  setLocalBonusCount((n) => n + bonusKeys.length);
+                  const bonusName = BONUS_ACTIVITIES.find((b) => b.key === bonusKeys[0])?.label ?? bonusKeys[0];
+                  setBonusCelebration(`✓ ${bonusName} logged — every recovery session counts toward your results.`);
+                  setTimeout(() => setBonusCelebration(""), 5000);
+                }
 
                 // Build save message
                 const protocolLabels = toAdd.map((i) => i.type === "arx" ? "ARX" : i.subtype.replace(/_/g, " ")).slice(0, 2).join(", ");
@@ -1602,6 +1639,12 @@ export function DashboardReactClient({
                   </div>
                 </div>
 
+                {/* Bonus celebration banner */}
+                {bonusCelebration && (
+                  <div style={{ padding: "8px 20px", background: "rgba(46,200,200,0.08)", borderTop: "1px solid rgba(46,200,200,0.15)" }}>
+                    <div style={{ fontSize: 12.5, color: "#2ec8c8", fontWeight: 500 }}>{bonusCelebration}</div>
+                  </div>
+                )}
                 {/* Part 3 — Save button */}
                 <div style={{ padding: "0 20px 16px" }}>
                   {activitySavedMsg ? (
@@ -1610,7 +1653,7 @@ export function DashboardReactClient({
                         <div key={i} style={{ fontSize: 13, color: "#9dcc3a", fontWeight: 500, lineHeight: 1.6 }}>{line}</div>
                       ))}
                       <button type="button" style={{ marginTop: 8, fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                        onClick={() => setActivitySavedMsg("")}>Log more →</button>
+                        onClick={() => { setActivitySavedMsg(""); setBonusCelebration(""); }}>Log more →</button>
                     </div>
                   ) : (
                     <button type="button" className="btn btn-lime" disabled={savingActivity}
@@ -2984,6 +3027,22 @@ export function DashboardReactClient({
                   {act.isOptional && act.alternativeActivity && (
                     <div style={{ fontSize: 12, color: "#9b9889", marginBottom: 14 }}>Can&apos;t make it in? <span style={{ color: "#9dcc3a", textDecoration: "underline", cursor: "pointer" }}>{act.alternativeActivity}</span></div>
                   )}
+                  {/* Zone 2 walk swap */}
+                  {act.name.toLowerCase().includes("zone 2") && (
+                    <div style={{ fontSize: 12, color: "#9b9889", marginBottom: 14 }}>
+                      Can&apos;t make it in?{" "}
+                      <button type="button" style={{ background: "none", border: "none", color: "#9dcc3a", cursor: "pointer", fontSize: 12, padding: 0, textDecoration: "underline" }}
+                        onClick={async () => {
+                          try {
+                            await fetch("/api/member/activity-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bonus: ["walk"], to_add: [{ type: "carol", subtype: "FAT_BURN_45" }] }) });
+                          } catch { /* */ }
+                          setSessionCompleted((prev) => new Set([...prev, sessionStep]));
+                        }}>
+                        Take a walk instead →
+                      </button>
+                      <span style={{ fontSize: 11, color: "#9b9889", marginLeft: 6 }}>— counts as Zone 2</span>
+                    </div>
+                  )}
                   {/* Action buttons */}
                   <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                     {act.isBookable && act.bookingUrl ? (
@@ -3053,30 +3112,117 @@ export function DashboardReactClient({
               })()
             ) : (
               /* Week overview */
-              <div style={{ padding: "8px 0" }}>
-                {weekPlan.map((day) => {
-                  const isToday = day.dayOfWeek === (new Date().getDay() === 0 ? 7 : new Date().getDay());
-                  const actSummary = day.activities.map((a) => a.name).join(" · ");
-                  return (
-                    <button key={day.dayOfWeek} type="button"
-                      onClick={() => setWeekViewDay(day.dayOfWeek)}
-                      style={{ width: "100%", textAlign: "left", background: isToday ? "rgba(157,204,58,0.06)" : "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", padding: "14px 20px", cursor: "pointer" }}>
-                      <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
-                        <div style={{ width: 32, flexShrink: 0 }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, color: isToday ? "#9dcc3a" : "#edeae0" }}>{day.dayName.slice(0, 3)}</div>
-                          {isToday && <div style={{ fontSize: 8, color: "#9dcc3a", textTransform: "uppercase" }}>Today</div>}
+              <div>
+                {/* Customization notes from Dustin */}
+                {weekPlanMeta.customizationNotes && (
+                  <div style={{ margin: "8px 16px 0", background: "rgba(220,180,100,0.08)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Dustin&apos;s notes for your plan</div>
+                    <p style={{ fontSize: 12.5, color: "#c4c0b4", margin: 0, lineHeight: 1.6, fontStyle: "italic" }}>&ldquo;{weekPlanMeta.customizationNotes}&rdquo;</p>
+                  </div>
+                )}
+                <div style={{ padding: "8px 0" }}>
+                  {weekPlan.map((day) => {
+                    const todayDow = new Date().getDay() === 0 ? 7 : new Date().getDay();
+                    const isToday = day.dayOfWeek === todayDow;
+                    const override = weekPlanMeta.overrides.find((o) => o.protocolDayId === day.id);
+                    const actSummary = day.activities.map((a) => a.name).join(" · ");
+                    return (
+                      <div key={day.dayOfWeek} style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                        <div style={{ display: "flex", gap: 16, alignItems: "flex-start", padding: "14px 20px 10px", background: isToday ? "rgba(157,204,58,0.05)" : "transparent" }}>
+                          <button type="button" onClick={() => setWeekViewDay(day.dayOfWeek)}
+                            style={{ flex: 1, background: "none", border: "none", textAlign: "left", cursor: "pointer", padding: 0, display: "flex", gap: 16, alignItems: "flex-start" }}>
+                            <div style={{ width: 32, flexShrink: 0 }}>
+                              <div style={{ fontSize: 11, fontWeight: 700, color: isToday ? "#9dcc3a" : "#edeae0" }}>{day.dayName.slice(0, 3)}</div>
+                              {isToday && <div style={{ fontSize: 8, color: "#9dcc3a", textTransform: "uppercase" }}>Today</div>}
+                              {override && <div style={{ fontSize: 8, color: "#e8a838" }}>Moved</div>}
+                            </div>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "#edeae0", marginBottom: 3 }}>{day.dayTheme}</div>
+                              <div style={{ fontSize: 11, color: "#9b9889" }}>{actSummary || "Rest"}</div>
+                              {override && <div style={{ fontSize: 10, color: "#e8a838", marginTop: 2 }}>→ moved to {DAY_NAMES[override.overrideDow]}</div>}
+                            </div>
+                            <div style={{ marginLeft: "auto", fontSize: 11, color: "#9b9889", flexShrink: 0 }}>{day.totalMinutes > 0 ? `~${day.totalMinutes}m` : ""}</div>
+                          </button>
                         </div>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "#edeae0", marginBottom: 3 }}>{day.dayTheme}</div>
-                          <div style={{ fontSize: 11, color: "#9b9889" }}>{actSummary || "Rest"}</div>
-                        </div>
-                        <div style={{ marginLeft: "auto", fontSize: 11, color: "#9b9889", flexShrink: 0 }}>{day.totalMinutes > 0 ? `~${day.totalMinutes}m` : ""}</div>
+                        {/* Move to different day */}
+                        {day.activities.length > 0 && (
+                          <div style={{ padding: "0 20px 10px" }}>
+                            {dayPickerOpen.day?.id === day.id ? (
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                                <span style={{ fontSize: 11, color: "#9b9889" }}>Move to:</span>
+                                {[1,2,3,4,5,6,7].filter((d) => d !== day.dayOfWeek).map((d) => (
+                                  <button key={d} type="button"
+                                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#c4c0b4", cursor: "pointer", opacity: movingDay ? 0.6 : 1 }}
+                                    disabled={movingDay}
+                                    onClick={async () => {
+                                      setMovingDay(true);
+                                      try {
+                                        await fetch("/api/member/schedule-override", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ protocol_day_id: day.id, original_day_of_week: day.dayOfWeek, override_day_of_week: d }) });
+                                        setWeekPlanMeta((prev) => ({ ...prev, overrides: [...prev.overrides.filter((o) => o.protocolDayId !== day.id), { protocolDayId: day.id, originalDow: day.dayOfWeek, overrideDow: d }] }));
+                                        setDayPickerOpen({ day: null });
+                                      } catch { /* */ } finally { setMovingDay(false); }
+                                    }}>
+                                    {DAY_NAMES[d].slice(0, 3)}
+                                  </button>
+                                ))}
+                                <button type="button" style={{ fontSize: 11, color: "#9b9889", background: "none", border: "none", cursor: "pointer" }} onClick={() => setDayPickerOpen({ day: null })}>Cancel</button>
+                                {override && (
+                                  <button type="button" style={{ fontSize: 11, color: "#e05252", background: "none", border: "none", cursor: "pointer" }}
+                                    onClick={async () => { setMovingDay(true); try { await fetch("/api/member/schedule-override", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ protocol_day_id: day.id }) }); setWeekPlanMeta((prev) => ({ ...prev, overrides: prev.overrides.filter((o) => o.protocolDayId !== day.id) })); setDayPickerOpen({ day: null }); } catch { /* */ } finally { setMovingDay(false); } }}>
+                                    Reset to {DAY_NAMES[day.dayOfWeek].slice(0,3)}
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <button type="button" style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                                onClick={() => setDayPickerOpen({ day })}>
+                                Move to different day →
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </button>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Core activity guardrail modal */}
+        {guardrailItem && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1100, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+            onClick={(e) => { if (e.target === e.currentTarget) { setGuardrailItem(null); setGuardrailSent(false); } }}>
+            <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "24px", maxWidth: 400, width: "100%" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>This is a core part of your protocol</div>
+              <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 14 }}>
+                Removing {guardrailItem.type === "arx" ? "strength training" : "CAROL REHIT sprint intervals"} from your plan affects your results significantly. These sessions are the foundation of everything else in your protocol.
+              </p>
+              <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 16 }}>Want to request an adjustment from Dustin?</p>
+              {guardrailSent ? (
+                <div style={{ fontSize: 13, color: "#9dcc3a", fontWeight: 500, marginBottom: 12 }}>✓ Request sent. Dustin will review and follow up.</div>
+              ) : (
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <button type="button" className="btn btn-sm" disabled={sendingGuardrail}
+                    onClick={async () => {
+                      setSendingGuardrail(true);
+                      try {
+                        await fetch("/api/member/notifications", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "protocol_adjustment_request", message: `Member requested to remove ${guardrailItem.label} from their plan.` }) });
+                        setGuardrailSent(true);
+                      } catch { /* */ } finally { setSendingGuardrail(false); }
+                    }}>
+                    {sendingGuardrail ? "Sending…" : "Send request to Dustin"}
+                  </button>
+                  <button type="button" className="btn btn-lime btn-sm" onClick={() => { setGuardrailItem(null); setGuardrailSent(false); }}>
+                    Keep in my plan
+                  </button>
+                </div>
+              )}
+              {guardrailSent && (
+                <button type="button" className="btn btn-sm" style={{ marginTop: 10, fontSize: 11 }} onClick={() => { setGuardrailItem(null); setGuardrailSent(false); }}>Close</button>
+              )}
+            </div>
           </div>
         )}
 
