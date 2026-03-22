@@ -1292,17 +1292,17 @@ export async function DashboardPageView({
           display: "flex",
           alignItems: "center",
           gap: 8,
-          background: "rgba(30,43,27,0.9)",
-          border: "1px solid rgba(175,189,165,0.22)",
+          background: "rgba(28,48,32,0.92)",
+          border: "1px solid rgba(245,240,232,0.15)",
           borderRadius: 999,
           padding: "6px 10px",
-          backdropFilter: "blur(2px)",
+          backdropFilter: "blur(4px)",
         }}
       >
         <Link
           href="/"
           style={{
-            color: "#afbda5",
+            color: "rgba(245,240,232,0.75)",
             textDecoration: "none",
             fontSize: 12,
             letterSpacing: "0.04em",
@@ -1310,7 +1310,7 @@ export async function DashboardPageView({
         >
           Back
         </Link>
-        <div style={{ width: 1, height: 14, background: "rgba(175,189,165,0.25)" }} />
+        <div style={{ width: 1, height: 14, background: "rgba(245,240,232,0.20)" }} />
         {clerkConfigured ? <UserButton /> : null}
       </div>
 

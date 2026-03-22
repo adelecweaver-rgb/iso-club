@@ -262,7 +262,7 @@ function scanPctChange(current: number | null, previous: number | null): ScanCha
 
 function scanChangeColor(change: ScanChange, goodDirection: "up" | "down" | "neutral"): string {
   if (!change || goodDirection === "neutral") return "var(--text3)";
-  return change.direction === goodDirection ? "#9dcc3a" : "#e05252";
+  return change.direction === goodDirection ? "#4A7C59" : "#B84040";
 }
 
 type ScanItem = DashboardPayload["scanHistory"][number];
@@ -337,11 +337,11 @@ function estimateVo2Max(manpW: number, weightLbs: number): number | null {
 
 function vo2Category(vo2: number): { label: string; color: string; barPct: number } {
   const barPct = Math.min(100, Math.max(0, ((vo2 - 20) / 45) * 100));
-  if (vo2 >= 55) return { label: "Excellent", color: "#9dcc3a", barPct };
-  if (vo2 >= 50) return { label: "Very Good", color: "#9dcc3a", barPct };
-  if (vo2 >= 44) return { label: "Good", color: "#9dcc3a", barPct };
-  if (vo2 >= 35) return { label: "Average", color: "#e8a838", barPct };
-  return { label: "Below Average", color: "#e05252", barPct };
+  if (vo2 >= 55) return { label: "Excellent", color: "#4A7C59", barPct };
+  if (vo2 >= 50) return { label: "Very Good", color: "#4A7C59", barPct };
+  if (vo2 >= 44) return { label: "Good", color: "#4A7C59", barPct };
+  if (vo2 >= 35) return { label: "Average", color: "#C4831A", barPct };
+  return { label: "Below Average", color: "#B84040", barPct };
 }
 
 function buildCarolInsight(
@@ -406,10 +406,10 @@ function buildArxByExercise(sessions: DashboardPayload["arxSessions"]): ArxExerc
 }
 
 function eccRatioLabel(ratio: number): { label: string; color: string } {
-  if (ratio >= 1.3) return { label: "Excellent", color: "#9dcc3a" };
-  if (ratio >= 1.15) return { label: "Good", color: "#9dcc3a" };
-  if (ratio >= 1.0) return { label: "Developing", color: "#e8a838" };
-  return { label: "Review form", color: "#e05252" };
+  if (ratio >= 1.3) return { label: "Excellent", color: "#4A7C59" };
+  if (ratio >= 1.15) return { label: "Good", color: "#4A7C59" };
+  if (ratio >= 1.0) return { label: "Developing", color: "#C4831A" };
+  return { label: "Review form", color: "#B84040" };
 }
 
 function buildArxInsight(groups: ArxExerciseGroup[]): string {
@@ -465,9 +465,9 @@ const GOAL_DEFS: Record<string, { name: string; description: string; category: s
 };
 
 function goalStatusColor(direction: "positive" | "neutral" | "negative" | "no_data"): string {
-  if (direction === "positive") return "#9dcc3a";
-  if (direction === "neutral") return "#e8a838";
-  if (direction === "negative") return "#e05252";
+  if (direction === "positive") return "#4A7C59";
+  if (direction === "neutral") return "#C4831A";
+  if (direction === "negative") return "#B84040";
   return "var(--text3)";
 }
 
@@ -1269,7 +1269,7 @@ export function DashboardReactClient({
               >
                 🔔
                 {notifUnreadCount > 0 && (
-                  <span style={{ position: "absolute", top: -4, right: -4, background: "#e05252", color: "white", borderRadius: "50%", width: 16, height: 16, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+                  <span style={{ position: "absolute", top: -4, right: -4, background: "#B84040", color: "white", borderRadius: "50%", width: 16, height: 16, fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
                     {notifUnreadCount > 9 ? "9+" : notifUnreadCount}
                   </span>
                 )}
@@ -1327,7 +1327,7 @@ export function DashboardReactClient({
             ];
 
             return (
-              <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 16 }}>
+              <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 16 }}>
                 {/* Header */}
                 <div style={{ marginBottom: 16 }}>
                   <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 4 }}>Today&apos;s Plan</div>
@@ -1342,17 +1342,17 @@ export function DashboardReactClient({
                     <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>How are you feeling today?</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                       <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #9dcc3a", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #4A7C59", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
                         onClick={() => { void submitCheckin("strong"); }}>
                         ⚡<br />Feeling strong
                       </button>
                       <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #e8a838", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #C4831A", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
                         onClick={() => { void submitCheckin("low"); }}>
                         😴<br />Low energy
                       </button>
                       <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #e05252", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #B84040", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
                         onClick={() => { void submitCheckin("hurt"); }}>
                         🤕<br />Something hurts
                       </button>
@@ -1362,7 +1362,7 @@ export function DashboardReactClient({
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
                     <div style={{ fontSize: 12, color: "var(--text3)" }}>
                       Today you chose:{" "}
-                      <strong style={{ color: todayCheckin === "strong" ? "#9dcc3a" : todayCheckin === "low" ? "#e8a838" : "#e05252" }}>
+                      <strong style={{ color: todayCheckin === "strong" ? "#4A7C59" : todayCheckin === "low" ? "#C4831A" : "#B84040" }}>
                         {todayCheckin === "strong" ? "⚡ Full plan" : todayCheckin === "low" ? "😴 Recovery day" : "🤕 Rest today"}
                       </strong>
                     </div>
@@ -1378,7 +1378,7 @@ export function DashboardReactClient({
                       Listening to your body is part of the protocol. Rest and recovery today sets you up for a stronger session tomorrow.
                     </p>
                     <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Today&apos;s recovery plan</div>
-                    <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 10 }}>
+                    <div style={{ background: "rgba(28,43,30,0.04)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 10 }}>
                       {RECOVERY_ACTS.map((a, i) => (
                         <div key={i} style={{ display: "flex", padding: "9px 14px", borderBottom: i < RECOVERY_ACTS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
                           <span style={{ fontSize: 11, color: "var(--text3)", width: 20 }}>{i + 1}</span>
@@ -1398,11 +1398,11 @@ export function DashboardReactClient({
                       We recommend booking a private session with Dustin to assess and adjust your plan.
                     </p>
                     <a href="https://theiso.club/book" target="_blank" rel="noreferrer"
-                      style={{ display: "inline-flex", alignItems: "center", background: "#e05252", color: "white", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
+                      style={{ display: "inline-flex", alignItems: "center", background: "#B84040", color: "white", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
                       Book NxPro session with Dustin →
                     </a>
                     <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>In the meantime, gentle recovery only:</div>
-                    <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "var(--r-sm)", padding: "4px 0" }}>
+                    <div style={{ background: "rgba(28,43,30,0.04)", borderRadius: "var(--r-sm)", padding: "4px 0" }}>
                       {PAIN_ACTS.map((a, i) => (
                         <div key={i} style={{ display: "flex", padding: "9px 14px", borderBottom: i < PAIN_ACTS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
                           <span style={{ fontSize: 11, color: "var(--text3)", width: 20 }}>{i + 1}</span>
@@ -1411,21 +1411,21 @@ export function DashboardReactClient({
                         </div>
                       ))}
                     </div>
-                    <div style={{ fontSize: 11, color: "rgba(224,82,82,0.7)", marginTop: 10 }}>No cold plunge, no training today.</div>
+                    <div style={{ fontSize: 11, color: "rgba(184,64,64,0.7)", marginTop: 10 }}>No cold plunge, no training today.</div>
                   </div>
                 ) : !tp || !tp.hasProtocol ? (
-                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
+                  <div style={{ background: "rgba(28,43,30,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
                     <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Your plan is being prepared</div>
                     <p style={{ fontSize: 12.5, color: "var(--text3)", margin: "0 0 12px 0", lineHeight: 1.6 }}>Dustin will assign your protocol after your first session.</p>
                     <a href="https://theiso.club/book" target="_blank" rel="noreferrer" className="btn btn-lime btn-sm" style={{ fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Book your first session →</a>
                   </div>
                 ) : tp.isRestDay ? (
-                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
+                  <div style={{ background: "rgba(28,43,30,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
                     <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 10px 0", lineHeight: 1.65 }}>Rest is where your results are made. Protect your sleep, eat well, and hydrate.</p>
                     <div style={{ fontSize: 12, color: "var(--text3)" }}>You completed {weekTotal} session{weekTotal !== 1 ? "s" : ""} this week.</div>
                   </div>
                 ) : tp.activities.length === 0 ? (
-                  <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r-sm)", padding: "14px 18px", marginBottom: 14 }}>
+                  <div style={{ background: "rgba(28,43,30,0.03)", borderRadius: "var(--r-sm)", padding: "14px 18px", marginBottom: 14 }}>
                     <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>{tp.dayDescription || "Your day plan will appear here once seeded."}</p>
                   </div>
                 ) : (
@@ -1433,7 +1433,7 @@ export function DashboardReactClient({
                     <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, marginBottom: 14 }}>
                       {tp.dayDescription.length > 160 ? tp.dayDescription.slice(0, 160) + "…" : tp.dayDescription}
                     </p>
-                    <div style={{ background: "rgba(0,0,0,0.2)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 14 }}>
+                    <div style={{ background: "rgba(28,43,30,0.04)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 14 }}>
                       {tp.activities.map((act, i) => (
                         <div key={act.id} style={{ display: "flex", alignItems: "center", padding: "9px 14px", borderBottom: i < tp.activities.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
                           <span style={{ fontSize: 11, color: "var(--text3)", width: 20, flexShrink: 0 }}>{i + 1}</span>
@@ -1475,13 +1475,13 @@ export function DashboardReactClient({
                 <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                     <span style={{ fontSize: 12, color: "var(--text3)" }}>This week</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: done1 >= adjustedTotal && adjustedTotal > 0 ? "#9dcc3a" : "var(--text2)" }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: done1 >= adjustedTotal && adjustedTotal > 0 ? "#4A7C59" : "var(--text2)" }}>
                       {done1} of {adjustedTotal} sessions complete
                       {isAdaptedDay && <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: 6 }}>· rest day</span>}
                     </span>
                   </div>
                   <div style={{ height: 5, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${adjustedTotal > 0 ? Math.min(100, (done1 / adjustedTotal) * 100) : 0}%`, background: "#9dcc3a", borderRadius: 3, transition: "width 0.3s" }} />
+                    <div style={{ height: "100%", width: `${adjustedTotal > 0 ? Math.min(100, (done1 / adjustedTotal) * 100) : 0}%`, background: "#4A7C59", borderRadius: 3, transition: "width 0.3s" }} />
                   </div>
                 </div>
               </div>
@@ -1490,10 +1490,10 @@ export function DashboardReactClient({
 
           {/* ── Section 2: Latest win ────────────────────────────────────── */}
           {payload.wins.length > 0 && (
-            <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 16 }}>
-              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(220,180,100,0.7)", marginBottom: 10 }}>Latest win 🏆</div>
+            <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 16 }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(196,131,26,0.8)", marginBottom: 10 }}>Latest win 🏆</div>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: payload.wins[0].isMilestone ? 4 : 0 }}>{payload.wins[0].label}</div>
-              {payload.wins[0].isMilestone && <div style={{ fontSize: 11, color: "rgba(220,180,100,0.7)" }}>Milestone achieved</div>}
+              {payload.wins[0].isMilestone && <div style={{ fontSize: 11, color: "rgba(196,131,26,0.8)" }}>Milestone achieved</div>}
             </div>
           )}
 
@@ -1580,13 +1580,13 @@ export function DashboardReactClient({
                     <div style={{ marginTop: 10 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
                         <span style={{ fontSize: 11, color: "var(--text3)" }}>This week</span>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: protocolDoneCount === cl.length ? "#9dcc3a" : "var(--text2)" }}>{protocolDoneCount} of {cl.length} completed</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: protocolDoneCount === cl.length ? "#4A7C59" : "var(--text2)" }}>{protocolDoneCount} of {cl.length} completed</span>
                       </div>
                       <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${cl.length > 0 ? (protocolDoneCount / cl.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 2, transition: "width 0.3s" }} />
+                        <div style={{ height: "100%", width: `${cl.length > 0 ? (protocolDoneCount / cl.length) * 100 : 0}%`, background: "#4A7C59", borderRadius: 2, transition: "width 0.3s" }} />
                       </div>
                       {totalBonusThisWeek > 0 && (
-                        <div style={{ fontSize: 10, color: "#2ec8c8", marginTop: 5 }}>+ {totalBonusThisWeek} bonus activit{totalBonusThisWeek === 1 ? "y" : "ies"} this week</div>
+                        <div style={{ fontSize: 10, color: "#6B9FD4", marginTop: 5 }}>+ {totalBonusThisWeek} bonus activit{totalBonusThisWeek === 1 ? "y" : "ies"} this week</div>
                       )}
                     </div>
                   )}
@@ -1605,10 +1605,10 @@ export function DashboardReactClient({
                             return (
                               <div key={item.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}
                                 onClick={() => setSelectedProtocol((prev) => ({ ...prev, [item.id]: !sel }))}>
-                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: sel ? "#9dcc3a" : "transparent", border: `2.5px solid ${sel ? "#9dcc3a" : "rgba(157,204,58,0.4)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s", flexShrink: 0 }}>
-                                  {sel && <span style={{ color: "#0b0c09", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: sel ? "#4A7C59" : "transparent", border: `2.5px solid ${sel ? "#4A7C59" : "rgba(74,124,89,0.38)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s", flexShrink: 0 }}>
+                                  {sel && <span style={{ color: "#1C2B1E", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
                                 </div>
-                                <span style={{ fontSize: 10.5, color: sel ? "#9dcc3a" : "var(--text2)", textAlign: "center", maxWidth: 64, lineHeight: 1.3, textDecoration: sel ? "line-through" : "none", transition: "all 0.18s" }}>
+                                <span style={{ fontSize: 10.5, color: sel ? "#4A7C59" : "var(--text2)", textAlign: "center", maxWidth: 64, lineHeight: 1.3, textDecoration: sel ? "line-through" : "none", transition: "all 0.18s" }}>
                                   {item.label}
                                 </span>
                               </div>
@@ -1629,7 +1629,7 @@ export function DashboardReactClient({
                       return (
                         <button key={key} type="button"
                           onClick={() => setSelectedBonus((prev) => ({ ...prev, [key]: !sel }))}
-                          style={{ padding: "7px 14px", borderRadius: 20, border: `1.5px solid ${sel ? "#2ec8c8" : "var(--border)"}`, background: sel ? "rgba(46,200,200,0.12)" : "transparent", color: sel ? "#2ec8c8" : "var(--text3)", fontSize: 12.5, cursor: "pointer", transition: "all 0.15s", fontWeight: sel ? 600 : 400 }}>
+                          style={{ padding: "7px 14px", borderRadius: 20, border: `1.5px solid ${sel ? "#6B9FD4" : "var(--border)"}`, background: sel ? "rgba(107,159,212,0.10)" : "transparent", color: sel ? "#6B9FD4" : "var(--text3)", fontSize: 12.5, cursor: "pointer", transition: "all 0.15s", fontWeight: sel ? 600 : 400 }}>
                           {label}
                         </button>
                       );
@@ -1639,16 +1639,16 @@ export function DashboardReactClient({
 
                 {/* Bonus celebration banner */}
                 {bonusCelebration && (
-                  <div style={{ padding: "8px 20px", background: "rgba(46,200,200,0.08)", borderTop: "1px solid rgba(46,200,200,0.15)" }}>
-                    <div style={{ fontSize: 12.5, color: "#2ec8c8", fontWeight: 500 }}>{bonusCelebration}</div>
+                  <div style={{ padding: "8px 20px", background: "rgba(107,159,212,0.08)", borderTop: "1px solid rgba(107,159,212,0.14)" }}>
+                    <div style={{ fontSize: 12.5, color: "#6B9FD4", fontWeight: 500 }}>{bonusCelebration}</div>
                   </div>
                 )}
                 {/* Part 3 — Save button */}
                 <div style={{ padding: "0 20px 16px" }}>
                   {activitySavedMsg ? (
-                    <div style={{ padding: "10px 14px", background: "rgba(157,204,58,0.07)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r-sm)" }}>
+                    <div style={{ padding: "10px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.18)", borderRadius: "var(--r-sm)" }}>
                       {activitySavedMsg.split("\n").map((line, i) => (
-                        <div key={i} style={{ fontSize: 13, color: "#9dcc3a", fontWeight: 500, lineHeight: 1.6 }}>{line}</div>
+                        <div key={i} style={{ fontSize: 13, color: "#4A7C59", fontWeight: 500, lineHeight: 1.6 }}>{line}</div>
                       ))}
                       <button type="button" style={{ marginTop: 8, fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
                         onClick={() => { setActivitySavedMsg(""); setBonusCelebration(""); }}>Log more →</button>
@@ -1670,16 +1670,16 @@ export function DashboardReactClient({
             const peakPow = payload.carolSessions.length ? Math.max(...payload.carolSessions.map((s) => Number(s.peakPowerWatts || 0))) : 0;
             type SI = { label: string; value: string; sub: string | null; subLabel: string; subColor: string; href: string | null; tab: string | null };
             const strip: SI[] = [
-              { label: "Vitality Age", value: payload.vitalityAge.estimated !== null ? String(payload.vitalityAge.estimated) : "—", sub: payload.vitalityAge.difference !== null ? (payload.vitalityAge.difference > 0 ? `-${payload.vitalityAge.difference} yrs` : `+${Math.abs(payload.vitalityAge.difference)} yrs`) : null, subLabel: "vs real age", subColor: (payload.vitalityAge.difference ?? 0) > 0 ? "#9dcc3a" : "#e05252", href: "/member/progress", tab: null },
-              { label: "Lean Mass", value: payload.scan.leanMassLbs !== "--" ? `${payload.scan.leanMassLbs} lbs` : "—", sub: payload.goalDetails.gain_muscle.sinceJoining !== "--" ? payload.goalDetails.gain_muscle.sinceJoining.replace(" lean mass", "").replace(" lbs lean mass", "") : null, subLabel: "since joining", subColor: payload.goalDetails.gain_muscle.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "progress" },
-              { label: "Body Fat", value: payload.scan.bodyFatPct !== "--" ? `${payload.scan.bodyFatPct}%` : "—", sub: payload.goalDetails.lose_fat.sinceJoining !== "--" ? payload.goalDetails.lose_fat.sinceJoining.replace(" body fat", "") : null, subLabel: "since joining", subColor: payload.goalDetails.lose_fat.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "progress" },
-              { label: "Peak Power", value: peakPow > 0 ? `${Math.round(peakPow)}W` : "—", sub: payload.goalDetails.improve_cardio.sinceJoining !== "--" ? payload.goalDetails.improve_cardio.sinceJoining.replace(" cardio power", "") : null, subLabel: "since joining", subColor: payload.goalDetails.improve_cardio.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "progress" },
+              { label: "Vitality Age", value: payload.vitalityAge.estimated !== null ? String(payload.vitalityAge.estimated) : "—", sub: payload.vitalityAge.difference !== null ? (payload.vitalityAge.difference > 0 ? `-${payload.vitalityAge.difference} yrs` : `+${Math.abs(payload.vitalityAge.difference)} yrs`) : null, subLabel: "vs real age", subColor: (payload.vitalityAge.difference ?? 0) > 0 ? "#4A7C59" : "#B84040", href: "/member/progress", tab: null },
+              { label: "Lean Mass", value: payload.scan.leanMassLbs !== "--" ? `${payload.scan.leanMassLbs} lbs` : "—", sub: payload.goalDetails.gain_muscle.sinceJoining !== "--" ? payload.goalDetails.gain_muscle.sinceJoining.replace(" lean mass", "").replace(" lbs lean mass", "") : null, subLabel: "since joining", subColor: payload.goalDetails.gain_muscle.sinceJoiningDir === "up" ? "#4A7C59" : "#B84040", href: null, tab: "progress" },
+              { label: "Body Fat", value: payload.scan.bodyFatPct !== "--" ? `${payload.scan.bodyFatPct}%` : "—", sub: payload.goalDetails.lose_fat.sinceJoining !== "--" ? payload.goalDetails.lose_fat.sinceJoining.replace(" body fat", "") : null, subLabel: "since joining", subColor: payload.goalDetails.lose_fat.sinceJoiningDir === "up" ? "#4A7C59" : "#B84040", href: null, tab: "progress" },
+              { label: "Peak Power", value: peakPow > 0 ? `${Math.round(peakPow)}W` : "—", sub: payload.goalDetails.improve_cardio.sinceJoining !== "--" ? payload.goalDetails.improve_cardio.sinceJoining.replace(" cardio power", "") : null, subLabel: "since joining", subColor: payload.goalDetails.improve_cardio.sinceJoiningDir === "up" ? "#4A7C59" : "#B84040", href: null, tab: "progress" },
             ];
             return (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
                 {strip.map((item) => {
                   const inner = (
-                    <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 8px 8px", textAlign: "center", height: "100%" }}>
+                    <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 8px 8px", textAlign: "center", height: "100%" }}>
                       <div style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 4, lineHeight: 1.2 }}>{item.label}</div>
                       <div style={{ fontSize: item.value.length > 5 ? 13 : 18, fontWeight: 700, color: "var(--text)", lineHeight: 1.1, marginBottom: 2 }}>{item.value}</div>
                       {item.sub && <div style={{ fontSize: 10, color: item.subColor, fontWeight: 500 }}>{item.sub}</div>}
@@ -1700,9 +1700,9 @@ export function DashboardReactClient({
 
           {/* ── Section 5: Note from Dustin ─────────────────────────────── */}
           {payload.sessionNote && (
-            <div style={{ background: "rgba(220,180,100,0.05)", border: "1px solid rgba(220,180,100,0.15)", borderRadius: "var(--r)", padding: "16px 20px" }}>
+            <div style={{ background: "rgba(196,131,26,0.04)", border: "1px solid rgba(196,131,26,0.14)", borderRadius: "var(--r)", padding: "16px 20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(220,180,100,0.8)" }}>Note from Dustin</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(196,131,26,0.90)" }}>Note from Dustin</div>
                 <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.sessionNote.date}</div>
               </div>
               <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0, fontStyle: "italic" }}>&ldquo;{payload.sessionNote.text}&rdquo;</p>
@@ -1737,7 +1737,7 @@ export function DashboardReactClient({
                       type="button"
                       onClick={() => { void handleGoalToggle(goalType); }}
                       disabled={isSaving}
-                      style={{ width: 44, height: 24, borderRadius: 12, background: isActive ? "#9dcc3a" : "var(--bg3)", border: `2px solid ${isActive ? "#9dcc3a" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0, opacity: isSaving ? 0.5 : 1 }}
+                      style={{ width: 44, height: 24, borderRadius: 12, background: isActive ? "#4A7C59" : "var(--bg3)", border: `2px solid ${isActive ? "#4A7C59" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0, opacity: isSaving ? 0.5 : 1 }}
                     >
                       <div style={{ width: 16, height: 16, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: isActive ? 22 : 2, transition: "left 0.2s" }} />
                     </button>
@@ -1750,7 +1750,7 @@ export function DashboardReactClient({
                         <span style={{ fontSize: 12, fontWeight: 600, color }}>{goalStatusLabel(prog.status)}</span>
                       </div>
                       <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 10 }}>{prog.display}</div>
-                      <div style={{ height: 4, background: "var(--bg3)", borderRadius: 2, overflow: "hidden" }}>
+                      <div style={{ height: 4, background: "var(--bg2)", borderRadius: 2, overflow: "hidden" }}>
                         <div style={{ height: "100%", width: `${barPct}%`, background: color, borderRadius: 2, transition: "width 0.4s ease" }} />
                       </div>
                     </>
@@ -1784,15 +1784,15 @@ export function DashboardReactClient({
               } catch { /* silent */ } finally { setIsRequestingProtocol(false); }
             }
             return (
-              <div style={{ background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.25)", borderRadius: "var(--r)", padding: "18px 20px" }}>
+              <div style={{ background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.22)", borderRadius: "var(--r)", padding: "18px 20px" }}>
                 <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(157,204,58,0.7)", marginBottom: 8 }}>Protocol Recommendation</div>
                 <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
-                  Based on your goals, we recommend: <span style={{ color: "#9dcc3a" }}>{rec}</span>
+                  Based on your goals, we recommend: <span style={{ color: "#4A7C59" }}>{rec}</span>
                 </div>
                 <p style={{ fontSize: 12.5, color: "var(--text3)", lineHeight: 1.6, margin: "0 0 14px 0" }}>{reason}</p>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                   {protocolRequested ? (
-                    <span style={{ fontSize: 12, color: "#9dcc3a", fontWeight: 500 }}>✓ Request sent to Dustin</span>
+                    <span style={{ fontSize: 12, color: "#4A7C59", fontWeight: 500 }}>✓ Request sent to Dustin</span>
                   ) : (
                     <button
                       type="button"
@@ -1837,7 +1837,7 @@ export function DashboardReactClient({
                       <div style={{ fontSize: 22, fontFamily: "var(--serif)", color: "var(--text)", marginBottom: 6 }}>{confirmProtocol}</div>
                       <div style={{ fontSize: 13, color: "var(--lime)", marginBottom: 12, fontStyle: "italic" }}>{opt.headline}</div>
                       <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: "0 0 20px 0" }}>{opt.description}</p>
-                      <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "12px 14px", marginBottom: 24, border: "1px solid var(--border)" }}>
+                      <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "12px 14px", marginBottom: 24, border: "1px solid var(--border)" }}>
                         <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
                           We recommend staying on a protocol for a few weeks to see results.
                         </p>
@@ -2022,8 +2022,8 @@ export function DashboardReactClient({
 
                     {/* Coach notes — shown if present */}
                     {p.coachNotes && (
-                      <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 14 }}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Notes from your coach</div>
+                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 6 }}>Notes from your coach</div>
                         <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{p.coachNotes}</p>
                       </div>
                     )}
@@ -2080,10 +2080,10 @@ export function DashboardReactClient({
             const getActivityDots = (data: DayActivity | undefined): Array<{ color: string; label: string }> => {
               if (!data) return [];
               const dots: Array<{ color: string; label: string }> = [];
-              if (data.arx.length > 0) dots.push({ color: "#9dcc3a", label: "Strength" });
-              if (data.carol.length > 0) dots.push({ color: "#38bdf8", label: "Cardio" });
-              if (data.recovery.length > 0) dots.push({ color: "#a78bfa", label: "Recovery" });
-              if (data.manual.length > 0 && dots.length < 3) dots.push({ color: "#2ec8c8", label: "Activity" });
+              if (data.arx.length > 0) dots.push({ color: "#4A7C59", label: "Strength" });
+              if (data.carol.length > 0) dots.push({ color: "#C4831A", label: "Cardio" });
+              if (data.recovery.length > 0) dots.push({ color: "#9B8EA0", label: "Recovery" });
+              if (data.manual.length > 0 && dots.length < 3) dots.push({ color: "#6B9FD4", label: "Activity" });
               return dots.slice(0, 3);
             };
 
@@ -2136,8 +2136,8 @@ export function DashboardReactClient({
                           return (
                             <button key={cell.date} type="button"
                               onClick={() => setHistorySelectedDate(isSelected ? null : cell.date)}
-                              style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "6px 2px", borderRadius: 8, background: isSelected ? "rgba(157,204,58,0.12)" : hasActivity ? "rgba(255,255,255,0.04)" : "transparent", border: isToday ? "1.5px solid rgba(157,204,58,0.4)" : isSelected ? "1.5px solid rgba(157,204,58,0.5)" : "1.5px solid transparent", cursor: "pointer", minHeight: 44 }}>
-                              <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? "#9dcc3a" : "var(--text2)" }}>{cell.dayNum}</span>
+                              style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "6px 2px", borderRadius: 8, background: isSelected ? "rgba(74,124,89,0.10)" : hasActivity ? "rgba(28,43,30,0.04)" : "transparent", border: isToday ? "1.5px solid rgba(74,124,89,0.38)" : isSelected ? "1.5px solid rgba(157,204,58,0.5)" : "1.5px solid transparent", cursor: "pointer", minHeight: 44 }}>
+                              <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 400, color: isToday ? "#4A7C59" : "var(--text2)" }}>{cell.dayNum}</span>
                               <div style={{ display: "flex", gap: 2, marginTop: 3 }}>
                                 {dots.map((dot, di) => (
                                   <div key={di} style={{ width: 5, height: 5, borderRadius: "50%", background: dot.color }} />
@@ -2150,7 +2150,7 @@ export function DashboardReactClient({
 
                       {/* Legend */}
                       <div style={{ display: "flex", gap: 14, padding: "0 20px 14px", flexWrap: "wrap" }}>
-                        {[{ color: "#9dcc3a", label: "Strength" }, { color: "#38bdf8", label: "Cardio" }, { color: "#a78bfa", label: "Recovery" }, { color: "#2ec8c8", label: "Activity" }].map(({ color, label }) => (
+                        {[{ color: "#4A7C59", label: "Strength" }, { color: "#C4831A", label: "Cardio" }, { color: "#9B8EA0", label: "Recovery" }, { color: "#6B9FD4", label: "Activity" }].map(({ color, label }) => (
                           <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
                             <div style={{ width: 7, height: 7, borderRadius: "50%", background: color }} />
                             <span style={{ fontSize: 10, color: "var(--text3)" }}>{label}</span>
@@ -2172,7 +2172,7 @@ export function DashboardReactClient({
                             <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBottom: 14 }}>
                               {selectedData.arx.length > 0 && (
                                 <div>
-                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#9dcc3a", marginBottom: 8 }}>Strength (ARX)</div>
+                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#4A7C59", marginBottom: 8 }}>Strength (ARX)</div>
                                   {selectedData.arx.map((a, i) => (
                                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
                                       <span style={{ fontSize: 13, color: "var(--text2)" }}>{a.exercise}</span>
@@ -2186,7 +2186,7 @@ export function DashboardReactClient({
                               )}
                               {selectedData.carol.length > 0 && (
                                 <div>
-                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#38bdf8", marginBottom: 8 }}>Cardio (CAROL)</div>
+                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#C4831A", marginBottom: 8 }}>Cardio (CAROL)</div>
                                   {selectedData.carol.map((c, i) => (
                                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
                                       <span style={{ fontSize: 13, color: "var(--text2)" }}>{RIDE_LABELS[c.rideType] ?? c.rideType.replace(/_/g, " ")}</span>
@@ -2200,7 +2200,7 @@ export function DashboardReactClient({
                               )}
                               {selectedData.recovery.length > 0 && (
                                 <div>
-                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#a78bfa", marginBottom: 8 }}>Recovery</div>
+                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#9B8EA0", marginBottom: 8 }}>Recovery</div>
                                   {selectedData.recovery.map((r, i) => (
                                     <div key={i} style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
                                       <span style={{ fontSize: 13, color: "var(--text2)" }}>{MODALITY_LABELS[r.modality] ?? r.modality.replace(/_/g, " ")}</span>
@@ -2210,7 +2210,7 @@ export function DashboardReactClient({
                               )}
                               {selectedData.manual.length > 0 && (
                                 <div>
-                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#2ec8c8", marginBottom: 8 }}>Activities</div>
+                                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#6B9FD4", marginBottom: 8 }}>Activities</div>
                                   {selectedData.manual.map((m, i) => (
                                     <div key={i} style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
                                       <span style={{ fontSize: 13, color: "var(--text2)" }}>{MODALITY_LABELS[m.equipment] ?? m.equipment.replace(/_/g, " ")}</span>
@@ -2317,8 +2317,8 @@ export function DashboardReactClient({
               const olderAvg = rehitWithManp.slice(3, 6).reduce((s, r) => s + (carolNum(r.manp) ?? 0), 0) / 3;
               if (olderAvg > 0) {
                 const pct = ((recentAvg - olderAvg) / olderAvg) * 100;
-                if (pct > 3) { manpTrendLabel = `\u2191 ${pct.toFixed(0)}% vs prior`; manpTrendColor = "#9dcc3a"; }
-                else if (pct < -3) { manpTrendLabel = `\u2193 ${Math.abs(pct).toFixed(0)}% vs prior`; manpTrendColor = "#e05252"; }
+                if (pct > 3) { manpTrendLabel = `\u2191 ${pct.toFixed(0)}% vs prior`; manpTrendColor = "#4A7C59"; }
+                else if (pct < -3) { manpTrendLabel = `\u2193 ${Math.abs(pct).toFixed(0)}% vs prior`; manpTrendColor = "#B84040"; }
                 else { manpTrendLabel = "Stable"; manpTrendColor = "var(--text3)"; }
               }
             } else if (rehitWithManp.length >= 2) {
@@ -2333,7 +2333,7 @@ export function DashboardReactClient({
             const RIDE_TYPE_LABELS: Record<string, string> = { REHIT: "REHIT", FAT_BURN_30: "Fat Burn 30", FAT_BURN_45: "Fat Burn 45", FAT_BURN_60: "Fat Burn 60", ENERGISER: "Energiser" };
 
             const sectionLabelStyle: React.CSSProperties = { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 12, fontWeight: 600 };
-            const detailBtnStyle: React.CSSProperties = { background: "none", border: "none", padding: "8px 0 0", fontSize: 11, color: "#9dcc3a", cursor: "pointer", fontWeight: 500, textAlign: "left" };
+            const detailBtnStyle: React.CSSProperties = { background: "none", border: "none", padding: "8px 0 0", fontSize: 11, color: "#4A7C59", cursor: "pointer", fontWeight: 500, textAlign: "left" };
 
             return (
               <>
@@ -2357,14 +2357,14 @@ export function DashboardReactClient({
                           </div>
                         </div>
                         {va.difference !== null && va.difference !== 0 && (
-                          <div style={{ fontSize: 13, color: va.difference > 0 ? "#9dcc3a" : "#e05252", fontWeight: 500, marginBottom: 4 }}>
+                          <div style={{ fontSize: 13, color: va.difference > 0 ? "#4A7C59" : "#B84040", fontWeight: 500, marginBottom: 4 }}>
                             {va.difference > 0
                               ? `Functioning ${va.difference} year${va.difference !== 1 ? "s" : ""} younger than your age`
                               : `Vitality age is ${Math.abs(va.difference)} year${Math.abs(va.difference) !== 1 ? "s" : ""} above chronological`}
                           </div>
                         )}
                         {va.trend !== null && va.trend !== 0 && (
-                          <div style={{ fontSize: 12, color: va.trend > 0 ? "#9dcc3a" : "#e05252" }}>
+                          <div style={{ fontSize: 12, color: va.trend > 0 ? "#4A7C59" : "#B84040" }}>
                             {va.trend > 0
                               ? `\u2191 Improved ${va.trend} year${va.trend !== 1 ? "s" : ""} since joining`
                               : `\u2193 Up ${Math.abs(va.trend)} year${Math.abs(va.trend) !== 1 ? "s" : ""} since last calculation`}
@@ -2406,11 +2406,11 @@ export function DashboardReactClient({
                           </div>
                           {leanSparkVals.some((v) => v !== null) && sparklinePath(leanSparkVals, 100, 28) ? (
                             <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 4 }}>
-                              <path d={sparklinePath(leanSparkVals, 100, 28)} fill="none" stroke={leanTrendGood ? "#9dcc3a" : "#e05252"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d={sparklinePath(leanSparkVals, 100, 28)} fill="none" stroke={leanTrendGood ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           ) : null}
                           {leanFirst !== null && leanLast !== null && (
-                            <div style={{ fontSize: 10, color: leanTrendGood ? "#9dcc3a" : "#e05252" }}>
+                            <div style={{ fontSize: 10, color: leanTrendGood ? "#4A7C59" : "#B84040" }}>
                               {leanTrendGood ? "\u2191" : "\u2193"} {Math.abs(leanLast - leanFirst).toFixed(1)} lbs since first scan
                             </div>
                           )}
@@ -2423,11 +2423,11 @@ export function DashboardReactClient({
                           </div>
                           {fatSparkVals.some((v) => v !== null) && sparklinePath(fatSparkVals, 100, 28) ? (
                             <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 4 }}>
-                              <path d={sparklinePath(fatSparkVals, 100, 28)} fill="none" stroke={fatTrendGood ? "#9dcc3a" : "#e05252"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              <path d={sparklinePath(fatSparkVals, 100, 28)} fill="none" stroke={fatTrendGood ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                           ) : null}
                           {fatFirst !== null && fatLast !== null && (
-                            <div style={{ fontSize: 10, color: fatTrendGood ? "#9dcc3a" : "#e05252" }}>
+                            <div style={{ fontSize: 10, color: fatTrendGood ? "#4A7C59" : "#B84040" }}>
                               {fatTrendGood ? "\u2193" : "\u2191"} {Math.abs(fatLast - fatFirst).toFixed(1)}% since first scan
                             </div>
                           )}
@@ -2436,8 +2436,8 @@ export function DashboardReactClient({
 
                       {/* Coach insight */}
                       {(currentScan || prevScan) && (
-                        <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
-                          <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
+                        <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                          <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
                           <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{scanInsight(currentScan, prevScan)}</p>
                         </div>
                       )}
@@ -2520,9 +2520,9 @@ export function DashboardReactClient({
                               ].map((chart) => {
                                 const path = sparklinePath(chart.vals, 100, 36);
                                 const trendGood = chart.good === "neutral" ? true : chart.good === "down" ? (chart.last ?? 0) <= (chart.first ?? 0) : (chart.last ?? 0) >= (chart.first ?? 0);
-                                const lineColor = chart.good === "neutral" ? "var(--text3)" : trendGood ? "#9dcc3a" : "#e05252";
+                                const lineColor = chart.good === "neutral" ? "var(--text3)" : trendGood ? "#4A7C59" : "#B84040";
                                 return (
-                                  <div key={chart.label} style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                                  <div key={chart.label} style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
                                     <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{chart.label}</div>
                                     {path ? (
                                       <svg viewBox="0 0 100 36" style={{ width: "100%", height: 36, display: "block" }}>
@@ -2552,7 +2552,7 @@ export function DashboardReactClient({
                     <div className="card" style={{ padding: "20px 22px" }}>
                       <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
                         No strength data yet.{" "}
-                        <Link href="/member/connect/arx" style={{ color: "#9dcc3a", textDecoration: "none" }}>Import ARX data \u2192</Link>
+                        <Link href="/member/connect/arx" style={{ color: "#4A7C59", textDecoration: "none" }}>Import ARX data \u2192</Link>
                       </p>
                     </div>
                   ) : (
@@ -2575,19 +2575,19 @@ export function DashboardReactClient({
                         <>
                           <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Concentric trend</div>
                           <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 6 }}>
-                            <path d={sparklinePath(topConcHistory, 100, 28)} fill="none" stroke={strengthTrend === "improving" ? "#9dcc3a" : strengthTrend === "declining" ? "#e05252" : "var(--text3)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d={sparklinePath(topConcHistory, 100, 28)} fill="none" stroke={strengthTrend === "improving" ? "#4A7C59" : strengthTrend === "declining" ? "#B84040" : "var(--text3)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         </>
                       ) : null}
 
                       {strengthTrend && (
-                        <div style={{ fontSize: 11, color: strengthTrend === "improving" ? "#9dcc3a" : strengthTrend === "declining" ? "#e05252" : "var(--text3)", fontWeight: 500, marginBottom: 8 }}>
+                        <div style={{ fontSize: 11, color: strengthTrend === "improving" ? "#4A7C59" : strengthTrend === "declining" ? "#B84040" : "var(--text3)", fontWeight: 500, marginBottom: 8 }}>
                           {strengthTrend === "improving" ? "\u2191 Trending up" : strengthTrend === "declining" ? "\u2193 Trending down" : "Stable"}
                         </div>
                       )}
 
-                      <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
-                        <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
+                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                        <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
                         <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{buildArxInsight(arxGroups)}</p>
                       </div>
 
@@ -2627,8 +2627,8 @@ export function DashboardReactClient({
                                     <span style={{ fontSize: 11, color: "var(--text2)" }}>{exercise}</span>
                                     <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>{value > 0 ? `${Math.round(value)} lbs` : "\u2014"}</span>
                                   </div>
-                                  <div style={{ height: 5, background: "var(--bg3)", borderRadius: 3, overflow: "hidden" }}>
-                                    <div style={{ height: "100%", width: `${(value / maxConcAll) * 100}%`, background: "#9dcc3a", borderRadius: 3 }} />
+                                  <div style={{ height: 5, background: "var(--bg2)", borderRadius: 3, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${(value / maxConcAll) * 100}%`, background: "#4A7C59", borderRadius: 3 }} />
                                   </div>
                                 </div>
                               ))}
@@ -2653,21 +2653,21 @@ export function DashboardReactClient({
                               const isSelected = selectedArxExercise === exercise;
                               return (
                                 <div key={exercise} className="card"
-                                  style={{ padding: "14px 16px", cursor: "pointer", border: isSelected ? "1px solid rgba(157,204,58,0.4)" : undefined, background: isSelected ? "rgba(157,204,58,0.04)" : undefined }}
+                                  style={{ padding: "14px 16px", cursor: "pointer", border: isSelected ? "1px solid rgba(74,124,89,0.38)" : undefined, background: isSelected ? "rgba(157,204,58,0.04)" : undefined }}
                                   onClick={() => setSelectedArxExercise(isSelected ? null : exercise)}>
                                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
                                     <div>
                                       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{exercise}</div>
                                       <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""} \u00b7 {isSelected ? "tap to close" : "tap for full history"}</div>
                                     </div>
-                                    {isPR && <span style={{ fontSize: 9, background: "rgba(157,204,58,0.15)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.3)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
+                                    {isPR && <span style={{ fontSize: 9, background: "rgba(74,124,89,0.12)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.28)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
                                   </div>
                                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: path ? 8 : 0 }}>
-                                    <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "7px 10px" }}>
+                                    <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "7px 10px" }}>
                                       <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Concentric</div>
                                       <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{conc !== null ? Math.round(conc) : "--"} <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span></div>
                                     </div>
-                                    <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "7px 10px" }}>
+                                    <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "7px 10px" }}>
                                       <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Eccentric</div>
                                       <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{ecc !== null ? Math.round(ecc) : "--"} <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span></div>
                                     </div>
@@ -2681,7 +2681,7 @@ export function DashboardReactClient({
                                   )}
                                   {path ? (
                                     <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block" }}>
-                                      <path d={path} fill="none" stroke={trending ? "#9dcc3a" : "#e05252"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      <path d={path} fill="none" stroke={trending ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                                     </svg>
                                   ) : null}
                                 </div>
@@ -2702,7 +2702,7 @@ export function DashboardReactClient({
                     <div className="card" style={{ padding: "20px 22px" }}>
                       <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
                         No cardio data yet.{" "}
-                        <Link href="/member/connect/carol" style={{ color: "#9dcc3a", textDecoration: "none" }}>Connect CAROL account \u2192</Link>
+                        <Link href="/member/connect/carol" style={{ color: "#4A7C59", textDecoration: "none" }}>Connect CAROL account \u2192</Link>
                       </p>
                     </div>
                   ) : (
@@ -2716,7 +2716,7 @@ export function DashboardReactClient({
                                 <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{vo2.toFixed(0)}</span>
                                 <span style={{ fontSize: 9, color: "var(--text3)" }}>ml/kg/min</span>
                               </div>
-                              <div style={{ height: 3, background: "var(--bg3)", borderRadius: 2, marginBottom: 4, overflow: "hidden" }}>
+                              <div style={{ height: 3, background: "var(--bg2)", borderRadius: 2, marginBottom: 4, overflow: "hidden" }}>
                                 <div style={{ height: "100%", width: `${vo2Cat.barPct}%`, background: vo2Cat.color, borderRadius: 2 }} />
                               </div>
                               <span style={{ fontSize: 10, color: vo2Cat.color, fontWeight: 600 }}>{vo2Cat.label}</span>
@@ -2746,7 +2746,7 @@ export function DashboardReactClient({
                             <span style={{ fontSize: 9, color: "var(--text3)" }}>sessions</span>
                           </div>
                           {carolPrevMonth > 0 ? (
-                            <div style={{ fontSize: 10, color: carolThisMonth >= carolPrevMonth ? "#9dcc3a" : "var(--text3)" }}>
+                            <div style={{ fontSize: 10, color: carolThisMonth >= carolPrevMonth ? "#4A7C59" : "var(--text3)" }}>
                               {carolThisMonth >= carolPrevMonth ? "\u2191" : "\u2193"} vs {carolPrevMonth} last month
                             </div>
                           ) : (
@@ -2755,8 +2755,8 @@ export function DashboardReactClient({
                         </div>
                       </div>
 
-                      <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
-                        <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
+                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                        <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
                         <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{buildCarolInsight(allCarol, payload.scan.weightLbs)}</p>
                       </div>
 
@@ -2770,12 +2770,12 @@ export function DashboardReactClient({
                             <div style={{ marginBottom: 16 }}>
                               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>REHIT performance</div>
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
-                                <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                                <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
                                   <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Latest MANP</div>
                                   <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "\u2014"} <span style={{ fontSize: 9, color: "var(--text3)" }}>W</span></div>
                                   {manpTrendLabel && <div style={{ fontSize: 10, color: manpTrendColor, marginTop: 3 }}>{manpTrendLabel}</div>}
                                 </div>
-                                <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                                <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
                                   <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Est. VO2 Max</div>
                                   {vo2 && vo2Cat ? (
                                     <>
@@ -3045,12 +3045,12 @@ export function DashboardReactClient({
           {/* At-risk members */}
           {payload.coachAtRisk.length > 0 && (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#e8a838", marginBottom: 10 }}>⚠ Members Needing Attention</div>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#C4831A", marginBottom: 10 }}>⚠ Members Needing Attention</div>
               {payload.coachAtRisk.map((m) => (
                 <div key={m.id} style={{ background: "rgba(232,168,56,0.07)", border: "1px solid rgba(232,168,56,0.25)", borderRadius: "var(--r-sm)", padding: "12px 16px", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{m.name}</div>
-                    {m.reasons.map((r, i) => <div key={i} style={{ fontSize: 11, color: "#e8a838" }}>{r}</div>)}
+                    {m.reasons.map((r, i) => <div key={i} style={{ fontSize: 11, color: "#C4831A" }}>{r}</div>)}
                   </div>
                   <button type="button" className="btn btn-sm" style={{ fontSize: 10, flexShrink: 0 }} onClick={() => { setSelectedCoachRecipientId(m.id); setCoachView("messages"); setMode("coach"); void loadMessages(true, m.id); }}>Message →</button>
                 </div>
@@ -3099,10 +3099,10 @@ export function DashboardReactClient({
                 <div
                   key={proto.id}
                   onClick={() => setAssignProtocolId(proto.id)}
-                  style={{ cursor: "pointer", background: assignProtocolId === proto.id ? "rgba(157,204,58,0.08)" : "var(--bg2)", border: `1px solid ${assignProtocolId === proto.id ? "#9dcc3a" : "var(--border)"}`, borderRadius: "var(--r)", padding: "12px 14px" }}
+                  style={{ cursor: "pointer", background: assignProtocolId === proto.id ? "rgba(74,124,89,0.07)" : "var(--bg2)", border: `1px solid ${assignProtocolId === proto.id ? "#4A7C59" : "var(--border)"}`, borderRadius: "var(--r)", padding: "12px 14px" }}
                 >
                   <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>{proto.name}</div>
-                  <span style={{ fontSize: 9, background: "rgba(157,204,58,0.1)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.25)", borderRadius: 3, padding: "1px 6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  <span style={{ fontSize: 9, background: "rgba(74,124,89,0.10)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.22)", borderRadius: 3, padding: "1px 6px", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                     {formatTargetSystem(proto.target_system ?? "")}
                   </span>
                   <p style={{ fontSize: 11, color: "var(--text3)", marginTop: 6, marginBottom: 0, lineHeight: 1.5 }}>{proto.description}</p>
@@ -3200,7 +3200,7 @@ export function DashboardReactClient({
                 {isAssigning ? "Assigning…" : "Assign Protocol"}
               </button>
               {assignStatus && (
-                <span style={{ fontSize: 12, color: assignStatus.startsWith("✓") ? "#9dcc3a" : "#e05252" }}>
+                <span style={{ fontSize: 12, color: assignStatus.startsWith("✓") ? "#4A7C59" : "#B84040" }}>
                   {assignStatus}
                 </span>
               )}
@@ -3219,12 +3219,12 @@ export function DashboardReactClient({
                     {(["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).map((gt) => {
                       const isOn = memberGoals[gt] ?? false;
                       return (
-                        <div key={gt} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                        <div key={gt} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
                           <span style={{ fontSize: 12, color: "var(--text2)" }}>{GOAL_DEFS[gt]?.name ?? gt}</span>
                           <button
                             type="button"
                             onClick={() => { void handleGoalToggle(gt, assignMemberId); }}
-                            style={{ width: 40, height: 22, borderRadius: 11, background: isOn ? "#9dcc3a" : "var(--bg3)", border: `2px solid ${isOn ? "#9dcc3a" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0 }}
+                            style={{ width: 40, height: 22, borderRadius: 11, background: isOn ? "#4A7C59" : "var(--bg3)", border: `2px solid ${isOn ? "#4A7C59" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0 }}
                           >
                             <div style={{ width: 14, height: 14, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: isOn ? 20 : 2, transition: "left 0.2s" }} />
                           </button>
@@ -3239,7 +3239,7 @@ export function DashboardReactClient({
                     if (!rec || active.length === 0) return null;
                     const recProtocol = coachProtocols.find((p) => p.name === rec);
                     return (
-                      <div style={{ background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px" }}>
+                      <div style={{ background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px" }}>
                         <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 8 }}>
                           Based on goals: recommend <strong style={{ color: "var(--text)" }}>{rec}</strong>
                         </div>
@@ -3310,16 +3310,16 @@ export function DashboardReactClient({
           }
 
           return (
-            <div style={{ position: "fixed", inset: 0, background: "#0b0c09", zIndex: 2000, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+            <div style={{ position: "fixed", inset: 0, background: "#1C2B1E", zIndex: 2000, overflowY: "auto", display: "flex", flexDirection: "column" }}>
               {/* Header */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-                <div style={{ fontSize: 12, color: "#9b9889" }}>{payload.todaysPlan.dayName} — {payload.todaysPlan.dayTheme}</div>
-                <button type="button" style={{ background: "none", border: "none", color: "#9b9889", cursor: "pointer", fontSize: 20, padding: 0 }} onClick={() => setSessionGuideOpen(false)}>✕</button>
+                <div style={{ fontSize: 12, color: "#6B7B6E" }}>{payload.todaysPlan.dayName} — {payload.todaysPlan.dayTheme}</div>
+                <button type="button" style={{ background: "none", border: "none", color: "#6B7B6E", cursor: "pointer", fontSize: 20, padding: 0 }} onClick={() => setSessionGuideOpen(false)}>✕</button>
               </div>
               {/* Progress dots */}
               <div style={{ display: "flex", gap: 6, padding: "12px 20px", flexShrink: 0 }}>
                 {acts.map((_, i) => (
-                  <div key={i} style={{ height: 4, flex: 1, borderRadius: 2, background: sessionCompleted.has(i) ? "#9dcc3a" : i === sessionStep ? "rgba(157,204,58,0.4)" : "rgba(255,255,255,0.1)" }} />
+                  <div key={i} style={{ height: 4, flex: 1, borderRadius: 2, background: sessionCompleted.has(i) ? "#4A7C59" : i === sessionStep ? "rgba(74,124,89,0.38)" : "rgba(255,255,255,0.1)" }} />
                 ))}
               </div>
 
@@ -3327,42 +3327,42 @@ export function DashboardReactClient({
                 /* Completion screen */
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>✓</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: "#edeae0", marginBottom: 10, fontFamily: "Georgia, serif" }}>Today&apos;s plan complete</div>
-                  <p style={{ fontSize: 14, color: "#9b9889", lineHeight: 1.6, maxWidth: 320 }}>Great work. Your body is doing the work now. Rest, eat well, and come back tomorrow.</p>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: "#1C2B1E", marginBottom: 10, fontFamily: "Georgia, serif" }}>Today&apos;s plan complete</div>
+                  <p style={{ fontSize: 14, color: "#6B7B6E", lineHeight: 1.6, maxWidth: 320 }}>Great work. Your body is doing the work now. Rest, eat well, and come back tomorrow.</p>
                   <button type="button" className="btn btn-lime" style={{ marginTop: 24, fontSize: 13 }} onClick={() => setSessionGuideOpen(false)}>Back to dashboard</button>
                 </div>
               ) : act ? (
                 /* Activity screen */
                 <div style={{ flex: 1, padding: "20px 24px", maxWidth: 600, margin: "0 auto", width: "100%" }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#9b9889", marginBottom: 8 }}>Activity {sessionStep + 1} of {acts.length}</div>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#6B7B6E", marginBottom: 8 }}>Activity {sessionStep + 1} of {acts.length}</div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: "#edeae0", fontFamily: "Georgia, serif", lineHeight: 1.2 }}>{act.name}</div>
-                    <div style={{ fontSize: 13, color: "#9b9889", flexShrink: 0, marginLeft: 12 }}>{act.durationMinutes} min</div>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: "#1C2B1E", fontFamily: "Georgia, serif", lineHeight: 1.2 }}>{act.name}</div>
+                    <div style={{ fontSize: 13, color: "#6B7B6E", flexShrink: 0, marginLeft: 12 }}>{act.durationMinutes} min</div>
                   </div>
                   <p style={{ fontSize: 14, color: "#c4c0b4", lineHeight: 1.65, marginBottom: 16 }}>{act.description}</p>
-                  <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
-                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "#9b9889", marginBottom: 8 }}>Why it matters</div>
-                    <p style={{ fontSize: 13, color: "#9b9889", lineHeight: 1.6, margin: 0 }}>{act.whyItMatters}</p>
+                  <div style={{ background: "rgba(28,43,30,0.04)", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "#6B7B6E", marginBottom: 8 }}>Why it matters</div>
+                    <p style={{ fontSize: 13, color: "#6B7B6E", lineHeight: 1.6, margin: 0 }}>{act.whyItMatters}</p>
                   </div>
                   {act.steps.length > 0 && (
                     <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "#9b9889", marginBottom: 10 }}>How to do it</div>
+                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "#6B7B6E", marginBottom: 10 }}>How to do it</div>
                       {act.steps.map((step, i) => (
                         <div key={i} style={{ display: "flex", gap: 12, marginBottom: 10 }}>
-                          <span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(157,204,58,0.15)", color: "#9dcc3a", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{i + 1}</span>
+                          <span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(74,124,89,0.12)", color: "#4A7C59", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{i + 1}</span>
                           <span style={{ fontSize: 13.5, color: "#c4c0b4", lineHeight: 1.5 }}>{step}</span>
                         </div>
                       ))}
                     </div>
                   )}
                   {act.isOptional && act.alternativeActivity && (
-                    <div style={{ fontSize: 12, color: "#9b9889", marginBottom: 14 }}>Can&apos;t make it in? <span style={{ color: "#9dcc3a", textDecoration: "underline", cursor: "pointer" }}>{act.alternativeActivity}</span></div>
+                    <div style={{ fontSize: 12, color: "#6B7B6E", marginBottom: 14 }}>Can&apos;t make it in? <span style={{ color: "#4A7C59", textDecoration: "underline", cursor: "pointer" }}>{act.alternativeActivity}</span></div>
                   )}
                   {/* Zone 2 walk swap */}
                   {act.name.toLowerCase().includes("zone 2") && (
-                    <div style={{ fontSize: 12, color: "#9b9889", marginBottom: 14 }}>
+                    <div style={{ fontSize: 12, color: "#6B7B6E", marginBottom: 14 }}>
                       Can&apos;t make it in?{" "}
-                      <button type="button" style={{ background: "none", border: "none", color: "#9dcc3a", cursor: "pointer", fontSize: 12, padding: 0, textDecoration: "underline" }}
+                      <button type="button" style={{ background: "none", border: "none", color: "#4A7C59", cursor: "pointer", fontSize: 12, padding: 0, textDecoration: "underline" }}
                         onClick={async () => {
                           try {
                             await fetch("/api/member/activity-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bonus: ["walk"], to_add: [{ type: "carol", subtype: "FAT_BURN_45" }] }) });
@@ -3371,7 +3371,7 @@ export function DashboardReactClient({
                         }}>
                         Take a walk instead →
                       </button>
-                      <span style={{ fontSize: 11, color: "#9b9889", marginLeft: 6 }}>— counts as Zone 2</span>
+                      <span style={{ fontSize: 11, color: "#6B7B6E", marginLeft: 6 }}>— counts as Zone 2</span>
                     </div>
                   )}
                   {/* Action buttons */}
@@ -3397,9 +3397,9 @@ export function DashboardReactClient({
                   </div>
                   {/* Prev/Next nav */}
                   <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <button type="button" style={{ background: "none", border: "none", color: "#9b9889", cursor: sessionStep > 0 ? "pointer" : "not-allowed", opacity: sessionStep > 0 ? 1 : 0.3, fontSize: 13 }}
+                    <button type="button" style={{ background: "none", border: "none", color: "#6B7B6E", cursor: sessionStep > 0 ? "pointer" : "not-allowed", opacity: sessionStep > 0 ? 1 : 0.3, fontSize: 13 }}
                       disabled={sessionStep === 0} onClick={() => setSessionStep(sessionStep - 1)}>← Previous</button>
-                    <button type="button" style={{ background: "none", border: "none", color: "#9b9889", cursor: sessionStep < acts.length - 1 ? "pointer" : "not-allowed", opacity: sessionStep < acts.length - 1 ? 1 : 0.3, fontSize: 13 }}
+                    <button type="button" style={{ background: "none", border: "none", color: "#6B7B6E", cursor: sessionStep < acts.length - 1 ? "pointer" : "not-allowed", opacity: sessionStep < acts.length - 1 ? 1 : 0.3, fontSize: 13 }}
                       disabled={sessionStep >= acts.length - 1} onClick={() => setSessionStep(sessionStep + 1)}>Next →</button>
                   </div>
                 </div>
@@ -3410,13 +3410,13 @@ export function DashboardReactClient({
 
         {/* ── Week View modal ────────────────────────────────────────────── */}
         {weekViewOpen && (
-          <div style={{ position: "fixed", inset: 0, background: "#0b0c09", zIndex: 2000, overflowY: "auto" }}>
+          <div style={{ position: "fixed", inset: 0, background: "#1C2B1E", zIndex: 2000, overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#edeae0" }}>This week&apos;s plan</div>
-              <button type="button" style={{ background: "none", border: "none", color: "#9b9889", cursor: "pointer", fontSize: 20, padding: 0 }} onClick={() => { setWeekViewOpen(false); setWeekViewDay(null); }}>✕</button>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#1C2B1E" }}>This week&apos;s plan</div>
+              <button type="button" style={{ background: "none", border: "none", color: "#6B7B6E", cursor: "pointer", fontSize: 20, padding: 0 }} onClick={() => { setWeekViewOpen(false); setWeekViewDay(null); }}>✕</button>
             </div>
             {weekPlan.length === 0 ? (
-              <div style={{ padding: 32, color: "#9b9889", fontSize: 13 }}>Run protocol_days.sql in Supabase to load your week plan.</div>
+              <div style={{ padding: 32, color: "#6B7B6E", fontSize: 13 }}>Run protocol_days.sql in Supabase to load your week plan.</div>
             ) : weekViewDay !== null ? (
               /* Single day expanded */
               (() => {
@@ -3424,20 +3424,20 @@ export function DashboardReactClient({
                 if (!day) return null;
                 return (
                   <div style={{ padding: "20px 24px", maxWidth: 600, margin: "0 auto" }}>
-                    <button type="button" style={{ background: "none", border: "none", color: "#9dcc3a", cursor: "pointer", fontSize: 12, padding: "0 0 16px 0", display: "block" }} onClick={() => setWeekViewDay(null)}>← Back to week</button>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: "#edeae0", marginBottom: 4, fontFamily: "Georgia, serif" }}>{day.dayName} — {day.dayTheme}</div>
-                    <p style={{ fontSize: 13, color: "#9b9889", lineHeight: 1.6, marginBottom: 20 }}>{day.dayDescription}</p>
+                    <button type="button" style={{ background: "none", border: "none", color: "#4A7C59", cursor: "pointer", fontSize: 12, padding: "0 0 16px 0", display: "block" }} onClick={() => setWeekViewDay(null)}>← Back to week</button>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "#1C2B1E", marginBottom: 4, fontFamily: "Georgia, serif" }}>{day.dayName} — {day.dayTheme}</div>
+                    <p style={{ fontSize: 13, color: "#6B7B6E", lineHeight: 1.6, marginBottom: 20 }}>{day.dayDescription}</p>
                     {day.activities.map((act, i) => (
-                      <div key={act.id} style={{ background: "rgba(255,255,255,0.03)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
+                      <div key={act.id} style={{ background: "rgba(28,43,30,0.03)", borderRadius: 12, padding: "14px 16px", marginBottom: 10 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                          <span style={{ fontSize: 14, fontWeight: 600, color: "#edeae0" }}>{i + 1}. {act.name}</span>
-                          <span style={{ fontSize: 12, color: "#9b9889" }}>{act.durationMinutes} min</span>
+                          <span style={{ fontSize: 14, fontWeight: 600, color: "#1C2B1E" }}>{i + 1}. {act.name}</span>
+                          <span style={{ fontSize: 12, color: "#6B7B6E" }}>{act.durationMinutes} min</span>
                         </div>
-                        <p style={{ fontSize: 12.5, color: "#9b9889", margin: 0, lineHeight: 1.5 }}>{act.description}</p>
+                        <p style={{ fontSize: 12.5, color: "#6B7B6E", margin: 0, lineHeight: 1.5 }}>{act.description}</p>
                         {act.isOptional && <div style={{ fontSize: 11, color: "rgba(157,204,58,0.6)", marginTop: 6 }}>Optional</div>}
                       </div>
                     ))}
-                    <div style={{ fontSize: 12, color: "#9b9889", marginTop: 12 }}>Total: ~{day.totalMinutes} minutes</div>
+                    <div style={{ fontSize: 12, color: "#6B7B6E", marginTop: 12 }}>Total: ~{day.totalMinutes} minutes</div>
                   </div>
                 );
               })()
@@ -3446,8 +3446,8 @@ export function DashboardReactClient({
               <div>
                 {/* Customization notes from Dustin */}
                 {weekPlanMeta.customizationNotes && (
-                  <div style={{ margin: "8px 16px 0", background: "rgba(220,180,100,0.08)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: 10, padding: "12px 14px" }}>
-                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Dustin&apos;s notes for your plan</div>
+                  <div style={{ margin: "8px 16px 0", background: "rgba(220,180,100,0.08)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: 10, padding: "12px 14px" }}>
+                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(196,131,26,0.8)", marginBottom: 6 }}>Dustin&apos;s notes for your plan</div>
                     <p style={{ fontSize: 12.5, color: "#c4c0b4", margin: 0, lineHeight: 1.6, fontStyle: "italic" }}>&ldquo;{weekPlanMeta.customizationNotes}&rdquo;</p>
                   </div>
                 )}
@@ -3463,16 +3463,16 @@ export function DashboardReactClient({
                           <button type="button" onClick={() => setWeekViewDay(day.dayOfWeek)}
                             style={{ flex: 1, background: "none", border: "none", textAlign: "left", cursor: "pointer", padding: 0, display: "flex", gap: 16, alignItems: "flex-start" }}>
                             <div style={{ width: 32, flexShrink: 0 }}>
-                              <div style={{ fontSize: 11, fontWeight: 700, color: isToday ? "#9dcc3a" : "#edeae0" }}>{day.dayName.slice(0, 3)}</div>
-                              {isToday && <div style={{ fontSize: 8, color: "#9dcc3a", textTransform: "uppercase" }}>Today</div>}
-                              {override && <div style={{ fontSize: 8, color: "#e8a838" }}>Moved</div>}
+                              <div style={{ fontSize: 11, fontWeight: 700, color: isToday ? "#4A7C59" : "#1C2B1E" }}>{day.dayName.slice(0, 3)}</div>
+                              {isToday && <div style={{ fontSize: 8, color: "#4A7C59", textTransform: "uppercase" }}>Today</div>}
+                              {override && <div style={{ fontSize: 8, color: "#C4831A" }}>Moved</div>}
                             </div>
                             <div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: "#edeae0", marginBottom: 3 }}>{day.dayTheme}</div>
-                              <div style={{ fontSize: 11, color: "#9b9889" }}>{actSummary || "Rest"}</div>
-                              {override && <div style={{ fontSize: 10, color: "#e8a838", marginTop: 2 }}>→ moved to {DAY_NAMES[override.overrideDow]}</div>}
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "#1C2B1E", marginBottom: 3 }}>{day.dayTheme}</div>
+                              <div style={{ fontSize: 11, color: "#6B7B6E" }}>{actSummary || "Rest"}</div>
+                              {override && <div style={{ fontSize: 10, color: "#C4831A", marginTop: 2 }}>→ moved to {DAY_NAMES[override.overrideDow]}</div>}
                             </div>
-                            <div style={{ marginLeft: "auto", fontSize: 11, color: "#9b9889", flexShrink: 0 }}>{day.totalMinutes > 0 ? `~${day.totalMinutes}m` : ""}</div>
+                            <div style={{ marginLeft: "auto", fontSize: 11, color: "#6B7B6E", flexShrink: 0 }}>{day.totalMinutes > 0 ? `~${day.totalMinutes}m` : ""}</div>
                           </button>
                         </div>
                         {/* Move to different day */}
@@ -3480,10 +3480,10 @@ export function DashboardReactClient({
                           <div style={{ padding: "0 20px 10px" }}>
                             {dayPickerOpen.day?.id === day.id ? (
                               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                                <span style={{ fontSize: 11, color: "#9b9889" }}>Move to:</span>
+                                <span style={{ fontSize: 11, color: "#6B7B6E" }}>Move to:</span>
                                 {[1,2,3,4,5,6,7].filter((d) => d !== day.dayOfWeek).map((d) => (
                                   <button key={d} type="button"
-                                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", color: "#c4c0b4", cursor: "pointer", opacity: movingDay ? 0.6 : 1 }}
+                                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: 20, background: "#E8E2D9", border: "1px solid rgba(255,255,255,0.1)", color: "#c4c0b4", cursor: "pointer", opacity: movingDay ? 0.6 : 1 }}
                                     disabled={movingDay}
                                     onClick={async () => {
                                       setMovingDay(true);
@@ -3496,9 +3496,9 @@ export function DashboardReactClient({
                                     {DAY_NAMES[d].slice(0, 3)}
                                   </button>
                                 ))}
-                                <button type="button" style={{ fontSize: 11, color: "#9b9889", background: "none", border: "none", cursor: "pointer" }} onClick={() => setDayPickerOpen({ day: null })}>Cancel</button>
+                                <button type="button" style={{ fontSize: 11, color: "#6B7B6E", background: "none", border: "none", cursor: "pointer" }} onClick={() => setDayPickerOpen({ day: null })}>Cancel</button>
                                 {override && (
-                                  <button type="button" style={{ fontSize: 11, color: "#e05252", background: "none", border: "none", cursor: "pointer" }}
+                                  <button type="button" style={{ fontSize: 11, color: "#B84040", background: "none", border: "none", cursor: "pointer" }}
                                     onClick={async () => { setMovingDay(true); try { await fetch("/api/member/schedule-override", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ protocol_day_id: day.id }) }); setWeekPlanMeta((prev) => ({ ...prev, overrides: prev.overrides.filter((o) => o.protocolDayId !== day.id) })); setDayPickerOpen({ day: null }); } catch { /* */ } finally { setMovingDay(false); } }}>
                                     Reset to {DAY_NAMES[day.dayOfWeek].slice(0,3)}
                                   </button>
@@ -3550,17 +3550,17 @@ export function DashboardReactClient({
               <div style={{ flex: 1, padding: "20px 20px 32px", maxWidth: 600, margin: "0 auto", width: "100%" }}>
                 {/* Stats row */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>
-                  <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
+                  <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
                     <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>PR</div>
-                    <div style={{ fontSize: 18, fontWeight: 700, color: "#9dcc3a" }}>{prConc > 0 ? `${Math.round(prConc)} lbs` : "—"}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: "#4A7C59" }}>{prConc > 0 ? `${Math.round(prConc)} lbs` : "—"}</div>
                     <div style={{ fontSize: 9, color: "var(--text3)" }}>concentric</div>
                   </div>
-                  <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
+                  <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
                     <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Sessions</div>
                     <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{rows.length}</div>
                     <div style={{ fontSize: 9, color: "var(--text3)" }}>total</div>
                   </div>
-                  <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
+                  <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px", textAlign: "center" }}>
                     <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>Last</div>
                     <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{rows[0]?.conc != null ? `${Math.round(rows[0].conc)}` : "—"}</div>
                     <div style={{ fontSize: 9, color: "var(--text3)" }}>lbs conc</div>
@@ -3569,22 +3569,22 @@ export function DashboardReactClient({
 
                 {/* Progression chart */}
                 {pathH && (
-                  <div style={{ background: "var(--bg3)", borderRadius: "var(--r)", padding: "14px 16px", marginBottom: 20 }}>
+                  <div style={{ background: "var(--bg2)", borderRadius: "var(--r)", padding: "14px 16px", marginBottom: 20 }}>
                     <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>Concentric max progression</div>
                     <svg viewBox="0 0 200 40" style={{ width: "100%", height: 44, display: "block", marginBottom: 6 }}>
-                      <path d={pathH} fill="none" stroke="#9dcc3a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                      <path d={pathH} fill="none" stroke="#4A7C59" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                     <div style={{ display: "flex", justifyContent: "space-between" }}>
                       <span style={{ fontSize: 10, color: "var(--text3)" }}>{rowsAsc[0]?.conc != null ? `${Math.round(rowsAsc[0].conc)} lbs` : ""}</span>
                       <span style={{ fontSize: 10, color: "var(--text3)" }}>→</span>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "#9dcc3a" }}>{rows[0]?.conc != null ? `${Math.round(rows[0].conc)} lbs today` : ""}</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#4A7C59" }}>{rows[0]?.conc != null ? `${Math.round(rows[0].conc)} lbs today` : ""}</span>
                     </div>
                   </div>
                 )}
 
                 {/* Session log */}
                 <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>Session log</div>
-                <div style={{ background: "var(--bg3)", borderRadius: "var(--r)" }}>
+                <div style={{ background: "var(--bg2)", borderRadius: "var(--r)" }}>
                   {rows.map((r, i) => {
                     const ratio = r.conc && r.ecc ? r.ecc / r.conc : null;
                     const isPR = r.conc != null && r.conc === prConc;
@@ -3593,11 +3593,11 @@ export function DashboardReactClient({
                       <div key={r.date} style={{ display: "flex", alignItems: "center", padding: "11px 16px", borderTop: i > 0 ? "1px solid var(--border)" : "none", background: isPR ? "rgba(157,204,58,0.04)" : "transparent" }}>
                         <div style={{ fontSize: 12, color: "var(--text3)", flexShrink: 0, width: 110 }}>{dateLabel}</div>
                         <div style={{ flex: 1, display: "flex", gap: 12, flexWrap: "wrap" }}>
-                          {r.conc != null && <span style={{ fontSize: 13, color: "var(--text2)" }}>Conc <b style={{ color: isPR ? "#9dcc3a" : "var(--text)" }}>{Math.round(r.conc)} lbs</b></span>}
+                          {r.conc != null && <span style={{ fontSize: 13, color: "var(--text2)" }}>Conc <b style={{ color: isPR ? "#4A7C59" : "var(--text)" }}>{Math.round(r.conc)} lbs</b></span>}
                           {r.ecc != null && <span style={{ fontSize: 13, color: "var(--text2)" }}>Ecc <b style={{ color: "var(--text)" }}>{Math.round(r.ecc)} lbs</b></span>}
                           {ratio != null && <span style={{ fontSize: 12, color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}×</span>}
                         </div>
-                        {isPR && <span style={{ fontSize: 10, fontWeight: 700, color: "#9dcc3a", flexShrink: 0 }}>PR</span>}
+                        {isPR && <span style={{ fontSize: 10, fontWeight: 700, color: "#4A7C59", flexShrink: 0 }}>PR</span>}
                       </div>
                     );
                   })}
@@ -3618,7 +3618,7 @@ export function DashboardReactClient({
               </p>
               <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 16 }}>Want to request an adjustment from Dustin?</p>
               {guardrailSent ? (
-                <div style={{ fontSize: 13, color: "#9dcc3a", fontWeight: 500, marginBottom: 12 }}>✓ Request sent. Dustin will review and follow up.</div>
+                <div style={{ fontSize: 13, color: "#4A7C59", fontWeight: 500, marginBottom: 12 }}>✓ Request sent. Dustin will review and follow up.</div>
               ) : (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <button type="button" className="btn btn-sm" disabled={sendingGuardrail}
@@ -3653,7 +3653,7 @@ export function DashboardReactClient({
               <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Request Protocol Adjustment</div>
               <p style={{ fontSize: 12.5, color: "var(--text3)", marginBottom: 14, lineHeight: 1.6 }}>Tell Dustin what you&apos;d like to change and why. He&apos;ll review and update your protocol.</p>
               {protocolRequestSent ? (
-                <div style={{ color: "#9dcc3a", fontSize: 13, fontWeight: 500, padding: "12px 0" }}>
+                <div style={{ color: "#4A7C59", fontSize: 13, fontWeight: 500, padding: "12px 0" }}>
                   ✓ Request sent. Dustin will review and update your protocol.
                 </div>
               ) : (
@@ -3725,7 +3725,7 @@ export function DashboardReactClient({
                     <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 4 }}>
                       <div>
                         <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)" }}>{notif.member_name}</span>
-                        {!notif.is_read && <span style={{ marginLeft: 8, fontSize: 9, background: "#9dcc3a", color: "#0b0c09", borderRadius: 3, padding: "1px 5px", fontWeight: 700 }}>NEW</span>}
+                        {!notif.is_read && <span style={{ marginLeft: 8, fontSize: 9, background: "#4A7C59", color: "#1C2B1E", borderRadius: 3, padding: "1px 5px", fontWeight: 700 }}>NEW</span>}
                       </div>
                       <span style={{ fontSize: 10, color: "var(--text3)", whiteSpace: "nowrap" }}>
                         {new Date(notif.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
