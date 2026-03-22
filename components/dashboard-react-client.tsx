@@ -148,6 +148,10 @@ type DashboardPayload = {
     sessions: Array<{ name: string; detail: string; duration: string; status: string }>;
     id: string;
     targetSystem: string;
+    tier: string;
+    description: string;
+    scienceRationale: string;
+    daysPerWeek: number | null;
     arxPerWeek: number;
     carolPerWeek: number;
     recoveryPerMonth: number;
@@ -2096,7 +2100,7 @@ export function DashboardReactClient({
           {(() => {
             const p = payload.protocol;
             const meta = resolveProtocolMeta(p.name);
-            const protocolDisplayName = PROTOCOL_ALIASES[p.name] ?? p.name;
+            const protocolDisplayName = p.name || (PROTOCOL_ALIASES[p.name] ?? p.name);
 
             // ── Change Protocol screen ────────────────────────────────────
             if (showChangeProtocol) {
@@ -2219,21 +2223,36 @@ export function DashboardReactClient({
             // ── Main Protocol page ────────────────────────────────────────
             const hasProtocol = !!p.name;
 
+            // Build weekly targets from live protocol data
+            const weeklyTargets: Array<{ label: string; value: string }> = [];
+            if (hasProtocol) {
+              if (p.arxPerWeek > 0) weeklyTargets.push({ label: "Strength (ARX)", value: `${p.arxPerWeek}x` });
+              if (p.carolPerWeek > 0) weeklyTargets.push({ label: "Cardio (CAROL)", value: `${p.carolPerWeek}x` });
+              if (p.recoveryPerMonth > 0) weeklyTargets.push({ label: "Recovery", value: `${Math.ceil(p.recoveryPerMonth / 4)}x` });
+              if (p.daysPerWeek) weeklyTargets.push({ label: "Total sessions", value: `${p.daysPerWeek}x` });
+              // Fall back to meta targets if no live data
+              if (weeklyTargets.length === 0) meta.targets.forEach((t) => weeklyTargets.push(t));
+            }
+
+            const tierLabel = PROTOCOL_TIER_LABELS[normalizeProtocolTier(p.tier) ?? "longevity"] ?? "";
+
             return (
               <>
-                {/* 1. Header */}
+                {/* Header */}
                 <div style={{ marginBottom: 28 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
                     <div style={{ fontSize: 26, fontFamily: "var(--serif)", color: "var(--text)", lineHeight: 1.2 }}>
                       {hasProtocol ? protocolDisplayName : "Your plan is being prepared"}
                     </div>
                     {hasProtocol && <span style={{ fontSize: 10, background: "rgba(201,240,85,0.1)", color: "var(--lime)", border: "1px solid rgba(201,240,85,0.25)", borderRadius: 4, padding: "3px 10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 4, flexShrink: 0 }}>Active</span>}
                   </div>
+                  {hasProtocol && tierLabel && (
+                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>{tierLabel}</div>
+                  )}
                   {hasProtocol && (
-                    <>
-                      <div style={{ fontSize: 14, color: "var(--lime)", fontStyle: "italic", marginBottom: 8 }}>&ldquo;{meta.tagline}&rdquo;</div>
-                      <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{meta.description}</p>
-                    </>
+                    <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0 }}>
+                      {p.description || meta.description}
+                    </p>
                   )}
                   {!hasProtocol && (
                     <p style={{ fontSize: 13, color: "var(--text3)", margin: "8px 0 0 0", lineHeight: 1.65 }}>Dustin will assign your protocol after your first session.</p>
@@ -2242,56 +2261,62 @@ export function DashboardReactClient({
 
                 {hasProtocol && (
                   <>
-                    {/* 2. Weekly Targets */}
-                    <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>This Week&apos;s Targets</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                        {meta.targets.map((t, i) => (
-                          <div
-                            key={t.label}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              padding: "11px 0",
-                              borderBottom: i < meta.targets.length - 1 ? "1px solid var(--border)" : "none",
-                            }}
-                          >
-                            <span style={{ fontSize: 13.5, color: "var(--text)" }}>{t.label}</span>
-                            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--lime)" }}>{t.value}</span>
-                          </div>
-                        ))}
+                    {/* Weekly Targets */}
+                    {weeklyTargets.length > 0 && (
+                      <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>This Week&apos;s Targets</div>
+                        <div style={{ display: "flex", flexDirection: "column" }}>
+                          {weeklyTargets.map((t, i) => (
+                            <div key={t.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: i < weeklyTargets.length - 1 ? "1px solid var(--border)" : "none" }}>
+                              <span style={{ fontSize: 13.5, color: "var(--text)" }}>{t.label}</span>
+                              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--lime)" }}>{t.value}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    {/* 3. What to Expect */}
+                    {/* Why this protocol */}
                     <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>What to Expect</div>
+                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 14 }}>Why this protocol</div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         {meta.whatToExpect.map((bullet) => (
                           <div key={bullet} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
                             <span style={{ color: "var(--lime)", fontSize: 14, lineHeight: "20px", flexShrink: 0 }}>—</span>
-                            <span style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.5 }}>{bullet}</span>
+                            <span style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.55 }}>{bullet}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    {/* 4. Optional Add-Ons */}
+                    {/* Science behind the sessions */}
+                    {p.scienceRationale && (
+                      <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 14 }}>The science</div>
+                        <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.75, margin: 0 }}>{p.scienceRationale}</p>
+                      </div>
+                    )}
+
+                    {/* CAROL ride types if set */}
+                    {p.carolRideTypes.length > 0 && (
+                      <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 14 }}>Cardio focus</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {p.carolRideTypes.map((rt) => (
+                            <span key={rt} style={{ fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border2)", borderRadius: "var(--r-sm)", padding: "5px 12px", color: "var(--text2)" }}>
+                              CAROL {rt.replace(/_/g, " ")}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Optional Add-Ons */}
                     <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>Optional Add-Ons</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>Optional add-ons</div>
+                      <div style={{ display: "flex", flexDirection: "column" }}>
                         {OPTIONAL_ADDONS.map((addon, i) => (
-                          <div
-                            key={addon}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              gap: 10,
-                              padding: "10px 0",
-                              borderBottom: i < OPTIONAL_ADDONS.length - 1 ? "1px solid var(--border)" : "none",
-                            }}
-                          >
+                          <div key={addon} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < OPTIONAL_ADDONS.length - 1 ? "1px solid var(--border)" : "none" }}>
                             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--text3)", flexShrink: 0, display: "inline-block" }} />
                             <span style={{ fontSize: 13, color: "var(--text2)" }}>{addon}</span>
                           </div>
@@ -2299,16 +2324,23 @@ export function DashboardReactClient({
                       </div>
                     </div>
 
-                    {/* Coach notes — shown if present */}
+                    {/* Coach notes */}
                     {p.coachNotes && (
-                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 14 }}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 6 }}>Notes from your coach</div>
-                        <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{p.coachNotes}</p>
+                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 8 }}>Note from your coach</div>
+                        <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0 }}>{p.coachNotes}</p>
                       </div>
                     )}
 
-                    {/* 5. Change Protocol */}
-                    <div style={{ paddingTop: 8 }}>
+                    {/* Started date */}
+                    {p.startDate && (
+                      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 20, paddingLeft: 2 }}>
+                        Started {new Date(p.startDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+                      </div>
+                    )}
+
+                    {/* Change Protocol */}
+                    <div style={{ paddingTop: 4 }}>
                       <button
                         type="button"
                         className="btn"

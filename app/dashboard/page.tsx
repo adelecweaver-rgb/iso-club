@@ -149,6 +149,10 @@ type DashboardPayload = {
     sessions: Array<{ name: string; detail: string; duration: string; status: string }>;
     id: string;
     targetSystem: string;
+    tier: string;
+    description: string;
+    scienceRationale: string;
+    daysPerWeek: number | null;
     arxPerWeek: number;
     carolPerWeek: number;
     recoveryPerMonth: number;
@@ -343,6 +347,10 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       sessions: [],
       id: "",
       targetSystem: "",
+      tier: "",
+      description: "",
+      scienceRationale: "",
+      daysPerWeek: null,
       arxPerWeek: 0,
       carolPerWeek: 0,
       recoveryPerMonth: 0,
@@ -516,7 +524,7 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     (async () => {
       const newRes = await supabase
         .from("member_protocols")
-        .select("id,start_date,coach_notes,protocols(id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
+        .select("id,start_date,coach_notes,days_per_week,protocols(id,name,description,target_system,tier,science_rationale,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
         .eq("member_id", memberId)
         .eq("status", "active")
         .order("assigned_at", { ascending: false })
@@ -821,6 +829,10 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     payload.protocol.id = stringOr(protocolLib.id, "");
     payload.protocol.name = stringOr(protocolLib.name, "");
     payload.protocol.targetSystem = stringOr(protocolLib.target_system, "");
+    payload.protocol.tier = stringOr(protocolLib.tier, "");
+    payload.protocol.description = stringOr(protocolLib.description, "");
+    payload.protocol.scienceRationale = stringOr(protocolLib.science_rationale, "");
+    payload.protocol.daysPerWeek = typeof protocolRow!.days_per_week === "number" ? protocolRow!.days_per_week : null;
     payload.protocol.arxPerWeek = Math.round(numberOr(protocolLib.arx_frequency_per_week, 0));
     payload.protocol.carolPerWeek = Math.round(numberOr(protocolLib.carol_frequency_per_week, 0));
     payload.protocol.recoveryPerMonth = Math.round(numberOr(protocolLib.recovery_target_per_month, 0));
