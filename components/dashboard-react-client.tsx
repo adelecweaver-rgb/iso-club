@@ -1238,9 +1238,6 @@ export function DashboardReactClient({
                 <Link className="btn btn-sm" href="/dashboard/settings">
                   Settings
                 </Link>
-                <Link className="btn btn-sm" href="/dashboard/upload">
-                  Upload Data
-                </Link>
               </>
             ) : canSeeCoachImportData ? (
               <>
