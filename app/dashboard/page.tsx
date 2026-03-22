@@ -10,17 +10,15 @@ import { getCurrentAuthState, routeForRole, type AppRole } from "@/lib/server/ro
 
 type MemberSection =
   | "dashboard"
+  | "progress"
+  | "history"
   | "protocol"
-  | "carol"
-  | "arx"
-  | "scans"
   | "recovery"
   | "wearables"
   | "messages"
   | "reports"
   | "schedule"
-  | "goals"
-  | "history";
+  | "goals";
 
 type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 
@@ -241,17 +239,15 @@ function normalizeMemberSection(input: string | undefined): MemberSection {
   const value = String(input || "").trim().toLowerCase();
   if (
     value === "dashboard" ||
+    value === "progress" ||
+    value === "history" ||
     value === "protocol" ||
-    value === "carol" ||
-    value === "arx" ||
-    value === "scans" ||
     value === "recovery" ||
     value === "wearables" ||
     value === "messages" ||
     value === "reports" ||
     value === "schedule" ||
-    value === "goals" ||
-    value === "history"
+    value === "goals"
   ) {
     return value;
   }
