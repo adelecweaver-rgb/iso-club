@@ -39,10 +39,14 @@ export default async function MemberConnectCarolPage() {
   }
 
   const clerkUser = await safeCurrentUser();
-  const memberName =
+  const clerkName =
     [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ").trim() ||
     clerkUser?.username ||
     "Member";
+  const memberName =
+    (typeof context.dbUser.full_name === "string" && context.dbUser.full_name.trim()
+      ? context.dbUser.full_name.trim()
+      : clerkName);
   const savedCarolUsername =
     typeof context.dbUser.carol_username === "string"
       ? context.dbUser.carol_username
