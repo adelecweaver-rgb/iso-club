@@ -16,21 +16,21 @@
   --border:    rgba(255,255,255,0.07);
   --border2:   rgba(255,255,255,0.13);
   --text:      #edeae0;
-  --text2:     #9b9889;
-  --text3:     #585750;
-  --lime:      #c9f055;
-  --lime2:     #a8d038;
-  --lime-dim:  rgba(201,240,85,0.1);
-  --lime-dim2: rgba(201,240,85,0.05);
-  --amber:     #f0b955;
-  --amber-dim: rgba(240,185,85,0.1);
-  --blue:      #55b8f0;
-  --blue-dim:  rgba(85,184,240,0.1);
-  --coral:     #f07055;
-  --teal:      #55e8c8;
-  --teal-dim:  rgba(85,232,200,0.1);
-  --serif:     'Instrument Serif', Georgia, serif;
-  --sans:      'Instrument Sans', sans-serif;
+  --text2:     #c8c4b4;
+  --text3:     #9b9889;
+  --lime:      #9dcc3a;
+  --lime2:     #84ae2e;
+  --lime-dim:  rgba(157,204,58,0.1);
+  --lime-dim2: rgba(157,204,58,0.05);
+  --amber:     #e8a838;
+  --amber-dim: rgba(232,168,56,0.1);
+  --blue:      #38bdf8;
+  --blue-dim:  rgba(56,189,248,0.1);
+  --coral:     #e05252;
+  --teal:      #2ec8c8;
+  --teal-dim:  rgba(46,200,200,0.1);
+  --serif:     Georgia, serif;
+  --sans:      -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --r:         14px;
   --r-sm:      8px;
 }
@@ -47,8 +47,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--lime),var(--lime2));transition:width 0.5s ease;border-radius:0 2px 2px 0}
 
 /* LOGO */
-.onboard-logo{position:fixed;top:24px;left:32px;font-family:var(--serif);font-size:20px;color:var(--text);letter-spacing:0.02em}
-.onboard-logo em{color:var(--lime);font-style:normal}
+.onboard-logo{position:fixed;top:20px;left:28px;display:flex;align-items:center;gap:0}
 
 /* STEP INDICATOR */
 .step-indicator{position:fixed;top:28px;right:32px;font-size:11px;color:var(--text3);letter-spacing:0.1em}
@@ -191,7 +190,13 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:14%"></div></div>
 
 <!-- LOGO -->
-<div class="onboard-logo">Iso<em>.</em></div>
+<div class="onboard-logo">
+  <svg viewBox="0 0 130 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:62px;height:38px;display:block" aria-label="Iso">
+    <circle cx="24" cy="9" r="5.5" fill="#edeae0"/>
+    <path d="M24 20 C24 28, 18 35, 14 44 C10 53, 14 62, 24 64 C34 66, 42 58, 54 46 C66 34, 76 20, 88 18" stroke="#edeae0" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <circle cx="107" cy="50" r="19" stroke="#edeae0" stroke-width="7.5" fill="none"/>
+  </svg>
+</div>
 
 <!-- STEP INDICATOR -->
 <div class="step-indicator" id="step-indicator">Step 1 of 7</div>
@@ -203,20 +208,19 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <!-- ======================== -->
   <div class="screen active" id="screen-1">
     <div class="screen-eyebrow">Welcome to Iso Club</div>
-    <h1 class="screen-title">Your health,<br><em>optimized.</em></h1>
-    <p class="screen-sub">You're about to set up your personal Healthspan OS — a precision protocol designed by Dustin, built around your goals and your data. This takes about 5 minutes.</p>
+    <h1 class="screen-title">Built around<br><em>you.</em></h1>
+    <p class="screen-sub">This takes about 5 minutes. Your answers go directly to Dustin — he'll use them to build your personal protocol before your first session.</p>
 
     <div class="dustin-card">
       <div class="dustin-av">D</div>
       <div>
         <div class="dustin-name">Dustin Weaver</div>
         <div class="dustin-title">Head Coach · Iso Club</div>
-        <div class="dustin-msg">"Every protocol I write is built around one question: what does this specific person need to get meaningfully healthier? Answer this honestly and I'll build you something that actually works."</div>
+        <div class="dustin-msg">"I read every intake personally. Be honest about where you are — not where you think you should be. That's how I build something that actually moves the needle."</div>
       </div>
     </div>
 
-    <button class="btn-primary" onclick="nextScreen()">Let's get started →</button>
-    <p style="text-align:center;font-size:12px;color:var(--text3);margin-top:8px">Already a member? <span style="color:var(--lime);cursor:pointer">Sign in</span></p>
+    <button class="btn-primary" onclick="nextScreen()">Get started →</button>
   </div>
 
   <!-- ======================== -->
@@ -225,7 +229,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div class="screen" id="screen-2">
     <div class="screen-eyebrow">About you</div>
     <h1 class="screen-title">The basics</h1>
-    <p class="screen-sub">Dustin uses this to calibrate your protocol from day one.</p>
+    <p class="screen-sub">Dustin uses this to calibrate your protocol from day one. Phone is required for notifications.</p>
 
     <div class="form-row" style="margin-bottom:16px">
       <div class="form-group" style="margin-bottom:0">
@@ -283,7 +287,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div class="screen" id="screen-3">
     <div class="screen-eyebrow">Your goals</div>
     <h1 class="screen-title">What matters<br>most to you?</h1>
-    <p class="screen-sub">Dustin will use this to choose your track. Pick the one that resonates most — you can add more later.</p>
+    <p class="screen-sub">Pick the one that resonates most. Dustin uses this to choose your track — you can refine it later.</p>
 
     <div class="option-grid cols-2" style="margin-bottom:28px">
       <div class="option-card" onclick="selectOption(this, 'goal')">
@@ -329,8 +333,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <!-- ======================== -->
   <div class="screen" id="screen-4">
     <div class="screen-eyebrow">Health history</div>
-    <h1 class="screen-title">A few more<br>things Dustin<br>needs to know</h1>
-    <p class="screen-sub">This helps him avoid contraindicated exercises and prescribe safely.</p>
+    <h1 class="screen-title">A few more<br>details</h1>
+    <p class="screen-sub">This helps Dustin avoid contraindicated exercises and tailor your protocol safely from day one.</p>
 
     <div class="form-group">
       <label class="form-label">Current activity level</label>
@@ -392,7 +396,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div class="screen" id="screen-5">
     <div class="screen-eyebrow">Connect your data</div>
     <h1 class="screen-title">Do you wear<br>a <em>tracker?</em></h1>
-    <p class="screen-sub">Connecting your wearable lets Dustin see your recovery and sleep data — so he can adjust your training based on how your body is actually responding between sessions.</p>
+    <p class="screen-sub">Connecting your wearable lets Dustin see your recovery and sleep data — so your protocol adapts to how your body is actually responding.</p>
 
     <div class="device-grid" style="margin-bottom:24px">
       <div class="device-card" onclick="selectDevice(this)">
@@ -445,7 +449,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div class="screen" id="screen-6">
     <div class="screen-eyebrow">Your membership</div>
     <h1 class="screen-title">Choose your<br>level of access</h1>
-    <p class="screen-sub">Every member gets the Healthspan OS dashboard. Higher tiers unlock more direct access to Dustin.</p>
+    <p class="screen-sub">Every tier includes the full Healthspan OS dashboard. Higher tiers add direct access to Dustin.</p>
 
     <div class="tier-grid" style="margin-bottom:24px">
       <div class="tier-card" onclick="selectTier(this)">
@@ -493,7 +497,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     </div>
 
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:24px;font-size:12.5px;color:var(--text3);text-align:center">
-      Not sure? Start with Essential. You can upgrade anytime from your dashboard. Additional services are available, such as 1:1 consultations.
+      Not sure? Start with Essential — you can upgrade anytime from your dashboard.
     </div>
 
     <div class="btn-row">
@@ -508,7 +512,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div class="screen" id="screen-7">
     <div class="screen-eyebrow">You're in</div>
     <h1 class="screen-title">Welcome to<br><em>Iso Club.</em></h1>
-    <p class="screen-sub">Dustin has been notified and will review your intake to build your personal protocol. Here's what happens next.</p>
+    <p class="screen-sub">Dustin has been notified. He'll review your intake and build your protocol. Here's what to expect.</p>
 
     <div class="pending-card">
       <div class="pending-icon">
@@ -530,8 +534,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         </div>
         <div class="pending-step">
           <div class="pending-step-num">3</div>
-          <div class="pending-step-text">You receive a notification — protocol is live</div>
-          <div class="pending-step-time">You'll be notified</div>
+          <div class="pending-step-text">You're notified — your protocol is live in the app</div>
+          <div class="pending-step-time">SMS + app</div>
         </div>
         <div class="pending-step">
           <div class="pending-step-num">4</div>
@@ -544,8 +548,8 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <div class="notif-card">
       <div class="notif-icon">🔔</div>
       <div>
-        <div class="notif-title">Enable notifications</div>
-        <div class="notif-sub">Get notified when Dustin sends your protocol or a message</div>
+        <div class="notif-title">SMS notifications</div>
+        <div class="notif-sub">Get notified when your protocol is ready or Dustin sends a message</div>
       </div>
       <div class="notif-toggle"><div class="notif-thumb"></div></div>
     </div>
