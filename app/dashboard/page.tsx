@@ -11,7 +11,6 @@ import { getCurrentAuthState, routeForRole, type AppRole } from "@/lib/server/ro
 type MemberSection =
   | "dashboard"
   | "progress"
-  | "history"
   | "protocol"
   | "recovery"
   | "wearables"
@@ -240,7 +239,6 @@ function normalizeMemberSection(input: string | undefined): MemberSection {
   if (
     value === "dashboard" ||
     value === "progress" ||
-    value === "history" ||
     value === "protocol" ||
     value === "recovery" ||
     value === "wearables" ||

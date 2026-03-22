@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 type MemberSection =
   | "dashboard"
   | "progress"
-  | "history"
   | "protocol"
   | "recovery"
   | "wearables"
@@ -1164,9 +1163,6 @@ export function DashboardReactClient({
             <button className={activeMemberView("progress")} onClick={() => setMemberSection("progress")} type="button">
               Progress
             </button>
-            <button className={activeMemberView("history")} onClick={() => setMemberSection("history")} type="button">
-              History
-            </button>
             <button className={activeMemberView("protocol")} onClick={() => setMemberSection("protocol")} type="button">
               Protocol
             </button>
@@ -2054,10 +2050,10 @@ export function DashboardReactClient({
         </div>
 
         {/* ── Workout History ──────────────────────────────────────────── */}
-        <div id="view-history" className="content" style={{ display: mode === "member" && memberView === "history" ? "block" : "none" }}>
+        <div id="view-history" className="content" style={{ display: mode === "member" && (memberView as string) === "history" ? "block" : "none" }}>
           {(() => {
             // Load data when tab opens
-            if (memberView === "history" && !historyLoaded && !historyLoadingMore) {
+            if ((memberView as string) === "history" && !historyLoaded && !historyLoadingMore) {
               setHistoryLoadingMore(true);
               void getJson<{ days: DayActivity[] }>("/api/member/activity-history?months=3")
                 .then((r) => { setHistoryDays(r.days ?? []); setHistoryLoaded(true); })
