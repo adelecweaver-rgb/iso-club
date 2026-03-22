@@ -3,6 +3,17 @@
 import Link from "next/link";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  WHY_ITEMS,
+  SESSION_RATIONALE,
+  EQUIPMENT_NOTES,
+  COLD_PLUNGE_RULES,
+  TIER_DISPLAY,
+  deriveGoalLine,
+  type ProtocolTier,
+  type EquipmentKey,
+  type ColdPlungePosition,
+} from "@/lib/protocolContent";
 
 type MemberSection =
   | "dashboard"
@@ -161,8 +172,24 @@ type DashboardPayload = {
     customizationNotes: string;
     startDate: string;
     compliance: { arxThisWeek: number; carolThisWeek: number; recoveryThisMonth: number };
+    days: Array<{
+      id: string;
+      dayOfWeek: number;
+      dayName: string;
+      dayTheme: string;
+      activities: Array<{
+        id: string;
+        order: number;
+        type: string;
+        name: string;
+        durationMinutes: number;
+        isOptional: boolean;
+        coldPlunge: string | null;
+      }>;
+    }>;
   };
-  bookings: Array<{ label: string; status: string; scheduledAt: string | null }>;
+  contrastTherapyPreference: string;
+  bookings: Array<{ label: string; status: string }>;
   reports: Array<{ title: string }>;
   goals: {
     activeGoals: string[];
@@ -606,27 +633,16 @@ const OPTIONAL_ADDONS = [
 
 // ─── Protocol data-model typed constants (coach-facing) ───────────────────────
 
-type ProtocolTier =
-  | "longevity"
-  | "bone_density"
-  | "body_composition"
-  | "athletic_performance"
-  | "healthspan_elite";
+// ProtocolTier imported from @/lib/protocolContent
 
 type ColdPlungeRule =
-  | "recommended"       // before ARX or Katalyst — CNS primer
-  | "optional_contrast" // after sauna on non-ARX/Katalyst days
-  | "optional_cardio"   // before Vasper or cardio-only sessions
-  | "never"             // after ARX or Katalyst — blunts hypertrophic adaptation
+  | "recommended"
+  | "optional_contrast"
+  | "optional_cardio"
+  | "never"
   | null;
 
-const PROTOCOL_TIER_LABELS: Record<ProtocolTier, string> = {
-  longevity:            "Longevity",
-  bone_density:         "Bone Density",
-  body_composition:     "Body Composition",
-  athletic_performance: "Athletic Performance",
-  healthspan_elite:     "Healthspan Elite",
-};
+const PROTOCOL_TIER_LABELS: Record<ProtocolTier, string> = TIER_DISPLAY;
 
 const COLD_PLUNGE_LABELS: Record<NonNullable<ColdPlungeRule>, string> = {
   recommended:       "Cold Plunge — Recommended",
@@ -951,10 +967,6 @@ export function DashboardReactClient({
   // Tracks which protocol day IDs have been checked off locally this session
   const [checkedDayIds, setCheckedDayIds] = useState<Record<string, boolean>>({});
   const [weekPlanLoaded, setWeekPlanLoaded] = useState(false);
-  // Session card day navigation (today's dayOfWeek → forward only)
-  const [sessionCardDow, setSessionCardDow] = useState<number | null>(null);
-  // Optimistic mark-complete for session card
-  const [sessionCardCompleted, setSessionCardCompleted] = useState<Record<string, boolean>>({});
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinLoaded, setCheckinLoaded] = useState(false);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
@@ -965,6 +977,8 @@ export function DashboardReactClient({
   const [confirmProtocol, setConfirmProtocol] = useState<keyof typeof PROTOCOL_META | null>(null);
   const [switchingProtocol, setSwitchingProtocol] = useState(false);
   const [switchProtocolSent, setSwitchProtocolSent] = useState(false);
+  const [whyExpanded, setWhyExpanded] = useState(false);
+  const [expandedSessionDay, setExpandedSessionDay] = useState<number | null>(null);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [coachNotifs, setCoachNotifs] = useState<Array<{ id: string; member_id: string; member_name: string; type: string; message: string; is_read: boolean; created_at: string }>>([]);
   const [notifUnreadCount, setNotifUnreadCount] = useState(0);
@@ -1450,26 +1464,10 @@ export function DashboardReactClient({
             </div>
           )}
 
-          {/* ── Greeting header ─────────────────────────────────────── */}
-          {(() => {
-            const now = new Date();
-            const hour = now.getHours();
-            const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-            const dayLabel = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-            return (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 3 }}>{dayLabel}</div>
-                <div style={{ fontSize: 24, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}>
-                  {greeting}, {greetingName}.
-                </div>
-              </div>
-            );
-          })()}
-
           {/* ══════════════════════════════════════════════════════════════
-              SECTION 1 — READINESS CHECK
-              Existing check-in. DO NOT MODIFY. When "strong" → session
-              card appears below. When "low"/"hurt" → rest day card.
+              SECTION 1 — TODAY'S FOCUS
+              Check-in first. When "strong", reveal the day's protocol
+              focus with a one-tap "Log Complete" button.
           ══════════════════════════════════════════════════════════════ */}
           {(() => {
             const tp = payload.todaysPlan;
@@ -1928,7 +1926,7 @@ export function DashboardReactClient({
 
           {/* Coach note — shown if present */}
           {payload.sessionNote && (
-            <div style={{ background: "rgba(196,131,26,0.04)", border: "1px solid rgba(196,131,26,0.14)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 16 }}>
+            <div style={{ background: "rgba(196,131,26,0.04)", border: "1px solid rgba(196,131,26,0.14)", borderRadius: "var(--r)", padding: "16px 20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(196,131,26,0.90)" }}>Note from {payload.sessionNote.coachName}</div>
                 <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.sessionNote.date}</div>
@@ -1936,441 +1934,6 @@ export function DashboardReactClient({
               <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0, fontStyle: "italic" }}>&ldquo;{payload.sessionNote.text}&rdquo;</p>
             </div>
           )}
-
-          {/* ══════════════════════════════════════════════════════════════
-              SECTION 2 — SESSION CARD (readiness === strong)
-                        — REST DAY CARD (readiness === low | hurt)
-          ══════════════════════════════════════════════════════════════ */}
-          {(todayCheckin === "strong" || todayCheckin === "low" || todayCheckin === "hurt") && (() => {
-            const isRest = todayCheckin === "low" || todayCheckin === "hurt";
-
-            // ── rest day card ────────────────────────────────────────────
-            if (isRest) {
-              const REST_STACK = [
-                { name: "Infrared Sauna",   note: "Deep heat · muscle repair",      dur: 20,   optional: false },
-                { name: "Vasper",           note: "Compression cooling · recovery", dur: 20,   optional: false },
-                { name: "Cold Plunge",      note: "Contrast after sauna",           dur: 3,    optional: true  },
-                { name: "Compression Boots", note: "Circulation · lymphatic",       dur: 15,   optional: false },
-              ];
-              return (
-                <div className="card" style={{ marginBottom: 16, overflow: "hidden" }}>
-                  <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)" }}>
-                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 6 }}>Recovery options for today</div>
-                    <div style={{ fontSize: 20, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2, marginBottom: 3 }}>Rest day stack</div>
-                    <div style={{ fontSize: 12, color: "var(--text3)" }}>No ARX or Katalyst today — just recovery</div>
-                  </div>
-                  <div>
-                    {REST_STACK.map((item, i) => (
-                      <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 20px", borderBottom: i < REST_STACK.length - 1 ? "1px solid var(--border)" : "none" }}>
-                        <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(107,159,212,0.12)", border: "1px solid rgba(107,159,212,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6B9FD4" }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>
-                            {item.name}
-                            {item.optional && <span style={{ marginLeft: 6, fontSize: 10, color: "var(--text3)", fontWeight: 400 }}>optional</span>}
-                          </div>
-                          <div style={{ fontSize: 11, color: "var(--text3)" }}>{item.note}</div>
-                        </div>
-                        <div style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0 }}>{item.dur} min</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            }
-
-            // ── session card (strong) ────────────────────────────────────
-            if (weekPlan.length === 0) return null;
-
-            // Compute today's dow (1=Mon … 7=Sun)
-            const todayIso   = payload.checklistCompletions.todayDate;
-            const weekStart  = payload.checklistCompletions.weekStartDate;
-            const rawDiff    = Math.round((new Date(todayIso + "T00:00:00").getTime() - new Date(weekStart + "T00:00:00").getTime()) / 86400000);
-            const currentDow = Math.max(1, Math.min(7, rawDiff + 1));
-
-            // Training days only (non-rest), from today forward
-            const trainingDays = weekPlan.filter((d) => !d.dayTheme.toLowerCase().includes("rest"));
-            const futureDays   = weekPlan.filter((d) => d.dayOfWeek >= currentDow && !d.dayTheme.toLowerCase().includes("rest"));
-
-            // Which dow is the card showing?  Default to today's if there's a training day, else first future
-            const activeDow = sessionCardDow ?? (futureDays[0]?.dayOfWeek ?? weekPlan[0]?.dayOfWeek ?? currentDow);
-            const viewingDay = weekPlan.find((d) => d.dayOfWeek === activeDow) ?? weekPlan[0];
-
-            if (!viewingDay) return null;
-
-            // Navigation bounds — forward only from today
-            const navDays  = weekPlan.filter((d) => d.dayOfWeek >= currentDow);
-            const navIdx   = navDays.findIndex((d) => d.dayOfWeek === activeDow);
-            const canBack  = navIdx > 0;
-            const canFwd   = navIdx < navDays.length - 1;
-
-            // Is this day complete?
-            function isoForDow(dow: number): string {
-              const base = new Date(weekStart + "T00:00:00");
-              base.setDate(base.getDate() + (dow - 1));
-              return base.toISOString().slice(0, 10);
-            }
-            const dayIso   = isoForDow(viewingDay.dayOfWeek);
-            const hasArx   = payload.arxSessions.some((s) => s.sessionDate.slice(0, 10) === dayIso);
-            const hasCarol = payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === dayIso);
-            const isDone   = sessionCardCompleted[viewingDay.id] || hasArx || hasCarol;
-
-            const required = viewingDay.activities.filter((a) => !a.isOptional);
-
-            // Session title: derived from day theme + activity types
-            const actTypes = [...new Set(required.map((a) => {
-              if (a.type === "strength") return "Strength";
-              if (a.type === "cardio")   return "Cardio";
-              if (a.type === "recovery") return "Recovery";
-              if (a.type === "coaching") return "Coaching";
-              return a.type.charAt(0).toUpperCase() + a.type.slice(1);
-            }))];
-            const totalDur = required.reduce((s, a) => s + a.durationMinutes, 0);
-            const subtitle = `${actTypes.join(" · ")} · ~${totalDur} min`;
-
-            // Day label for header
-            const isToday = viewingDay.dayOfWeek === currentDow;
-            const dowNames = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-            const dayLabel = isToday ? "Today's session" : `${dowNames[viewingDay.dayOfWeek]}'s session`;
-
-            // Icon background per activity type
-            function actIconStyle(type: string): React.CSSProperties {
-              if (type === "strength") return { background: "rgba(74,124,89,0.14)", border: "1px solid rgba(74,124,89,0.28)" };
-              if (type === "cardio")   return { background: "rgba(196,131,26,0.12)", border: "1px solid rgba(196,131,26,0.25)" };
-              if (type === "recovery") return { background: "rgba(107,159,212,0.12)", border: "1px solid rgba(107,159,212,0.25)" };
-              return { background: "rgba(155,142,160,0.12)", border: "1px solid rgba(155,142,160,0.22)" };
-            }
-            function actDotColor(type: string): string {
-              if (type === "strength") return "#4A7C59";
-              if (type === "cardio")   return "#C4831A";
-              if (type === "recovery") return "#6B9FD4";
-              return "#9B8EA0";
-            }
-
-            async function handleMarkComplete() {
-              if (isDone) return;
-              // Optimistic update immediately
-              setSessionCardCompleted((prev) => ({ ...prev, [viewingDay.id]: true }));
-              // Map required activities → log items and fire
-              const toAdd = required
-                .map((a): { type: "arx" | "carol" | "recovery"; subtype: string } | null => {
-                  const n = a.name.toLowerCase();
-                  if (a.type === "strength") return { type: "arx", subtype: "manual_checkin" };
-                  if (a.type === "cardio") {
-                    if (n.includes("rehit")) return { type: "carol", subtype: "REHIT" };
-                    if (n.includes("norwegian") || n.includes("4x4")) return { type: "carol", subtype: "FAT_BURN_60" };
-                    if (n.includes("zone 2") || n.includes("free ride")) return { type: "carol", subtype: "FAT_BURN_30" };
-                    return { type: "carol", subtype: "FAT_BURN_45" };
-                  }
-                  if (a.type === "recovery") {
-                    if (n.includes("cold")) return { type: "recovery", subtype: "cold_plunge" };
-                    if (n.includes("sauna") || n.includes("infrared")) return { type: "recovery", subtype: "infrared_sauna" };
-                    if (n.includes("compression")) return { type: "recovery", subtype: "compression" };
-                  }
-                  return null;
-                })
-                .filter((x): x is { type: "arx" | "carol" | "recovery"; subtype: string } => x !== null);
-              try {
-                if (toAdd.length > 0) {
-                  await fetch("/api/member/activity-log", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: [] }),
-                  });
-                  const c = payload.checklistCompletions;
-                  for (const item of toAdd) {
-                    if (item.type === "arx") { c.arxWeekDates.push(dayIso); }
-                    else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); }
-                    else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); }
-                  }
-                }
-                // Also update checkedDayIds for the weekly tracker
-                setCheckedDayIds((prev) => ({ ...prev, [viewingDay.id]: true }));
-              } catch { /* optimistic — silently ignore, state already updated */ }
-            }
-
-            return (
-              <div className="card" style={{ marginBottom: 16, overflow: "hidden" }}>
-                {/* Header with day nav */}
-                <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)" }}>{dayLabel}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <button type="button"
-                      disabled={!canBack}
-                      onClick={() => { if (canBack) setSessionCardDow(navDays[navIdx - 1]!.dayOfWeek); }}
-                      style={{ background: "none", border: "none", color: canBack ? "var(--text2)" : "var(--border2)", cursor: canBack ? "pointer" : "default", padding: "4px 6px", fontSize: 14, lineHeight: 1 }}
-                    >‹</button>
-                    <span style={{ fontSize: 12, color: "var(--text2)", fontWeight: 500, minWidth: 72, textAlign: "center" }}>
-                      {dowNames[viewingDay.dayOfWeek]}
-                    </span>
-                    <button type="button"
-                      disabled={!canFwd}
-                      onClick={() => { if (canFwd) setSessionCardDow(navDays[navIdx + 1]!.dayOfWeek); }}
-                      style={{ background: "none", border: "none", color: canFwd ? "var(--text2)" : "var(--border2)", cursor: canFwd ? "pointer" : "default", padding: "4px 6px", fontSize: 14, lineHeight: 1 }}
-                    >›</button>
-                  </div>
-                </div>
-
-                {/* Session title + subtitle */}
-                <div style={{ padding: "14px 20px 10px" }}>
-                  <div style={{ fontSize: 20, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2, marginBottom: 4 }}>
-                    {viewingDay.dayTheme || viewingDay.dayName}
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{subtitle}</div>
-                </div>
-
-                {/* Activity list */}
-                <div style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
-                  {required.map((act, i) => (
-                    <div key={act.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderBottom: i < required.length - 1 ? "1px solid var(--border)" : "none" }}>
-                      <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", ...actIconStyle(act.type) }}>
-                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: actDotColor(act.type) }} />
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>{act.name}</div>
-                        {act.description && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.description.length > 80 ? act.description.slice(0, 80) + "…" : act.description}</div>}
-                      </div>
-                      {act.durationMinutes > 0 && <div style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0 }}>{act.durationMinutes} min</div>}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Footer */}
-                <div style={{ padding: "12px 20px", display: "flex", gap: 8 }}>
-                  <button
-                    type="button"
-                    onClick={() => { void handleMarkComplete(); }}
-                    disabled={isDone}
-                    style={{
-                      flex: 1, padding: "11px 0", borderRadius: 8,
-                      background: isDone ? "rgba(74,124,89,0.10)" : "#4A7C59",
-                      color: isDone ? "#4A7C59" : "#fff",
-                      border: isDone ? "1.5px solid rgba(74,124,89,0.30)" : "none",
-                      fontSize: 13.5, fontWeight: 700, cursor: isDone ? "default" : "pointer",
-                      transition: "all 0.15s",
-                    }}
-                  >
-                    {isDone ? "✓ Completed" : "Mark as complete"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMemberSection("protocol")}
-                    style={{ padding: "11px 16px", borderRadius: 8, background: "transparent", border: "1.5px solid var(--border2)", color: "var(--text2)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
-                  >
-                    Full plan
-                  </button>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* ══════════════════════════════════════════════════════════════
-              SECTION 3 — BOOKING CARD (always visible)
-          ══════════════════════════════════════════════════════════════ */}
-          {(() => {
-            const next = payload.bookings[0] ?? null;
-            const isBooked = next && next.status !== "cancelled";
-
-            // Format the scheduled date for display
-            let dateDisplay = "";
-            if (next?.scheduledAt) {
-              const d = new Date(next.scheduledAt);
-              dateDisplay = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-              const timeDisplay = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-              if (isBooked) dateDisplay = `${timeDisplay} · ${dateDisplay}`;
-            } else if (next?.label) {
-              dateDisplay = next.label;
-            }
-
-            return (
-              <div className="card" style={{ marginBottom: 16, padding: "14px 20px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 5 }}>Next booking</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: isBooked ? "var(--text)" : "#C4831A" }}>
-                      {isBooked ? "Booked" : "Not booked"}
-                    </div>
-                    {dateDisplay && (
-                      <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>{dateDisplay}</div>
-                    )}
-                  </div>
-                  <a
-                    href="https://theiso.club/book"
-                    target="_blank"
-                    rel="noreferrer"
-                    style={{
-                      padding: "9px 18px", borderRadius: 8, textDecoration: "none",
-                      background: isBooked ? "transparent" : "#4A7C59",
-                      color: isBooked ? "#4A7C59" : "#fff",
-                      border: isBooked ? "1.5px solid rgba(74,124,89,0.40)" : "none",
-                      fontSize: 13, fontWeight: 600, flexShrink: 0,
-                    }}
-                  >
-                    {isBooked ? "Manage ↗" : "Book now ↗"}
-                  </a>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* ══════════════════════════════════════════════════════════════
-              SECTION 4 — WEEKLY PROGRESS CARD (always visible)
-          ══════════════════════════════════════════════════════════════ */}
-          {(() => {
-            const weekStart  = payload.checklistCompletions.weekStartDate;
-            const todayIso   = payload.checklistCompletions.todayDate;
-
-            // Training days this week
-            const trainingDays = weekPlan.filter((d) => !d.dayTheme.toLowerCase().includes("rest") && d.dayOfWeek >= 1);
-
-            // For each training day, is it complete?
-            function isoForDow(dow: number): string {
-              const base = new Date(weekStart + "T00:00:00");
-              base.setDate(base.getDate() + (dow - 1));
-              return base.toISOString().slice(0, 10);
-            }
-            const currentDow = Math.max(1, Math.min(7, Math.round((new Date(todayIso + "T00:00:00").getTime() - new Date(weekStart + "T00:00:00").getTime()) / 86400000) + 1));
-
-            function isDayDone(dow: number, dayId: string): boolean {
-              if (sessionCardCompleted[dayId] || checkedDayIds[dayId]) return true;
-              const iso = isoForDow(dow);
-              return payload.arxSessions.some((s) => s.sessionDate.slice(0, 10) === iso)
-                  || payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === iso);
-            }
-
-            const completedCount = trainingDays.filter((d) => isDayDone(d.dayOfWeek, d.id)).length;
-            const totalCount     = trainingDays.length;
-
-            // ── Streak calculation ────────────────────────────────────────
-            // Build a set of Monday ISO strings where >= 1 session occurred
-            function mondayOf(isoDate: string): string {
-              const d = new Date(isoDate + "T00:00:00");
-              const dow = d.getDay(); // 0=Sun
-              const diff = dow === 0 ? -6 : 1 - dow;
-              d.setDate(d.getDate() + diff);
-              return d.toISOString().slice(0, 10);
-            }
-            const activeWeeks = new Set<string>();
-            for (const s of payload.arxSessions)   activeWeeks.add(mondayOf(s.sessionDate.slice(0, 10)));
-            for (const s of payload.carolSessions)  activeWeeks.add(mondayOf(s.sessionDate.slice(0, 10)));
-
-            let streak = 0;
-            let cur = new Date(weekStart + "T00:00:00");
-            while (activeWeeks.has(cur.toISOString().slice(0, 10))) {
-              streak++;
-              cur.setDate(cur.getDate() - 7);
-            }
-            // Current partial week counts if any session this week
-            if (streak === 0 && (completedCount > 0)) streak = 1;
-
-            return (
-              <div className="card" style={{ marginBottom: 16, padding: "16px 20px" }}>
-                {/* Header */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)" }}>This week</div>
-                  {streak > 0 && (
-                    <div style={{ fontSize: 11, color: "#4A7C59", fontWeight: 600 }}>{streak} week{streak !== 1 ? "s" : ""} consistent</div>
-                  )}
-                </div>
-
-                {/* Progress dots */}
-                {trainingDays.length > 0 && (
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
-                    {trainingDays.map((day) => {
-                      const done    = isDayDone(day.dayOfWeek, day.id);
-                      const isToday = day.dayOfWeek === currentDow;
-                      const isPast  = day.dayOfWeek < currentDow;
-                      return (
-                        <div key={day.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}>
-                          <div style={{
-                            width: "100%", height: 6, borderRadius: 3,
-                            background: done
-                              ? "#4A7C59"
-                              : isToday
-                                ? "rgba(74,124,89,0.30)"
-                                : isPast
-                                  ? "rgba(196,131,26,0.25)"
-                                  : "var(--border)",
-                            transition: "background 0.2s",
-                          }} />
-                          <div style={{ fontSize: 9, color: "var(--text3)", letterSpacing: "0.04em" }}>
-                            {["Mo","Tu","We","Th","Fr","Sa","Su"][day.dayOfWeek - 1]}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Count */}
-                <div style={{ fontSize: 13, color: "var(--text2)" }}>
-                  <span style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: 22, color: completedCount === totalCount && totalCount > 0 ? "#4A7C59" : "var(--text)" }}>
-                    {completedCount}
-                  </span>
-                  {" "}
-                  <span style={{ color: "var(--text3)" }}>of {totalCount} sessions complete this week</span>
-                  {completedCount === totalCount && totalCount > 0 && <span style={{ marginLeft: 6, color: "#4A7C59", fontWeight: 600 }}>✓</span>}
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* ══════════════════════════════════════════════════════════════
-              SECTION 5 — COACH MESSAGE CARD (unread messages only)
-          ══════════════════════════════════════════════════════════════ */}
-          {(() => {
-            if (unreadCount === 0 || messages.length === 0) return null;
-            // Find latest unread message from the coach (not from the member)
-            const memberId = payload.memberId ?? "";
-            const unread = [...messages].reverse().find((m) => !m.read_at && m.sender_id !== memberId);
-            if (!unread) return null;
-
-            // Relative time label
-            function relativeTime(iso: string): string {
-              const diff = Date.now() - new Date(iso).getTime();
-              const mins  = Math.floor(diff / 60000);
-              const hours = Math.floor(mins / 60);
-              if (mins < 5)   return "Just now";
-              if (hours < 1)  return `${mins}m ago`;
-              if (hours < 4)  return "This morning";
-              if (hours < 20) return `${hours}h ago`;
-              if (hours < 28) return "Yesterday";
-              return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-            }
-
-            return (
-              <div className="card" style={{ marginBottom: 16, padding: "14px 20px", position: "relative" }}>
-                {/* Unread dot */}
-                <div style={{ position: "absolute", top: 12, right: 14, width: 8, height: 8, borderRadius: "50%", background: "#6B9FD4" }} />
-
-                {/* Header */}
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(107,159,212,0.15)", border: "1.5px solid rgba(107,159,212,0.30)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#6B9FD4" }}>D</span>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Coach Dustin</div>
-                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{relativeTime(unread.created_at)}</div>
-                  </div>
-                </div>
-
-                {/* Message preview */}
-                <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 12px 0" }}>
-                  {unread.body.length > 140 ? unread.body.slice(0, 140) + "…" : unread.body}
-                </p>
-
-                {/* Reply button → navigates to messages tab */}
-                <button
-                  type="button"
-                  onClick={() => setMemberSection("messages")}
-                  style={{ padding: "8px 20px", borderRadius: 8, background: "transparent", border: "1.5px solid rgba(107,159,212,0.40)", color: "#6B9FD4", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
-                >
-                  Reply →
-                </button>
-              </div>
-            );
-          })()}
 
         </div>
 
@@ -2479,8 +2042,47 @@ export function DashboardReactClient({
         <div id="view-protocol" className="content" style={{ display: mode === "member" && memberView === "protocol" ? "block" : "none" }}>
           {(() => {
             const p = payload.protocol;
-            const meta = resolveProtocolMeta(p.name);
-            const protocolDisplayName = p.name || (PROTOCOL_ALIASES[p.name] ?? p.name);
+            const contrastPref = payload.contrastTherapyPreference || "no_preference";
+            const hasProtocol = !!p.name;
+            const tierKey = normalizeProtocolTier(p.tier);
+            const firstName = greetingName;
+
+            // ── Helpers ───────────────────────────────────────────────────
+            // "Next session" calculation from protocol days
+            const todayDow = new Date().getDay(); // 0=Sun…6=Sat
+            const trainingDays = p.days.filter((d) => d.activities.some((a) => !a.isOptional));
+            const nextDayIdx = (() => {
+              if (!trainingDays.length) return null;
+              // Find first training day after today (dow 1=Mon…7=Sun in DB)
+              const after = trainingDays.find((d) => d.dayOfWeek > (todayDow === 0 ? 7 : todayDow));
+              return after ? after.dayOfWeek : trainingDays[0].dayOfWeek;
+            })();
+
+            // Equipment tag style
+            function activityTagStyle(coldPlunge: string | null, isOptional: boolean): React.CSSProperties {
+              if (coldPlunge === "RECOMMENDED") return { background: "rgba(85,184,240,0.18)", border: "1px solid rgba(85,184,240,0.6)", color: "#55b8f0" };
+              if (coldPlunge === "OPTIONAL_CONTRAST" || coldPlunge === "OPTIONAL_CARDIO") return { background: "transparent", border: "1px dashed rgba(85,184,240,0.45)", color: "#55b8f0" };
+              if (coldPlunge === "NEVER") return { background: "rgba(240,112,85,0.12)", border: "1px solid rgba(240,112,85,0.4)", color: "#f07055" };
+              if (isOptional) return { background: "transparent", border: "1px dashed rgba(255,255,255,0.18)", color: "var(--text3)" };
+              return { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text2)" };
+            }
+
+            function equipKey(type: string, name: string): EquipmentKey | null {
+              const t = type.toLowerCase(); const n = name.toLowerCase();
+              if (t === "strength" && n.includes("arx")) return "arx";
+              if (t === "cardio" && n.includes("carol")) return "carol";
+              if (t === "cardio" && (n.includes("zone 2") || n.includes("zone2"))) return "zone2";
+              if (n.includes("cold plunge") || n.includes("cold")) return "cold_plunge";
+              if (n.includes("infrared sauna") || n.includes("infrared")) return "infrared_sauna";
+              if (n.includes("katalyst") || n.includes("ems")) return "katalyst";
+              if (n.includes("vasper")) return "vasper";
+              if (n.includes("proteus")) return "proteus";
+              if (n.includes("nxpro") || n.includes("red light") || n.includes("nx pro")) return "nxpro";
+              if (n.includes("compression")) return "compression";
+              if (t === "mobility" || n.includes("mobility")) return "mobility";
+              if (n.includes("sauna") && !n.includes("infrared")) return "infrared_sauna";
+              return null;
+            }
 
             // ── Change Protocol screen ────────────────────────────────────
             if (showChangeProtocol) {
@@ -2488,11 +2090,8 @@ export function DashboardReactClient({
                 const opt = CHOOSE_PROTOCOL_OPTIONS.find((o) => o.key === confirmProtocol)!;
                 return (
                   <div style={{ maxWidth: 480 }}>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmProtocol(null)}
-                      style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 12, padding: 0, marginBottom: 20, display: "flex", alignItems: "center", gap: 6 }}
-                    >
+                    <button type="button" onClick={() => setConfirmProtocol(null)}
+                      style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 12, padding: 0, marginBottom: 20, display: "flex", alignItems: "center", gap: 6 }}>
                       ← Back
                     </button>
                     <div className="card" style={{ padding: "28px 24px" }}>
@@ -2501,19 +2100,14 @@ export function DashboardReactClient({
                       <div style={{ fontSize: 13, color: "var(--lime)", marginBottom: 12, fontStyle: "italic" }}>{opt.headline}</div>
                       <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: "0 0 20px 0" }}>{opt.description}</p>
                       <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "12px 14px", marginBottom: 24, border: "1px solid var(--border)" }}>
-                        <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
-                          We recommend staying on a protocol for a few weeks to see results.
-                        </p>
+                        <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>We recommend staying on a protocol for a few weeks to see results.</p>
                       </div>
                       <div style={{ display: "flex", gap: 10 }}>
                         {switchProtocolSent ? (
                           <span style={{ fontSize: 13, color: "var(--lime)", fontWeight: 500 }}>✓ Request sent to your coach</span>
                         ) : (
                           <>
-                            <button
-                              type="button"
-                              className="btn btn-lime"
-                              disabled={switchingProtocol}
+                            <button type="button" className="btn btn-lime" disabled={switchingProtocol}
                               onClick={() => {
                                 if (switchingProtocol) return;
                                 setSwitchingProtocol(true);
@@ -2524,28 +2118,14 @@ export function DashboardReactClient({
                                       const inbox = await getJson<{ peer?: { id?: string }; coach?: { id?: string } }>("/api/messages/inbox");
                                       resolvedPeerId = String(inbox.peer?.id || inbox.coach?.id || "");
                                     }
-                                    if (resolvedPeerId) {
-                                      await postJson("/api/messages/send", {
-                                        recipient_id: resolvedPeerId,
-                                        body: `Hi — I'd like to switch to the ${confirmProtocol} protocol. Could you update this when you have a chance? Thanks!`,
-                                      });
-                                    }
+                                    if (resolvedPeerId) await postJson("/api/messages/send", { recipient_id: resolvedPeerId, body: `Hi — I'd like to switch to the ${confirmProtocol} protocol. Could you update this when you have a chance? Thanks!` });
                                     setSwitchProtocolSent(true);
                                   } catch { /* silent */ } finally { setSwitchingProtocol(false); }
                                 })();
-                              }}
-                              style={{ fontSize: 13 }}
-                            >
+                              }} style={{ fontSize: 13 }}>
                               {switchingProtocol ? "Sending…" : `Confirm Switch to ${confirmProtocol}`}
                             </button>
-                            <button
-                              type="button"
-                              className="btn"
-                              onClick={() => { setConfirmProtocol(null); setSwitchProtocolSent(false); }}
-                              style={{ fontSize: 13 }}
-                            >
-                              Cancel
-                            </button>
+                            <button type="button" className="btn" onClick={() => { setConfirmProtocol(null); setSwitchProtocolSent(false); }} style={{ fontSize: 13 }}>Cancel</button>
                           </>
                         )}
                       </div>
@@ -2553,39 +2133,20 @@ export function DashboardReactClient({
                   </div>
                 );
               }
-
               return (
                 <div style={{ maxWidth: 520 }}>
-                  <button
-                    type="button"
-                    onClick={() => { setShowChangeProtocol(false); setSwitchProtocolSent(false); setConfirmProtocol(null); }}
-                    style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 12, padding: 0, marginBottom: 20, display: "flex", alignItems: "center", gap: 6 }}
-                  >
+                  <button type="button" onClick={() => { setShowChangeProtocol(false); setSwitchProtocolSent(false); setConfirmProtocol(null); }}
+                    style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 12, padding: 0, marginBottom: 20, display: "flex", alignItems: "center", gap: 6 }}>
                     ← Back to Protocol
                   </button>
                   <div style={{ fontSize: 20, fontFamily: "var(--serif)", color: "var(--text)", marginBottom: 6 }}>Choose Your Focus</div>
                   <p style={{ fontSize: 13, color: "var(--text3)", margin: "0 0 24px 0", lineHeight: 1.6 }}>Select the protocol that fits where you are right now.</p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {CHOOSE_PROTOCOL_OPTIONS.map((opt) => {
-                      const isCurrent = opt.key === protocolDisplayName;
+                      const isCurrent = opt.key === p.name;
                       return (
-                        <button
-                          key={opt.key}
-                          type="button"
-                          onClick={() => { if (!isCurrent) setConfirmProtocol(opt.key); }}
-                          style={{
-                            background: isCurrent ? "rgba(201,240,85,0.06)" : "var(--bg3)",
-                            border: `1px solid ${isCurrent ? "rgba(201,240,85,0.3)" : "var(--border2)"}`,
-                            borderRadius: "var(--r)",
-                            padding: "18px 20px",
-                            textAlign: "left",
-                            cursor: isCurrent ? "default" : "pointer",
-                            transition: "border-color 0.15s, background 0.15s",
-                            width: "100%",
-                          }}
-                          onMouseEnter={(e) => { if (!isCurrent) (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(201,240,85,0.4)"; }}
-                          onMouseLeave={(e) => { if (!isCurrent) (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border2)"; }}
-                        >
+                        <button key={opt.key} type="button" onClick={() => { if (!isCurrent) setConfirmProtocol(opt.key); }}
+                          style={{ background: isCurrent ? "rgba(201,240,85,0.06)" : "var(--bg3)", border: `1px solid ${isCurrent ? "rgba(201,240,85,0.3)" : "var(--border2)"}`, borderRadius: "var(--r)", padding: "18px 20px", textAlign: "left", cursor: isCurrent ? "default" : "pointer", width: "100%" }}>
                           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{opt.key}</div>
                             {isCurrent && <span style={{ fontSize: 10, background: "rgba(201,240,85,0.12)", color: "var(--lime)", border: "1px solid rgba(201,240,85,0.3)", borderRadius: 4, padding: "2px 8px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Current</span>}
@@ -2600,139 +2161,254 @@ export function DashboardReactClient({
               );
             }
 
-            // ── Main Protocol page ────────────────────────────────────────
-            const hasProtocol = !!p.name;
-
-            // Build weekly targets from live protocol data
-            const weeklyTargets: Array<{ label: string; value: string }> = [];
-            if (hasProtocol) {
-              if (p.arxPerWeek > 0) weeklyTargets.push({ label: "Strength (ARX)", value: `${p.arxPerWeek}x` });
-              if (p.carolPerWeek > 0) weeklyTargets.push({ label: "Cardio (CAROL)", value: `${p.carolPerWeek}x` });
-              if (p.recoveryPerMonth > 0) weeklyTargets.push({ label: "Recovery", value: `${Math.ceil(p.recoveryPerMonth / 4)}x` });
-              if (p.daysPerWeek) weeklyTargets.push({ label: "Total sessions", value: `${p.daysPerWeek}x` });
-              // Fall back to meta targets if no live data
-              if (weeklyTargets.length === 0) meta.targets.forEach((t) => weeklyTargets.push(t));
+            // ── No protocol assigned ──────────────────────────────────────
+            if (!hasProtocol) {
+              return (
+                <div style={{ maxWidth: 460 }}>
+                  <div style={{ fontSize: 24, fontFamily: "var(--serif)", color: "var(--text)", marginBottom: 8, lineHeight: 1.2 }}>Your plan is being prepared</div>
+                  <p style={{ fontSize: 13.5, color: "var(--text3)", lineHeight: 1.7, margin: 0 }}>Dustin will assign your protocol after your first session.</p>
+                </div>
+              );
             }
 
-            const tierLabel = PROTOCOL_TIER_LABELS[normalizeProtocolTier(p.tier) ?? "longevity"] ?? "";
+            // ── SUMMARY CARD ──────────────────────────────────────────────
+            const goalLine = deriveGoalLine(payload.goals.activeGoals);
+            const tierLabel = PROTOCOL_TIER_LABELS[tierKey ?? "longevity"] ?? p.tier;
+            const avgDuration = (() => {
+              const trainingDaysAll = p.days.filter((d) => d.activities.some((a) => !a.isOptional));
+              if (!trainingDaysAll.length) return null;
+              const totalMins = trainingDaysAll.reduce((sum, d) => sum + d.activities.filter((a) => !a.isOptional).reduce((s, a) => s + a.durationMinutes, 0), 0);
+              return Math.round(totalMins / trainingDaysAll.length);
+            })();
+            const saunaPerWeek = p.days.reduce((sum, d) => sum + d.activities.filter((a) => a.name.toLowerCase().includes("sauna") && !a.isOptional).length, 0);
+
+            // ── WHY ITEMS (filtered) ──────────────────────────────────────
+            const whyItems = (WHY_ITEMS[tierKey ?? "longevity"] ?? []).filter((item) => {
+              if (item.showIf) return false; // no health conditions in payload yet — skip conditional
+              if (item.showIfInjury) return false;
+              return true;
+            });
+
+            // ── SESSION RATIONALE lookup ──────────────────────────────────
+            const rationaleMap = SESSION_RATIONALE[tierKey ?? "longevity"] ?? {};
 
             return (
-              <>
-                {/* Header */}
-                <div style={{ marginBottom: 28 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 6 }}>
-                    <div style={{ fontSize: 26, fontFamily: "var(--serif)", color: "var(--text)", lineHeight: 1.2 }}>
-                      {hasProtocol ? protocolDisplayName : "Your plan is being prepared"}
-                    </div>
-                    {hasProtocol && <span style={{ fontSize: 10, background: "rgba(201,240,85,0.1)", color: "var(--lime)", border: "1px solid rgba(201,240,85,0.25)", borderRadius: 4, padding: "3px 10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 4, flexShrink: 0 }}>Active</span>}
+              <div style={{ maxWidth: 600 }}>
+                {/* ── 1. Summary card ─────────────────────────────────── */}
+                <div className="card" style={{ padding: "20px 20px 18px", marginBottom: 14 }}>
+                  {/* Tier pill + coach label */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <span style={{ fontSize: 11, background: tierKey === "healthspan_elite" ? "rgba(168,85,240,0.15)" : "rgba(201,240,85,0.1)", color: tierKey === "healthspan_elite" ? "#a855f0" : "var(--lime)", border: `1px solid ${tierKey === "healthspan_elite" ? "rgba(168,85,240,0.4)" : "rgba(201,240,85,0.3)"}`, borderRadius: 20, padding: "3px 12px", fontWeight: 600, letterSpacing: "0.06em" }}>
+                      {tierLabel}{p.daysPerWeek ? ` · ${p.daysPerWeek} days / week` : ""}
+                    </span>
+                    <span style={{ fontSize: 11, color: "var(--text3)" }}>Coach Dustin</span>
                   </div>
-                  {hasProtocol && tierLabel && (
-                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>{tierLabel}</div>
+
+                  {/* Heading */}
+                  <div style={{ fontSize: 22, fontFamily: "var(--serif)", color: "var(--text)", marginBottom: 8, lineHeight: 1.2 }}>
+                    {firstName}&apos;s protocol
+                  </div>
+
+                  {/* Goal line */}
+                  {goalLine ? (
+                    <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 14px 0", lineHeight: 1.6 }}>{goalLine}</p>
+                  ) : (
+                    <p style={{ fontSize: 13, color: "var(--text3)", margin: "0 0 14px 0", fontStyle: "italic" }}>Goals loading…</p>
                   )}
-                  {hasProtocol && (
-                    <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0 }}>
-                      {p.description || meta.description}
-                    </p>
+
+                  {/* Coach note */}
+                  {p.coachNotes && (
+                    <div style={{ borderLeft: "3px solid rgba(196,131,26,0.5)", paddingLeft: 14, marginBottom: 16 }}>
+                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(196,131,26,0.7)", marginBottom: 6 }}>A note from your coach</div>
+                      <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: "0 0 6px 0" }}>{p.coachNotes}</p>
+                      <div style={{ fontSize: 11, color: "rgba(196,131,26,0.6)", fontStyle: "italic" }}>— Coach Dustin</div>
+                    </div>
                   )}
-                  {!hasProtocol && (
-                    <p style={{ fontSize: 13, color: "var(--text3)", margin: "8px 0 0 0", lineHeight: 1.65 }}>Dustin will assign your protocol after your first session.</p>
-                  )}
+
+                  {/* Stats row */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+                    {[
+                      { label: "Days / week", value: p.daysPerWeek ? `${p.daysPerWeek}x` : "—" },
+                      { label: "Avg session", value: avgDuration ? `${avgDuration} min` : "—" },
+                      { label: "Sauna / week", value: saunaPerWeek > 0 ? `${saunaPerWeek}x` : "—" },
+                    ].map((stat) => (
+                      <div key={stat.label} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 3 }}>{stat.value}</div>
+                        <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", lineHeight: 1.3 }}>{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {hasProtocol && (
-                  <>
-                    {/* Weekly Targets */}
-                    {weeklyTargets.length > 0 && (
-                      <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
-                        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>This Week&apos;s Targets</div>
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          {weeklyTargets.map((t, i) => (
-                            <div key={t.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "11px 0", borderBottom: i < weeklyTargets.length - 1 ? "1px solid var(--border)" : "none" }}>
-                              <span style={{ fontSize: 13.5, color: "var(--text)" }}>{t.label}</span>
-                              <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--lime)" }}>{t.value}</span>
+                {/* ── 2. Why this plan (collapsible) ──────────────────── */}
+                {whyItems.length > 0 && (
+                  <div className="card" style={{ marginBottom: 14, overflow: "hidden" }}>
+                    <button
+                      type="button"
+                      onClick={() => setWhyExpanded((v) => !v)}
+                      style={{ width: "100%", background: "none", border: "none", padding: "16px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", textAlign: "left" }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>Why this plan for you</div>
+                        <div style={{ fontSize: 11, color: "var(--text3)" }}>How your protocol was built</div>
+                      </div>
+                      <span style={{ fontSize: 18, color: "var(--text3)", transition: "transform 0.2s", transform: whyExpanded ? "rotate(180deg)" : "none" }}>›</span>
+                    </button>
+                    {whyExpanded && (
+                      <div style={{ padding: "0 20px 18px", display: "flex", flexDirection: "column", gap: 18 }}>
+                        <div style={{ height: 1, background: "var(--border)", marginBottom: 4 }} />
+                        {whyItems.map((item) => (
+                          <div key={item.id} style={{ display: "flex", gap: 14 }}>
+                            <div style={{ fontSize: 20, lineHeight: "26px", flexShrink: 0, width: 28, textAlign: "center" }}>{item.icon}</div>
+                            <div>
+                              <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", marginBottom: 5 }}>{item.title}</div>
+                              <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.7, margin: 0 }}>{item.body}</p>
                             </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Why this protocol */}
-                    <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 14 }}>Why this protocol</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {meta.whatToExpect.map((bullet) => (
-                          <div key={bullet} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-                            <span style={{ color: "var(--lime)", fontSize: 14, lineHeight: "20px", flexShrink: 0 }}>—</span>
-                            <span style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.55 }}>{bullet}</span>
                           </div>
                         ))}
                       </div>
-                    </div>
-
-                    {/* Science behind the sessions */}
-                    {p.scienceRationale && (
-                      <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
-                        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 14 }}>The science</div>
-                        <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.75, margin: 0 }}>{p.scienceRationale}</p>
-                      </div>
                     )}
-
-                    {/* CAROL ride types if set */}
-                    {p.carolRideTypes.length > 0 && (
-                      <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
-                        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 14 }}>Cardio focus</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                          {p.carolRideTypes.map((rt) => (
-                            <span key={rt} style={{ fontSize: 12, background: "var(--bg3)", border: "1px solid var(--border2)", borderRadius: "var(--r-sm)", padding: "5px 12px", color: "var(--text2)" }}>
-                              CAROL {rt.replace(/_/g, " ")}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Optional Add-Ons */}
-                    <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
-                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>Optional add-ons</div>
-                      <div style={{ display: "flex", flexDirection: "column" }}>
-                        {OPTIONAL_ADDONS.map((addon, i) => (
-                          <div key={addon} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: i < OPTIONAL_ADDONS.length - 1 ? "1px solid var(--border)" : "none" }}>
-                            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--text3)", flexShrink: 0, display: "inline-block" }} />
-                            <span style={{ fontSize: 13, color: "var(--text2)" }}>{addon}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Coach notes */}
-                    {p.coachNotes && (
-                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 14 }}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 8 }}>Note from your coach</div>
-                        <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0 }}>{p.coachNotes}</p>
-                      </div>
-                    )}
-
-                    {/* Started date */}
-                    {p.startDate && (
-                      <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 20, paddingLeft: 2 }}>
-                        Started {new Date(p.startDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                      </div>
-                    )}
-
-                    {/* Change Protocol */}
-                    <div style={{ paddingTop: 4 }}>
-                      <button
-                        type="button"
-                        className="btn"
-                        onClick={() => { setShowChangeProtocol(true); setSwitchProtocolSent(false); setConfirmProtocol(null); }}
-                        style={{ fontSize: 13, width: "100%" }}
-                      >
-                        Change Protocol
-                      </button>
-                    </div>
-                  </>
+                  </div>
                 )}
-              </>
+
+                {/* ── 3. Weekly sessions ──────────────────────────────── */}
+                {p.days.length > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 12 }}>Your weekly sessions</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {p.days.map((day, dayIdx) => {
+                        const isNext = day.dayOfWeek === nextDayIdx;
+                        const isOpen = expandedSessionDay === null ? isNext : expandedSessionDay === dayIdx;
+                        const coreActs = day.activities.filter((a) => !a.isOptional);
+                        const optActs = day.activities.filter((a) => a.isOptional);
+                        const isRestDay = coreActs.length === 0;
+                        const rationale = rationaleMap[day.dayTheme] ?? rationaleMap[day.dayName] ?? null;
+
+                        // Cold plunge NEVER banner: any non-optional activity has coldPlunge=NEVER
+                        const neverAct = coreActs.find((a) => a.coldPlunge === "NEVER");
+
+                        // Filter cold plunge items based on contrastPref
+                        const visibleCoreActs = coreActs.filter((a) => {
+                          if (a.coldPlunge === "OPTIONAL_CONTRAST" && contrastPref === "cold_before_only") return false;
+                          return true;
+                        });
+
+                        return (
+                          <div key={day.id} style={{ background: "var(--bg2)", border: `1px solid ${isNext ? "rgba(201,240,85,0.3)" : "var(--border)"}`, borderRadius: "var(--r)", overflow: "hidden" }}>
+                            {/* Day header — always visible */}
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSessionDay(isOpen ? -1 : dayIdx)}
+                              style={{ width: "100%", background: "none", border: "none", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer", textAlign: "left" }}
+                            >
+                              {/* Day circle */}
+                              <div style={{ width: 32, height: 32, borderRadius: "50%", background: isNext ? "var(--lime)" : "var(--bg3)", border: `1px solid ${isNext ? "var(--lime)" : "var(--border)"}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: isNext ? "#0b0c09" : "var(--text3)" }}>{dayIdx + 1}</span>
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                                  <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{day.dayTheme || day.dayName}</span>
+                                  {isNext && <span style={{ fontSize: 9, background: "rgba(201,240,85,0.15)", color: "var(--lime)", border: "1px solid rgba(201,240,85,0.4)", borderRadius: 20, padding: "2px 8px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", flexShrink: 0 }}>Next session</span>}
+                                </div>
+                                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{day.dayName}{isRestDay ? " · Rest" : ""}</div>
+                              </div>
+                              <span style={{ fontSize: 16, color: "var(--text3)", transition: "transform 0.2s", transform: isOpen ? "rotate(90deg)" : "none", flexShrink: 0 }}>›</span>
+                            </button>
+
+                            {/* Expanded content */}
+                            {isOpen && !isRestDay && (
+                              <div style={{ padding: "0 16px 16px" }}>
+                                <div style={{ height: 1, background: "var(--border)", marginBottom: 14 }} />
+
+                                {/* Session rationale banner */}
+                                {rationale && (
+                                  <div style={{ background: "rgba(201,240,85,0.07)", border: "1px solid rgba(201,240,85,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 14 }}>
+                                    <p style={{ fontSize: 12.5, color: "var(--text2)", margin: 0, lineHeight: 1.65 }}>{rationale}</p>
+                                  </div>
+                                )}
+
+                                {/* Equipment items */}
+                                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                                  {visibleCoreActs.map((act) => {
+                                    const key = equipKey(act.type, act.name);
+                                    const note = key ? EQUIPMENT_NOTES[key] ?? null : null;
+                                    const tagStyle = activityTagStyle(act.coldPlunge, false);
+                                    const badge = act.coldPlunge === "RECOMMENDED" ? "Recommended"
+                                      : (act.coldPlunge === "OPTIONAL_CONTRAST" || act.coldPlunge === "OPTIONAL_CARDIO") ? "Optional"
+                                      : null;
+                                    return (
+                                      <div key={act.id} style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                                        <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", ...tagStyle }}>
+                                          <span style={{ fontSize: 14 }}>
+                                            {act.coldPlunge === "RECOMMENDED" || act.coldPlunge === "OPTIONAL_CONTRAST" || act.coldPlunge === "OPTIONAL_CARDIO" ? "❄️"
+                                              : act.coldPlunge === "NEVER" ? "⛔"
+                                              : act.type === "strength" ? "💪"
+                                              : act.type === "cardio" ? "❤️"
+                                              : act.type === "mobility" ? "🧘"
+                                              : act.type === "recovery" ? "♻️"
+                                              : "•"}
+                                          </span>
+                                        </div>
+                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 3 }}>
+                                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{act.name}</span>
+                                            {act.durationMinutes > 0 && <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>}
+                                            {badge && (
+                                              <span style={{ fontSize: 9, color: badge === "Recommended" ? "#55b8f0" : "var(--text3)", border: `1px solid ${badge === "Recommended" ? "rgba(85,184,240,0.4)" : "var(--border)"}`, borderRadius: 3, padding: "1px 6px", letterSpacing: "0.06em", textTransform: "uppercase" }}>{badge}</span>
+                                            )}
+                                          </div>
+                                          {note && <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>{note}</p>}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Cold plunge NEVER banner */}
+                                {neverAct && (
+                                  <div style={{ background: "rgba(240,112,85,0.07)", border: "1px solid rgba(240,112,85,0.25)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginTop: 14 }}>
+                                    <p style={{ fontSize: 12.5, color: "#f07055", margin: 0, lineHeight: 1.65 }}>
+                                      {COLD_PLUNGE_RULES["NEVER" as ColdPlungePosition]}
+                                    </p>
+                                  </div>
+                                )}
+
+                                {/* Optional add-ons */}
+                                {optActs.length > 0 && (
+                                  <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>Optional add-ons</div>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                                      {optActs.map((act) => (
+                                        <span key={act.id} style={{ fontSize: 12, padding: "5px 11px", borderRadius: "var(--r-sm)", ...activityTagStyle(act.coldPlunge, true) }}>
+                                          {act.name}{act.durationMinutes > 0 ? ` · ${act.durationMinutes}m` : ""}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {isOpen && isRestDay && (
+                              <div style={{ padding: "0 16px 14px" }}>
+                                <div style={{ height: 1, background: "var(--border)", marginBottom: 12 }} />
+                                <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>Rest is not doing nothing. It is the session where your body actually builds the adaptations from this week&apos;s work.</p>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Change Protocol ──────────────────────────────────── */}
+                <div style={{ paddingTop: 4, paddingBottom: 8 }}>
+                  <button type="button" className="btn" onClick={() => { setShowChangeProtocol(true); setSwitchProtocolSent(false); setConfirmProtocol(null); }} style={{ fontSize: 13, width: "100%" }}>
+                    Change Protocol
+                  </button>
+                </div>
+              </div>
             );
           })()}
         </div>
@@ -4026,15 +3702,19 @@ export function DashboardReactClient({
                   onChange={(e) => setAssignStartDate(e.target.value)}
                 />
               </div>
-              <div>
-                <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 6 }}>Coach notes (optional)</label>
-                <input
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 4 }}>Note to member</label>
+                <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 6, lineHeight: 1.5 }}>This appears at the top of their protocol tab, signed with your name. Keep it personal and specific to them.</div>
+                <textarea
                   className="form-input"
-                  type="text"
-                  placeholder="e.g. Focus on eccentric phase on ARX"
+                  rows={3}
+                  maxLength={300}
+                  placeholder="e.g. Focus on driving through the full range on leg press — your eccentric is strong, let's match it on the way down."
                   value={assignCoachNotes}
                   onChange={(e) => setAssignCoachNotes(e.target.value)}
+                  style={{ width: "100%", resize: "vertical", boxSizing: "border-box" }}
                 />
+                <div style={{ fontSize: 10, color: "var(--text3)", textAlign: "right", marginTop: 3 }}>{assignCoachNotes.length}/300</div>
               </div>
               {assignProtocolId && (
                 <div style={{ gridColumn: "1 / -1" }}>

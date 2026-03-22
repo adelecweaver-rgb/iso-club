@@ -162,7 +162,23 @@ type DashboardPayload = {
     customizationNotes: string;
     startDate: string;
     compliance: { arxThisWeek: number; carolThisWeek: number; recoveryThisMonth: number };
+    days: Array<{
+      id: string;
+      dayOfWeek: number;
+      dayName: string;
+      dayTheme: string;
+      activities: Array<{
+        id: string;
+        order: number;
+        type: string;
+        name: string;
+        durationMinutes: number;
+        isOptional: boolean;
+        coldPlunge: string | null;
+      }>;
+    }>;
   };
+  contrastTherapyPreference: string;
   checklistCompletions: {
     arxWeekDates: string[];
     carolWeekTypes: string[];
@@ -360,7 +376,9 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
       customizationNotes: "",
       startDate: "",
       compliance: { arxThisWeek: 0, carolThisWeek: 0, recoveryThisMonth: 0 },
+      days: [],
     },
+    contrastTherapyPreference: "",
     bookings: [],
     reports: [],
     goals: {
@@ -834,7 +852,14 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     Array.isArray(protocolRes.data) && protocolRes.data.length
       ? (protocolRes.data[0] as Record<string, unknown>)
       : null;
-  const protocolLib = protocolRow ? (protocolRow.protocols as Record<string, unknown> | null | undefined) : null;
+  // PostgREST may return the nested join as an array (1-to-1) or object depending on version
+  const protocolLibRaw = protocolRow ? protocolRow.protocols : null;
+  const protocolLib: Record<string, unknown> | null = Array.isArray(protocolLibRaw)
+    ? ((protocolLibRaw[0] as Record<string, unknown>) ?? null)
+    : (protocolLibRaw as Record<string, unknown> | null | undefined) ?? null;
+
+  // Contrast therapy preference from users table
+  payload.contrastTherapyPreference = stringOr(userRow?.contrast_therapy_preference, "");
 
   if (protocolLib) {
     // New-style: member_protocols → protocols library
@@ -852,13 +877,62 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     payload.protocol.arxExercises = Array.isArray(protocolLib.arx_exercises) ? (protocolLib.arx_exercises as string[]) : [];
     payload.protocol.coachNotes = stringOr(protocolRow!.coach_notes, "");
     payload.protocol.startDate = stringOr(protocolRow!.start_date, "");
-    // Fetch customization_notes separately — column may not exist if migration hasn't run
+    // Fetch customization_notes separately — column may not exist
     try {
       const cnRes = await supabase.from("member_protocols").select("customization_notes").eq("id", stringOr(protocolRow!.id, "")).limit(1);
       if (!cnRes.error && cnRes.data?.length) {
         payload.protocol.customizationNotes = stringOr((cnRes.data[0] as Record<string, unknown>).customization_notes, "");
       }
     } catch { /* column may not exist */ }
+
+    // Fetch protocol days + activities for the member tab
+    try {
+      const protoId = payload.protocol.id;
+      if (protoId) {
+        const daysRes = await supabase
+          .from("protocol_days")
+          .select("id,day_of_week,day_name,day_theme")
+          .eq("protocol_id", protoId)
+          .order("day_of_week");
+        if (!daysRes.error && Array.isArray(daysRes.data) && daysRes.data.length) {
+          const dayIds = (daysRes.data as Array<Record<string, unknown>>).map((d) => d.id as string);
+          // Try with cold_plunge column; fall back without it
+          let actsData: Array<Record<string, unknown>> = [];
+          const actsRes = await supabase
+            .from("protocol_day_activities")
+            .select("id,protocol_day_id,activity_order,activity_type,activity_name,duration_minutes,is_optional,cold_plunge")
+            .in("protocol_day_id", dayIds)
+            .order("activity_order");
+          if (!actsRes.error) {
+            actsData = (actsRes.data ?? []) as Array<Record<string, unknown>>;
+          } else {
+            const actsResBase = await supabase
+              .from("protocol_day_activities")
+              .select("id,protocol_day_id,activity_order,activity_type,activity_name,duration_minutes,is_optional")
+              .in("protocol_day_id", dayIds)
+              .order("activity_order");
+            if (!actsResBase.error) actsData = (actsResBase.data ?? []) as Array<Record<string, unknown>>;
+          }
+          payload.protocol.days = (daysRes.data as Array<Record<string, unknown>>).map((d) => ({
+            id: stringOr(d.id, ""),
+            dayOfWeek: Math.round(numberOr(d.day_of_week, 0)),
+            dayName: stringOr(d.day_name, ""),
+            dayTheme: stringOr(d.day_theme, ""),
+            activities: actsData
+              .filter((a) => a.protocol_day_id === d.id)
+              .map((a) => ({
+                id: stringOr(a.id, ""),
+                order: Math.round(numberOr(a.activity_order, 0)),
+                type: stringOr(a.activity_type, ""),
+                name: stringOr(a.activity_name, ""),
+                durationMinutes: Math.round(numberOr(a.duration_minutes, 0)),
+                isOptional: a.is_optional === true,
+                coldPlunge: typeof a.cold_plunge === "string" ? a.cold_plunge : null,
+              })),
+          }));
+        }
+      }
+    } catch { /* protocol_days may not exist */ }
   } else if (protocolRow) {
     // Legacy: old per-member protocols table
     payload.protocol.name = stringOr(protocolRow.name, "");
