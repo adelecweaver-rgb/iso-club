@@ -173,7 +173,7 @@ type DashboardPayload = {
     todayDate: string;
     weekStartDate: string;
   };
-  bookings: Array<{ label: string; status: string }>;
+  bookings: Array<{ label: string; status: string; scheduledAt: string | null }>;
   reports: Array<{ title: string }>;
   goals: {
     activeGoals: string[];
@@ -724,6 +724,7 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
   payload.bookings = bookingRows.map((row) => ({
     label: `${formatDateForLabel(row.scheduled_at)} · ${stringOr(row.title, stringOr(row.session_type, "Session"))}`,
     status: stringOr(row.status, "scheduled"),
+    scheduledAt: row.scheduled_at ? stringOr(row.scheduled_at, null as unknown as string) : null,
   }));
   payload.reports = reportRows.map((row) => ({ title: stringOr(row.title, "Report") }));
 

@@ -162,7 +162,7 @@ type DashboardPayload = {
     startDate: string;
     compliance: { arxThisWeek: number; carolThisWeek: number; recoveryThisMonth: number };
   };
-  bookings: Array<{ label: string; status: string }>;
+  bookings: Array<{ label: string; status: string; scheduledAt: string | null }>;
   reports: Array<{ title: string }>;
   goals: {
     activeGoals: string[];
@@ -951,6 +951,10 @@ export function DashboardReactClient({
   // Tracks which protocol day IDs have been checked off locally this session
   const [checkedDayIds, setCheckedDayIds] = useState<Record<string, boolean>>({});
   const [weekPlanLoaded, setWeekPlanLoaded] = useState(false);
+  // Session card day navigation (today's dayOfWeek → forward only)
+  const [sessionCardDow, setSessionCardDow] = useState<number | null>(null);
+  // Optimistic mark-complete for session card
+  const [sessionCardCompleted, setSessionCardCompleted] = useState<Record<string, boolean>>({});
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinLoaded, setCheckinLoaded] = useState(false);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
@@ -1446,10 +1450,26 @@ export function DashboardReactClient({
             </div>
           )}
 
+          {/* ── Greeting header ─────────────────────────────────────── */}
+          {(() => {
+            const now = new Date();
+            const hour = now.getHours();
+            const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+            const dayLabel = now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+            return (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 3 }}>{dayLabel}</div>
+                <div style={{ fontSize: 24, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}>
+                  {greeting}, {greetingName}.
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ══════════════════════════════════════════════════════════════
-              SECTION 1 — TODAY'S FOCUS
-              Check-in first. When "strong", reveal the day's protocol
-              focus with a one-tap "Log Complete" button.
+              SECTION 1 — READINESS CHECK
+              Existing check-in. DO NOT MODIFY. When "strong" → session
+              card appears below. When "low"/"hurt" → rest day card.
           ══════════════════════════════════════════════════════════════ */}
           {(() => {
             const tp = payload.todaysPlan;
@@ -1908,7 +1928,7 @@ export function DashboardReactClient({
 
           {/* Coach note — shown if present */}
           {payload.sessionNote && (
-            <div style={{ background: "rgba(196,131,26,0.04)", border: "1px solid rgba(196,131,26,0.14)", borderRadius: "var(--r)", padding: "16px 20px" }}>
+            <div style={{ background: "rgba(196,131,26,0.04)", border: "1px solid rgba(196,131,26,0.14)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(196,131,26,0.90)" }}>Note from {payload.sessionNote.coachName}</div>
                 <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.sessionNote.date}</div>
@@ -1916,6 +1936,441 @@ export function DashboardReactClient({
               <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0, fontStyle: "italic" }}>&ldquo;{payload.sessionNote.text}&rdquo;</p>
             </div>
           )}
+
+          {/* ══════════════════════════════════════════════════════════════
+              SECTION 2 — SESSION CARD (readiness === strong)
+                        — REST DAY CARD (readiness === low | hurt)
+          ══════════════════════════════════════════════════════════════ */}
+          {(todayCheckin === "strong" || todayCheckin === "low" || todayCheckin === "hurt") && (() => {
+            const isRest = todayCheckin === "low" || todayCheckin === "hurt";
+
+            // ── rest day card ────────────────────────────────────────────
+            if (isRest) {
+              const REST_STACK = [
+                { name: "Infrared Sauna",   note: "Deep heat · muscle repair",      dur: 20,   optional: false },
+                { name: "Vasper",           note: "Compression cooling · recovery", dur: 20,   optional: false },
+                { name: "Cold Plunge",      note: "Contrast after sauna",           dur: 3,    optional: true  },
+                { name: "Compression Boots", note: "Circulation · lymphatic",       dur: 15,   optional: false },
+              ];
+              return (
+                <div className="card" style={{ marginBottom: 16, overflow: "hidden" }}>
+                  <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)" }}>
+                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 6 }}>Recovery options for today</div>
+                    <div style={{ fontSize: 20, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2, marginBottom: 3 }}>Rest day stack</div>
+                    <div style={{ fontSize: 12, color: "var(--text3)" }}>No ARX or Katalyst today — just recovery</div>
+                  </div>
+                  <div>
+                    {REST_STACK.map((item, i) => (
+                      <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 20px", borderBottom: i < REST_STACK.length - 1 ? "1px solid var(--border)" : "none" }}>
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: "rgba(107,159,212,0.12)", border: "1px solid rgba(107,159,212,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6B9FD4" }} />
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>
+                            {item.name}
+                            {item.optional && <span style={{ marginLeft: 6, fontSize: 10, color: "var(--text3)", fontWeight: 400 }}>optional</span>}
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text3)" }}>{item.note}</div>
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0 }}>{item.dur} min</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            // ── session card (strong) ────────────────────────────────────
+            if (weekPlan.length === 0) return null;
+
+            // Compute today's dow (1=Mon … 7=Sun)
+            const todayIso   = payload.checklistCompletions.todayDate;
+            const weekStart  = payload.checklistCompletions.weekStartDate;
+            const rawDiff    = Math.round((new Date(todayIso + "T00:00:00").getTime() - new Date(weekStart + "T00:00:00").getTime()) / 86400000);
+            const currentDow = Math.max(1, Math.min(7, rawDiff + 1));
+
+            // Training days only (non-rest), from today forward
+            const trainingDays = weekPlan.filter((d) => !d.dayTheme.toLowerCase().includes("rest"));
+            const futureDays   = weekPlan.filter((d) => d.dayOfWeek >= currentDow && !d.dayTheme.toLowerCase().includes("rest"));
+
+            // Which dow is the card showing?  Default to today's if there's a training day, else first future
+            const activeDow = sessionCardDow ?? (futureDays[0]?.dayOfWeek ?? weekPlan[0]?.dayOfWeek ?? currentDow);
+            const viewingDay = weekPlan.find((d) => d.dayOfWeek === activeDow) ?? weekPlan[0];
+
+            if (!viewingDay) return null;
+
+            // Navigation bounds — forward only from today
+            const navDays  = weekPlan.filter((d) => d.dayOfWeek >= currentDow);
+            const navIdx   = navDays.findIndex((d) => d.dayOfWeek === activeDow);
+            const canBack  = navIdx > 0;
+            const canFwd   = navIdx < navDays.length - 1;
+
+            // Is this day complete?
+            function isoForDow(dow: number): string {
+              const base = new Date(weekStart + "T00:00:00");
+              base.setDate(base.getDate() + (dow - 1));
+              return base.toISOString().slice(0, 10);
+            }
+            const dayIso   = isoForDow(viewingDay.dayOfWeek);
+            const hasArx   = payload.arxSessions.some((s) => s.sessionDate.slice(0, 10) === dayIso);
+            const hasCarol = payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === dayIso);
+            const isDone   = sessionCardCompleted[viewingDay.id] || hasArx || hasCarol;
+
+            const required = viewingDay.activities.filter((a) => !a.isOptional);
+
+            // Session title: derived from day theme + activity types
+            const actTypes = [...new Set(required.map((a) => {
+              if (a.type === "strength") return "Strength";
+              if (a.type === "cardio")   return "Cardio";
+              if (a.type === "recovery") return "Recovery";
+              if (a.type === "coaching") return "Coaching";
+              return a.type.charAt(0).toUpperCase() + a.type.slice(1);
+            }))];
+            const totalDur = required.reduce((s, a) => s + a.durationMinutes, 0);
+            const subtitle = `${actTypes.join(" · ")} · ~${totalDur} min`;
+
+            // Day label for header
+            const isToday = viewingDay.dayOfWeek === currentDow;
+            const dowNames = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+            const dayLabel = isToday ? "Today's session" : `${dowNames[viewingDay.dayOfWeek]}'s session`;
+
+            // Icon background per activity type
+            function actIconStyle(type: string): React.CSSProperties {
+              if (type === "strength") return { background: "rgba(74,124,89,0.14)", border: "1px solid rgba(74,124,89,0.28)" };
+              if (type === "cardio")   return { background: "rgba(196,131,26,0.12)", border: "1px solid rgba(196,131,26,0.25)" };
+              if (type === "recovery") return { background: "rgba(107,159,212,0.12)", border: "1px solid rgba(107,159,212,0.25)" };
+              return { background: "rgba(155,142,160,0.12)", border: "1px solid rgba(155,142,160,0.22)" };
+            }
+            function actDotColor(type: string): string {
+              if (type === "strength") return "#4A7C59";
+              if (type === "cardio")   return "#C4831A";
+              if (type === "recovery") return "#6B9FD4";
+              return "#9B8EA0";
+            }
+
+            async function handleMarkComplete() {
+              if (isDone) return;
+              // Optimistic update immediately
+              setSessionCardCompleted((prev) => ({ ...prev, [viewingDay.id]: true }));
+              // Map required activities → log items and fire
+              const toAdd = required
+                .map((a): { type: "arx" | "carol" | "recovery"; subtype: string } | null => {
+                  const n = a.name.toLowerCase();
+                  if (a.type === "strength") return { type: "arx", subtype: "manual_checkin" };
+                  if (a.type === "cardio") {
+                    if (n.includes("rehit")) return { type: "carol", subtype: "REHIT" };
+                    if (n.includes("norwegian") || n.includes("4x4")) return { type: "carol", subtype: "FAT_BURN_60" };
+                    if (n.includes("zone 2") || n.includes("free ride")) return { type: "carol", subtype: "FAT_BURN_30" };
+                    return { type: "carol", subtype: "FAT_BURN_45" };
+                  }
+                  if (a.type === "recovery") {
+                    if (n.includes("cold")) return { type: "recovery", subtype: "cold_plunge" };
+                    if (n.includes("sauna") || n.includes("infrared")) return { type: "recovery", subtype: "infrared_sauna" };
+                    if (n.includes("compression")) return { type: "recovery", subtype: "compression" };
+                  }
+                  return null;
+                })
+                .filter((x): x is { type: "arx" | "carol" | "recovery"; subtype: string } => x !== null);
+              try {
+                if (toAdd.length > 0) {
+                  await fetch("/api/member/activity-log", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: [] }),
+                  });
+                  const c = payload.checklistCompletions;
+                  for (const item of toAdd) {
+                    if (item.type === "arx") { c.arxWeekDates.push(dayIso); }
+                    else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); }
+                    else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); }
+                  }
+                }
+                // Also update checkedDayIds for the weekly tracker
+                setCheckedDayIds((prev) => ({ ...prev, [viewingDay.id]: true }));
+              } catch { /* optimistic — silently ignore, state already updated */ }
+            }
+
+            return (
+              <div className="card" style={{ marginBottom: 16, overflow: "hidden" }}>
+                {/* Header with day nav */}
+                <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)" }}>{dayLabel}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                    <button type="button"
+                      disabled={!canBack}
+                      onClick={() => { if (canBack) setSessionCardDow(navDays[navIdx - 1]!.dayOfWeek); }}
+                      style={{ background: "none", border: "none", color: canBack ? "var(--text2)" : "var(--border2)", cursor: canBack ? "pointer" : "default", padding: "4px 6px", fontSize: 14, lineHeight: 1 }}
+                    >‹</button>
+                    <span style={{ fontSize: 12, color: "var(--text2)", fontWeight: 500, minWidth: 72, textAlign: "center" }}>
+                      {dowNames[viewingDay.dayOfWeek]}
+                    </span>
+                    <button type="button"
+                      disabled={!canFwd}
+                      onClick={() => { if (canFwd) setSessionCardDow(navDays[navIdx + 1]!.dayOfWeek); }}
+                      style={{ background: "none", border: "none", color: canFwd ? "var(--text2)" : "var(--border2)", cursor: canFwd ? "pointer" : "default", padding: "4px 6px", fontSize: 14, lineHeight: 1 }}
+                    >›</button>
+                  </div>
+                </div>
+
+                {/* Session title + subtitle */}
+                <div style={{ padding: "14px 20px 10px" }}>
+                  <div style={{ fontSize: 20, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2, marginBottom: 4 }}>
+                    {viewingDay.dayTheme || viewingDay.dayName}
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{subtitle}</div>
+                </div>
+
+                {/* Activity list */}
+                <div style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
+                  {required.map((act, i) => (
+                    <div key={act.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderBottom: i < required.length - 1 ? "1px solid var(--border)" : "none" }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", ...actIconStyle(act.type) }}>
+                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: actDotColor(act.type) }} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>{act.name}</div>
+                        {act.description && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.description.length > 80 ? act.description.slice(0, 80) + "…" : act.description}</div>}
+                      </div>
+                      {act.durationMinutes > 0 && <div style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0 }}>{act.durationMinutes} min</div>}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer */}
+                <div style={{ padding: "12px 20px", display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => { void handleMarkComplete(); }}
+                    disabled={isDone}
+                    style={{
+                      flex: 1, padding: "11px 0", borderRadius: 8,
+                      background: isDone ? "rgba(74,124,89,0.10)" : "#4A7C59",
+                      color: isDone ? "#4A7C59" : "#fff",
+                      border: isDone ? "1.5px solid rgba(74,124,89,0.30)" : "none",
+                      fontSize: 13.5, fontWeight: 700, cursor: isDone ? "default" : "pointer",
+                      transition: "all 0.15s",
+                    }}
+                  >
+                    {isDone ? "✓ Completed" : "Mark as complete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMemberSection("protocol")}
+                    style={{ padding: "11px 16px", borderRadius: 8, background: "transparent", border: "1.5px solid var(--border2)", color: "var(--text2)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}
+                  >
+                    Full plan
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ══════════════════════════════════════════════════════════════
+              SECTION 3 — BOOKING CARD (always visible)
+          ══════════════════════════════════════════════════════════════ */}
+          {(() => {
+            const next = payload.bookings[0] ?? null;
+            const isBooked = next && next.status !== "cancelled";
+
+            // Format the scheduled date for display
+            let dateDisplay = "";
+            if (next?.scheduledAt) {
+              const d = new Date(next.scheduledAt);
+              dateDisplay = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+              const timeDisplay = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+              if (isBooked) dateDisplay = `${timeDisplay} · ${dateDisplay}`;
+            } else if (next?.label) {
+              dateDisplay = next.label;
+            }
+
+            return (
+              <div className="card" style={{ marginBottom: 16, padding: "14px 20px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div>
+                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 5 }}>Next booking</div>
+                    <div style={{ fontSize: 15, fontWeight: 600, color: isBooked ? "var(--text)" : "#C4831A" }}>
+                      {isBooked ? "Booked" : "Not booked"}
+                    </div>
+                    {dateDisplay && (
+                      <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>{dateDisplay}</div>
+                    )}
+                  </div>
+                  <a
+                    href="https://theiso.club/book"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      padding: "9px 18px", borderRadius: 8, textDecoration: "none",
+                      background: isBooked ? "transparent" : "#4A7C59",
+                      color: isBooked ? "#4A7C59" : "#fff",
+                      border: isBooked ? "1.5px solid rgba(74,124,89,0.40)" : "none",
+                      fontSize: 13, fontWeight: 600, flexShrink: 0,
+                    }}
+                  >
+                    {isBooked ? "Manage ↗" : "Book now ↗"}
+                  </a>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ══════════════════════════════════════════════════════════════
+              SECTION 4 — WEEKLY PROGRESS CARD (always visible)
+          ══════════════════════════════════════════════════════════════ */}
+          {(() => {
+            const weekStart  = payload.checklistCompletions.weekStartDate;
+            const todayIso   = payload.checklistCompletions.todayDate;
+
+            // Training days this week
+            const trainingDays = weekPlan.filter((d) => !d.dayTheme.toLowerCase().includes("rest") && d.dayOfWeek >= 1);
+
+            // For each training day, is it complete?
+            function isoForDow(dow: number): string {
+              const base = new Date(weekStart + "T00:00:00");
+              base.setDate(base.getDate() + (dow - 1));
+              return base.toISOString().slice(0, 10);
+            }
+            const currentDow = Math.max(1, Math.min(7, Math.round((new Date(todayIso + "T00:00:00").getTime() - new Date(weekStart + "T00:00:00").getTime()) / 86400000) + 1));
+
+            function isDayDone(dow: number, dayId: string): boolean {
+              if (sessionCardCompleted[dayId] || checkedDayIds[dayId]) return true;
+              const iso = isoForDow(dow);
+              return payload.arxSessions.some((s) => s.sessionDate.slice(0, 10) === iso)
+                  || payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === iso);
+            }
+
+            const completedCount = trainingDays.filter((d) => isDayDone(d.dayOfWeek, d.id)).length;
+            const totalCount     = trainingDays.length;
+
+            // ── Streak calculation ────────────────────────────────────────
+            // Build a set of Monday ISO strings where >= 1 session occurred
+            function mondayOf(isoDate: string): string {
+              const d = new Date(isoDate + "T00:00:00");
+              const dow = d.getDay(); // 0=Sun
+              const diff = dow === 0 ? -6 : 1 - dow;
+              d.setDate(d.getDate() + diff);
+              return d.toISOString().slice(0, 10);
+            }
+            const activeWeeks = new Set<string>();
+            for (const s of payload.arxSessions)   activeWeeks.add(mondayOf(s.sessionDate.slice(0, 10)));
+            for (const s of payload.carolSessions)  activeWeeks.add(mondayOf(s.sessionDate.slice(0, 10)));
+
+            let streak = 0;
+            let cur = new Date(weekStart + "T00:00:00");
+            while (activeWeeks.has(cur.toISOString().slice(0, 10))) {
+              streak++;
+              cur.setDate(cur.getDate() - 7);
+            }
+            // Current partial week counts if any session this week
+            if (streak === 0 && (completedCount > 0)) streak = 1;
+
+            return (
+              <div className="card" style={{ marginBottom: 16, padding: "16px 20px" }}>
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)" }}>This week</div>
+                  {streak > 0 && (
+                    <div style={{ fontSize: 11, color: "#4A7C59", fontWeight: 600 }}>{streak} week{streak !== 1 ? "s" : ""} consistent</div>
+                  )}
+                </div>
+
+                {/* Progress dots */}
+                {trainingDays.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12, alignItems: "center" }}>
+                    {trainingDays.map((day) => {
+                      const done    = isDayDone(day.dayOfWeek, day.id);
+                      const isToday = day.dayOfWeek === currentDow;
+                      const isPast  = day.dayOfWeek < currentDow;
+                      return (
+                        <div key={day.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}>
+                          <div style={{
+                            width: "100%", height: 6, borderRadius: 3,
+                            background: done
+                              ? "#4A7C59"
+                              : isToday
+                                ? "rgba(74,124,89,0.30)"
+                                : isPast
+                                  ? "rgba(196,131,26,0.25)"
+                                  : "var(--border)",
+                            transition: "background 0.2s",
+                          }} />
+                          <div style={{ fontSize: 9, color: "var(--text3)", letterSpacing: "0.04em" }}>
+                            {["Mo","Tu","We","Th","Fr","Sa","Su"][day.dayOfWeek - 1]}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Count */}
+                <div style={{ fontSize: 13, color: "var(--text2)" }}>
+                  <span style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: 22, color: completedCount === totalCount && totalCount > 0 ? "#4A7C59" : "var(--text)" }}>
+                    {completedCount}
+                  </span>
+                  {" "}
+                  <span style={{ color: "var(--text3)" }}>of {totalCount} sessions complete this week</span>
+                  {completedCount === totalCount && totalCount > 0 && <span style={{ marginLeft: 6, color: "#4A7C59", fontWeight: 600 }}>✓</span>}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ══════════════════════════════════════════════════════════════
+              SECTION 5 — COACH MESSAGE CARD (unread messages only)
+          ══════════════════════════════════════════════════════════════ */}
+          {(() => {
+            if (unreadCount === 0 || messages.length === 0) return null;
+            // Find latest unread message from the coach (not from the member)
+            const memberId = payload.memberId ?? "";
+            const unread = [...messages].reverse().find((m) => !m.read_at && m.sender_id !== memberId);
+            if (!unread) return null;
+
+            // Relative time label
+            function relativeTime(iso: string): string {
+              const diff = Date.now() - new Date(iso).getTime();
+              const mins  = Math.floor(diff / 60000);
+              const hours = Math.floor(mins / 60);
+              if (mins < 5)   return "Just now";
+              if (hours < 1)  return `${mins}m ago`;
+              if (hours < 4)  return "This morning";
+              if (hours < 20) return `${hours}h ago`;
+              if (hours < 28) return "Yesterday";
+              return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+            }
+
+            return (
+              <div className="card" style={{ marginBottom: 16, padding: "14px 20px", position: "relative" }}>
+                {/* Unread dot */}
+                <div style={{ position: "absolute", top: 12, right: 14, width: 8, height: 8, borderRadius: "50%", background: "#6B9FD4" }} />
+
+                {/* Header */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(107,159,212,0.15)", border: "1.5px solid rgba(107,159,212,0.30)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#6B9FD4" }}>D</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Coach Dustin</div>
+                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{relativeTime(unread.created_at)}</div>
+                  </div>
+                </div>
+
+                {/* Message preview */}
+                <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 12px 0" }}>
+                  {unread.body.length > 140 ? unread.body.slice(0, 140) + "…" : unread.body}
+                </p>
+
+                {/* Reply button → navigates to messages tab */}
+                <button
+                  type="button"
+                  onClick={() => setMemberSection("messages")}
+                  style={{ padding: "8px 20px", borderRadius: 8, background: "transparent", border: "1.5px solid rgba(107,159,212,0.40)", color: "#6B9FD4", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Reply →
+                </button>
+              </div>
+            );
+          })()}
 
         </div>
 
