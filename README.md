@@ -215,6 +215,7 @@ The app expects these tables (minimum):
 - `reports`
 - `sms_log`
 - `member_notification_preferences`
+- `session_notes`
 
 If schema columns differ, some endpoints include graceful fallbacks (for example optional `read_at`, `dustin_reviewed`, or `logged_by` handling).
 
