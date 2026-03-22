@@ -948,6 +948,9 @@ export function DashboardReactClient({
   // Locally-appended logged sessions (key → array of date strings) so newly saved
   // sessions appear in the "already logged" rows without a page reload.
   const [localLoggedDates, setLocalLoggedDates] = useState<Record<string, string[]>>({});
+  // Tracks which protocol day IDs have been checked off locally this session
+  const [checkedDayIds, setCheckedDayIds] = useState<Record<string, boolean>>({});
+  const [weekPlanLoaded, setWeekPlanLoaded] = useState(false);
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinLoaded, setCheckinLoaded] = useState(false);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
@@ -1009,6 +1012,21 @@ export function DashboardReactClient({
       } catch { /* table may not exist */ }
     })();
   }, [isCoachAccount, checkinLoaded]);
+
+  // Eagerly load the week plan for the dashboard session tracker
+  useEffect(() => {
+    if (isCoachAccount || weekPlanLoaded || weekPlan.length > 0) return;
+    setWeekPlanLoaded(true);
+    void (async () => {
+      try {
+        const r = await getJson<{ days: typeof weekPlan; customizationNotes: string | null; overrides: WeekOverride[] }>("/api/member/week-plan");
+        if (Array.isArray(r.days) && r.days.length > 0) {
+          setWeekPlan(r.days);
+          setWeekPlanMeta({ customizationNotes: r.customizationNotes ?? null, overrides: r.overrides ?? [] });
+        }
+      } catch { /* protocol days may not be seeded */ }
+    })();
+  }, [isCoachAccount, weekPlanLoaded, weekPlan.length]);
 
   const handleGoalToggle = useCallback(async (goalType: string, forMemberId?: string) => {
     if (forMemberId) {
@@ -1596,386 +1614,293 @@ export function DashboardReactClient({
           })()}
 
           {/* ══════════════════════════════════════════════════════════════
-              SECTION 2 — THIS WEEK'S TARGETS
-              Shows already-logged sessions with dates, then remaining
-              options as pill buttons to log toward each target.
+              SECTION 2 — THIS WEEK'S PROTOCOL
+              Shows Dustin's assigned protocol for each day this week.
+              Members check off sessions as they complete them.
           ══════════════════════════════════════════════════════════════ */}
           {(() => {
             const proto = payload.protocol;
             const c = payload.checklistCompletions;
 
-            // ── Date formatting ───────────────────────────────────────────
-            function fmtDate(iso: string): string {
+            // ── Helpers ──────────────────────────────────────────────────
+            function fmtShortDate(iso: string): string {
               const d = new Date(iso + "T00:00:00");
               return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
             }
 
-            // ── Build logged-session rows from payload session arrays ─────
-            // Filter to current week (weekStartDate ≤ date ≤ today)
+            // ISO date for each day of the current week (Mon=weekStart)
+            function isoForDow(dow: number): string {
+              // dow: 1=Mon … 7=Sun (protocol convention)
+              const base = new Date(c.weekStartDate + "T00:00:00");
+              base.setDate(base.getDate() + (dow - 1));
+              return base.toISOString().slice(0, 10);
+            }
+
+            const todayIso = c.todayDate;
             const weekStart = c.weekStartDate;
-            const todayIso  = c.todayDate;
 
-            // ARX: each date in arxWeekDates is one session
-            const arxDatesThisWeek = c.arxWeekDates.filter((d) => d >= weekStart && d <= todayIso);
+            // Which calendar date is "today" as a day-of-week in the protocol (1=Mon…7=Sun)
+            const todayDow = (() => {
+              const diff = Math.round((new Date(todayIso + "T00:00:00").getTime() - new Date(weekStart + "T00:00:00").getTime()) / 86400000) + 1;
+              return Math.max(1, Math.min(7, diff));
+            })();
 
-            // CAROL: pair carolWeekTypes with session dates from payload.carolSessions
-            const carolThisWeek = payload.carolSessions
-              .filter((s) => s.sessionDate >= weekStart && s.sessionDate <= todayIso)
-              .map((s) => ({ rideType: s.rideType, date: s.sessionDate }));
+            // ── Determine whether a protocol day is "done" ───────────────
+            // A training day is complete if at least one session was logged
+            // on that calendar date (arx or carol or recovery).
+            function isDayComplete(dow: number, dayId: string): boolean {
+              if (checkedDayIds[dayId]) return true;
+              const iso = isoForDow(dow);
+              const hasArx     = c.arxWeekDates.some((d) => d === iso);
+              const hasCarol   = payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === iso);
+              const hasRecovery = false; // recovery sessions don't carry a date in completions
+              return hasArx || hasCarol || hasRecovery;
+            }
 
-            // Recovery: modalities from checklistCompletions — no per-session dates,
-            // so spread evenly across logged days in the week
-            const recoveryThisWeek = c.recoveryWeekModalities.map((mod, i) => {
-              // Use today for most-recent, step back one day per additional session
-              const d = new Date(todayIso);
-              d.setDate(d.getDate() - i);
-              const dateStr = d.toISOString().slice(0, 10);
-              return { modality: mod, date: dateStr >= weekStart ? dateStr : weekStart };
-            });
+            // Map activity type → log payload
+            function activityToLogItem(act: { type: string; name: string }): { type: "arx" | "carol" | "recovery"; subtype: string } | null {
+              const n = act.name.toLowerCase();
+              if (act.type === "strength") return { type: "arx", subtype: "manual_checkin" };
+              if (act.type === "cardio") {
+                if (n.includes("rehit")) return { type: "carol", subtype: "REHIT" };
+                if (n.includes("norwegian") || n.includes("4x4") || n.includes("fat burn 60")) return { type: "carol", subtype: "FAT_BURN_60" };
+                if (n.includes("fat burn 45") || n.includes("fat burn")) return { type: "carol", subtype: "FAT_BURN_45" };
+                if (n.includes("zone 2") || n.includes("free ride")) return { type: "carol", subtype: "FAT_BURN_30" };
+                return { type: "carol", subtype: "REHIT" };
+              }
+              if (act.type === "recovery") {
+                if (n.includes("cold")) return { type: "recovery", subtype: "cold_plunge" };
+                if (n.includes("sauna") || n.includes("infrared")) return { type: "recovery", subtype: "infrared_sauna" };
+                if (n.includes("compression")) return { type: "recovery", subtype: "compression" };
+                return { type: "recovery", subtype: "infrared_sauna" };
+              }
+              return null;
+            }
 
-            type TargetOption = {
-              key: string;
-              label: string;
-              logType: "arx" | "carol" | "recovery" | "bonus";
-              logSubtype: string;
-            };
-            type LoggedRow = { label: string; date: string };
-            type TargetCategory = {
-              key: string;
-              label: string;
-              color: string;
-              weeklyTarget: number;
-              targetLabel: string;
-              options: TargetOption[];
-              getLoggedRows: () => LoggedRow[];
-            };
+            // Category dot color per activity type
+            function actTypeColor(type: string): string {
+              if (type === "strength") return "#4A7C59";
+              if (type === "cardio")   return "#C4831A";
+              if (type === "recovery") return "#A0729A";
+              return "#9B8EA0";
+            }
 
-            const arxTarget      = proto.arxPerWeek  > 0 ? proto.arxPerWeek  : 2;
-            const carolTarget    = proto.carolPerWeek > 0 ? proto.carolPerWeek : 2;
-            const recovWeekTarget = proto.recoveryPerMonth > 0 ? Math.max(1, Math.ceil(proto.recoveryPerMonth / 4)) : 2;
-
-            const CATEGORIES: TargetCategory[] = [
-              {
-                key: "strength",
-                label: "Strength",
-                color: "#4A7C59",
-                weeklyTarget: arxTarget,
-                targetLabel: `${arxTarget}× per week`,
-                options: [
-                  { key: "strength-arx",     label: "ARX",     logType: "arx",   logSubtype: "manual_checkin" },
-                  { key: "strength-katalyst", label: "Katalyst",logType: "bonus", logSubtype: "katalyst" },
-                ],
-                getLoggedRows: () => [
-                  ...arxDatesThisWeek.map((d) => ({ label: "ARX", date: d })),
-                  ...(localLoggedDates["strength-arx"] ?? []).map((d) => ({ label: "ARX", date: d })),
-                  ...(localLoggedDates["strength-katalyst"] ?? []).map((d) => ({ label: "Katalyst", date: d })),
-                ],
-              },
-              {
-                key: "cardio",
-                label: "Cardio",
-                color: "#C4831A",
-                weeklyTarget: carolTarget,
-                targetLabel: `${carolTarget}× per week`,
-                options: [
-                  { key: "cardio-rehit",   label: "2×20s REHIT",   logType: "carol", logSubtype: "REHIT" },
-                  { key: "cardio-norw",    label: "Norwegian 4×4", logType: "carol", logSubtype: "FAT_BURN_60" },
-                  { key: "cardio-fatburn", label: "Fat Burn",       logType: "carol", logSubtype: "FAT_BURN_45" },
-                ],
-                getLoggedRows: () => {
-                  const CARDIO_TYPES = ["REHIT", "FAT_BURN_60", "FAT_BURN_45", "ENERGISER"];
-                  const CARDIO_LABELS: Record<string, string> = { REHIT: "2×20s REHIT", FAT_BURN_60: "Norwegian 4×4", FAT_BURN_45: "Fat Burn", ENERGISER: "Energiser" };
-                  return [
-                    ...carolThisWeek.filter((s) => CARDIO_TYPES.includes(s.rideType)).map((s) => ({ label: CARDIO_LABELS[s.rideType] ?? s.rideType, date: s.date })),
-                    ...(localLoggedDates["cardio-rehit"] ?? []).map((d) => ({ label: "2×20s REHIT", date: d })),
-                    ...(localLoggedDates["cardio-norw"]  ?? []).map((d) => ({ label: "Norwegian 4×4", date: d })),
-                    ...(localLoggedDates["cardio-fatburn"] ?? []).map((d) => ({ label: "Fat Burn", date: d })),
-                  ];
-                },
-              },
-              {
-                key: "zone2",
-                label: "Zone 2",
-                color: "#6B9FD4",
-                weeklyTarget: 1,
-                targetLabel: "1× per week",
-                options: [
-                  { key: "zone2-carol", label: "CAROL Zone 2", logType: "carol", logSubtype: "FAT_BURN_30" },
-                  { key: "zone2-walk",  label: "Walk",          logType: "bonus", logSubtype: "walk" },
-                ],
-                getLoggedRows: () => {
-                  const Z2_TYPES = ["FAT_BURN_30"];
-                  return [
-                    ...carolThisWeek.filter((s) => Z2_TYPES.includes(s.rideType)).map((s) => ({ label: "CAROL Zone 2", date: s.date })),
-                    ...(localLoggedDates["zone2-carol"] ?? []).map((d) => ({ label: "CAROL Zone 2", date: d })),
-                    ...(localLoggedDates["zone2-walk"]  ?? []).map((d) => ({ label: "Walk", date: d })),
-                  ];
-                },
-              },
-              {
-                key: "mobility",
-                label: "Mobility",
-                color: "#9B8EA0",
-                weeklyTarget: 1,
-                targetLabel: "1× per week",
-                options: [
-                  { key: "mob-stretch",  label: "Stretch independently",       logType: "bonus", logSubtype: "stretching" },
-                  { key: "mob-session",  label: "Book session with Dustin",    logType: "bonus", logSubtype: "nxpro" },
-                ],
-                getLoggedRows: () => [
-                  ...(localLoggedDates["mob-stretch"]  ?? []).map((d) => ({ label: "Stretch", date: d })),
-                  ...(localLoggedDates["mob-session"]  ?? []).map((d) => ({ label: "Session with Dustin", date: d })),
-                ],
-              },
-              {
-                key: "recovery",
-                label: "Recovery",
-                color: "#A0729A",
-                weeklyTarget: recovWeekTarget,
-                targetLabel: `${recovWeekTarget}× per week`,
-                options: [
-                  { key: "rec-compression", label: "Compression", logType: "recovery", logSubtype: "compression" },
-                  { key: "rec-sauna",       label: "Sauna",        logType: "recovery", logSubtype: "infrared_sauna" },
-                  { key: "rec-cold",        label: "Cold Plunge",  logType: "recovery", logSubtype: "cold_plunge" },
-                ],
-                getLoggedRows: () => {
-                  const MOD_LABELS: Record<string, string> = { compression: "Compression", infrared_sauna: "Sauna", cold_plunge: "Cold Plunge", sauna: "Sauna" };
-                  return [
-                    ...recoveryThisWeek.map((r) => ({ label: MOD_LABELS[r.modality] ?? r.modality, date: r.date })),
-                    ...(localLoggedDates["rec-compression"] ?? []).map((d) => ({ label: "Compression", date: d })),
-                    ...(localLoggedDates["rec-sauna"]       ?? []).map((d) => ({ label: "Sauna", date: d })),
-                    ...(localLoggedDates["rec-cold"]        ?? []).map((d) => ({ label: "Cold Plunge", date: d })),
-                  ];
-                },
-              },
-            ];
-
-            // ── Totals for week status bar ────────────────────────────────
-            const totalLogged = CATEGORIES.reduce((sum, cat) => sum + Math.min(cat.getLoggedRows().length, cat.weeklyTarget), 0);
-            const totalTarget  = CATEGORIES.reduce((sum, cat) => sum + cat.weeklyTarget, 0);
-            const totalRaw     = CATEGORIES.reduce((sum, cat) => sum + cat.getLoggedRows().length, 0);
-            const weekDone     = totalLogged >= totalTarget;
-
-            // ── Save handler ──────────────────────────────────────────────
-            async function handleSave() {
+            // ── Log a completed day ────────────────────────────────────────
+            async function handleLogDay(day: (typeof weekPlan)[number]) {
               if (savingActivity) return;
               setSavingActivity(true);
               try {
-                const toAdd: Array<{ type: "arx" | "carol" | "recovery"; subtype: string }> = [];
-                const bonusKeys: string[] = [];
-                const newDates: Record<string, string[]> = {};
+                const required = day.activities.filter((a) => !a.isOptional);
+                const toAdd = required
+                  .map(activityToLogItem)
+                  .filter((x): x is { type: "arx" | "carol" | "recovery"; subtype: string } => x !== null);
 
-                for (const cat of CATEGORIES) {
-                  for (const opt of cat.options) {
-                    if (!selectedProtocol[opt.key]) continue;
-                    newDates[opt.key] = [...(newDates[opt.key] ?? []), todayIso];
-                    if (opt.logType === "bonus") {
-                      bonusKeys.push(opt.logSubtype);
-                    } else {
-                      toAdd.push({ type: opt.logType as "arx" | "carol" | "recovery", subtype: opt.logSubtype });
-                      if (opt.logType === "arx") { c.arxWeekDates.push(todayIso); c.arxTodayLogged = true; }
-                      else if (opt.logType === "carol") { c.carolWeekTypes.push(opt.logSubtype); c.carolTodayTypes.push(opt.logSubtype); }
-                      else if (opt.logType === "recovery") { c.recoveryWeekModalities.push(opt.logSubtype); c.recoveryTodayModalities.push(opt.logSubtype); }
-                    }
+                if (toAdd.length > 0) {
+                  await fetch("/api/member/activity-log", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: [] }),
+                  });
+                  const iso = isoForDow(day.dayOfWeek);
+                  for (const item of toAdd) {
+                    if (item.type === "arx") { c.arxWeekDates.push(iso); }
+                    else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); }
+                    else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); }
                   }
                 }
-
-                await fetch("/api/member/activity-log", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: bonusKeys }),
-                });
-
-                if (bonusKeys.length > 0) setLocalBonusCount((n) => n + bonusKeys.length);
-
-                // Persist new dates into localLoggedDates so rows appear immediately
-                setLocalLoggedDates((prev) => {
-                  const next = { ...prev };
-                  for (const [key, dates] of Object.entries(newDates)) {
-                    next[key] = [...(next[key] ?? []), ...dates];
-                  }
-                  return next;
-                });
-
-                const logged = toAdd.length + bonusKeys.length;
-                setActivitySavedMsg(logged > 0 ? "✓ Saved — great work" : "✓ Nothing new to log");
-                setSelectedProtocol({});
-                setSelectedBonus({});
+                setCheckedDayIds((prev) => ({ ...prev, [day.id]: true }));
+                setActivitySavedMsg(`✓ ${day.dayName} logged — great work`);
               } catch { setActivitySavedMsg("Something went wrong — please try again"); }
               finally { setSavingActivity(false); }
             }
 
+            // ── Counts for status bar ─────────────────────────────────────
+            const trainingDays = weekPlan.filter((d) => !d.dayTheme.toLowerCase().includes("rest"));
+            const completedCount = trainingDays.filter((d) => isDayComplete(d.dayOfWeek, d.id)).length;
+            const totalTraining  = trainingDays.length;
+
+            // Fall back if week plan not yet loaded
             if (!proto.targetSystem && proto.arxPerWeek === 0 && proto.carolPerWeek === 0) return null;
 
             return (
               <div className="card" style={{ marginBottom: 16 }}>
 
                 {/* ── Header ── */}
-                <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)" }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>This Week&apos;s Targets</div>
-                </div>
-
-                {/* ── Category rows ── */}
-                <div style={{ padding: "4px 0 0" }}>
-                  {CATEGORIES.map((cat, ci) => {
-                    const loggedRows  = cat.getLoggedRows();
-                    const loggedCount = loggedRows.length;
-                    const target      = cat.weeklyTarget;
-                    const exceeded    = loggedCount > target;
-                    const met         = loggedCount === target;
-                    const remaining   = Math.max(0, target - loggedCount);
-                    const isLast      = ci === CATEGORIES.length - 1;
-
-                    // Count display
-                    const countColor  = loggedCount === 0 ? "#C4831A" : (met || exceeded) ? cat.color : "var(--text3)";
-                    const countLabel  = exceeded
-                      ? `${loggedCount} done ✓`
-                      : met
-                        ? `${loggedCount}/${target} ✓`
-                        : `${loggedCount}/${target}`;
-
-                    // Status message
-                    const statusMsg = exceeded
-                      ? "Target exceeded — great consistency this week"
-                      : loggedCount === 0
-                        ? "Not yet logged this week"
-                        : remaining === 1
-                          ? "1 remaining — log it:"
-                          : `${remaining} remaining — log it:`;
-                    const statusColor = exceeded || met ? cat.color : loggedCount === 0 ? "#C4831A" : "var(--text3)";
-
-                    return (
-                      <div key={cat.key} style={{ padding: "14px 20px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
-
-                        {/* ── Category header row ── */}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: loggedRows.length > 0 || remaining > 0 ? 10 : 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: cat.color, flexShrink: 0 }} />
-                            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{cat.label}</span>
-                            <span style={{ fontSize: 11, color: "var(--text3)" }}>{cat.targetLabel}</span>
-                          </div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: countColor }}>{countLabel}</span>
-                        </div>
-
-                        {/* ── Already-logged session rows ── */}
-                        {loggedRows.length > 0 && (
-                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: remaining > 0 ? 10 : 0 }}>
-                            {loggedRows.map((row, ri) => (
-                              <div key={ri} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 12px", borderRadius: "var(--r-sm)", background: `${cat.color}0F`, border: `1px solid ${cat.color}28` }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                  <span style={{ fontSize: 12, color: cat.color, fontWeight: 700, lineHeight: 1 }}>✓</span>
-                                  <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{row.label}</span>
-                                </div>
-                                <span style={{ fontSize: 11, color: "var(--text3)" }}>{fmtDate(row.date)}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* ── Status message + remaining pills ── */}
-                        {(remaining > 0 || exceeded) && (
-                          <>
-                            <div style={{ fontSize: 11, color: statusColor, marginBottom: 8, fontWeight: exceeded || met ? 600 : 400 }}>
-                              {statusMsg}
-                            </div>
-                            {remaining > 0 && (
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                                {cat.options.map((opt) => {
-                                  const sel = selectedProtocol[opt.key] ?? false;
-                                  const isDustinBooking = opt.key === "mob-session";
-                                  if (isDustinBooking) {
-                                    return (
-                                      <a
-                                        key={opt.key}
-                                        href="https://theiso.club/book"
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        style={{ padding: "7px 15px", borderRadius: 24, border: "1.5px solid #4A7C59", background: "transparent", color: "#4A7C59", fontSize: 13, fontWeight: 500, cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-                                      >
-                                        {opt.label} ↗
-                                      </a>
-                                    );
-                                  }
-                                  return (
-                                    <button
-                                      key={opt.key}
-                                      type="button"
-                                      onClick={() => setSelectedProtocol((prev) => ({ ...prev, [opt.key]: !sel }))}
-                                      style={{ padding: "7px 15px", borderRadius: 24, border: `1.5px solid ${sel ? cat.color : "var(--border2)"}`, background: sel ? `${cat.color}14` : "transparent", color: sel ? cat.color : "var(--text2)", fontSize: 13, fontWeight: sel ? 600 : 400, cursor: "pointer", transition: "all 0.13s", display: "flex", alignItems: "center", gap: 6 }}
-                                    >
-                                      {sel && <span style={{ fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
-                                      {opt.label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                            {exceeded && (
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 6 }}>
-                                <span style={{ fontSize: 11, color: "var(--text3)", alignSelf: "center" }}>Log more:</span>
-                                {cat.options.map((opt) => {
-                                  const sel = selectedProtocol[opt.key] ?? false;
-                                  const isDustinBooking = opt.key === "mob-session";
-                                  if (isDustinBooking) {
-                                    return (
-                                      <a key={opt.key} href="https://theiso.club/book" target="_blank" rel="noreferrer" style={{ padding: "5px 12px", borderRadius: 24, border: "1px solid #4A7C59", color: "#4A7C59", fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
-                                        {opt.label} ↗
-                                      </a>
-                                    );
-                                  }
-                                  return (
-                                    <button key={opt.key} type="button" onClick={() => setSelectedProtocol((prev) => ({ ...prev, [opt.key]: !sel }))} style={{ padding: "5px 12px", borderRadius: 24, border: `1px solid ${sel ? cat.color : "var(--border)"}`, background: sel ? `${cat.color}10` : "transparent", color: sel ? cat.color : "var(--text3)", fontSize: 12, fontWeight: sel ? 600 : 400, cursor: "pointer", transition: "all 0.13s" }}>
-                                      {sel && "✓ "}{opt.label}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </>
-                        )}
-
-                        {/* Zero logged but target met (shouldn't happen) edge case handled above */}
-                        {loggedCount === 0 && remaining > 0 && (
-                          <div style={{ fontSize: 11, color: "#C4831A", marginTop: -2, marginBottom: 6 }}>Not yet logged this week</div>
-                        )}
-
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* ── Save button ── */}
-                <div style={{ padding: "16px 20px" }}>
-                  {activitySavedMsg ? (
-                    <div style={{ padding: "10px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.16)", borderRadius: "var(--r-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 13, color: "#4A7C59", fontWeight: 600 }}>{activitySavedMsg}</span>
-                      <button type="button" style={{ fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                        onClick={() => setActivitySavedMsg("")}>dismiss</button>
+                <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>This Week&apos;s Protocol</div>
+                    {proto.name && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{proto.name}</div>}
+                  </div>
+                  {totalTraining > 0 && (
+                    <div style={{ fontSize: 12, color: completedCount === totalTraining ? "#4A7C59" : "var(--text3)", fontWeight: 600 }}>
+                      {completedCount}/{totalTraining} sessions{completedCount === totalTraining ? " ✓" : ""}
                     </div>
-                  ) : (
-                    <button type="button" className="btn btn-lime" disabled={savingActivity}
-                      style={{ width: "100%", fontSize: 13.5, fontWeight: 700, opacity: savingActivity ? 0.7 : 1, padding: "12px 0" }}
-                      onClick={() => { void handleSave(); }}>
-                      {savingActivity ? "Saving…" : "Save today's activities"}
-                    </button>
                   )}
                 </div>
 
-                {/* ── Week status bar ── */}
-                <div style={{ padding: "0 20px 20px", borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                    <span style={{ fontSize: 32, fontFamily: "var(--serif)", fontWeight: 700, color: weekDone ? "#4A7C59" : "var(--text)", lineHeight: 1 }}>
-                      {totalRaw}
-                    </span>
-                    <span style={{ fontSize: 15, color: "var(--text3)" }}>
-                      {totalRaw > totalTarget
-                        ? <>of {totalTarget} sessions this week · <span style={{ color: "#4A7C59", fontWeight: 600 }}>Target exceeded ✓</span></>
-                        : weekDone
-                          ? <>of {totalTarget} sessions this week · <span style={{ color: "#4A7C59", fontWeight: 600 }}>Complete ✓</span></>
-                          : `of ${totalTarget} sessions this week`}
-                    </span>
+                {/* ── Loading state ── */}
+                {weekPlan.length === 0 && (
+                  <div style={{ padding: "20px", textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
+                    {weekPlanLoaded ? "Protocol days not yet seeded. Ask Dustin to set up your week plan." : "Loading your week…"}
                   </div>
-                </div>
+                )}
+
+                {/* ── Day rows ── */}
+                {weekPlan.length > 0 && (
+                  <div>
+                    {weekPlan.map((day, di) => {
+                      const isRestDay  = day.dayTheme.toLowerCase().includes("rest");
+                      const dayIso     = isoForDow(day.dayOfWeek);
+                      const isToday    = day.dayOfWeek === todayDow;
+                      const isPast     = day.dayOfWeek < todayDow;
+                      const isFuture   = day.dayOfWeek > todayDow;
+                      const done       = isDayComplete(day.dayOfWeek, day.id);
+                      const required   = day.activities.filter((a) => !a.isOptional);
+                      const isLast     = di === weekPlan.length - 1;
+
+                      // Override: check weekPlanMeta overrides
+                      const hasOverride = weekPlanMeta.overrides.some((o) => o.protocolDayId === day.id);
+
+                      return (
+                        <div
+                          key={day.id}
+                          style={{
+                            padding: "12px 20px",
+                            borderBottom: isLast ? "none" : "1px solid var(--border)",
+                            background: isToday ? "rgba(74,124,89,0.04)" : "transparent",
+                          }}
+                        >
+                          {/* Day header */}
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: required.length > 0 ? 8 : 0 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              {/* Checkbox */}
+                              {!isRestDay && (
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => {
+                                    if (done) {
+                                      setCheckedDayIds((prev) => { const n = { ...prev }; delete n[day.id]; return n; });
+                                    } else {
+                                      void handleLogDay(day);
+                                    }
+                                  }}
+                                  onKeyDown={(e) => e.key === " " && !done && void handleLogDay(day)}
+                                  style={{
+                                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                                    background: done ? "#4A7C59" : "transparent",
+                                    border: `2px solid ${done ? "#4A7C59" : isPast && !done ? "#C4831A" : "rgba(28,43,30,0.22)"}`,
+                                    display: "flex", alignItems: "center", justifyContent: "center",
+                                    cursor: "pointer", transition: "all 0.13s",
+                                  }}
+                                >
+                                  {done && <span style={{ color: "#fff", fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                                </div>
+                              )}
+                              {isRestDay && <div style={{ width: 22, height: 22, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--border2)" }} /></div>}
+
+                              <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span style={{ fontSize: 13.5, fontWeight: isToday ? 700 : 500, color: done ? "var(--text3)" : "var(--text)", textDecoration: done ? "line-through" : "none" }}>
+                                    {day.dayName}
+                                  </span>
+                                  {isToday && <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em", color: "#fff", background: "#4A7C59", borderRadius: 4, padding: "1px 6px" }}>Today</span>}
+                                  {hasOverride && <span style={{ fontSize: 9, color: "var(--text3)" }}>rescheduled</span>}
+                                </div>
+                                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1 }}>
+                                  {fmtShortDate(dayIso)}
+                                  {day.dayTheme && !isRestDay && <span style={{ marginLeft: 6 }}>· {day.dayTheme}</span>}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Right: status badge or log button */}
+                            {!isRestDay && (
+                              <div>
+                                {done ? (
+                                  <span style={{ fontSize: 11, color: "#4A7C59", fontWeight: 600 }}>Done ✓</span>
+                                ) : isToday ? (
+                                  <button
+                                    type="button"
+                                    disabled={savingActivity}
+                                    onClick={() => { void handleLogDay(day); }}
+                                    style={{ padding: "5px 14px", borderRadius: 20, background: "#4A7C59", color: "#fff", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: savingActivity ? 0.6 : 1 }}
+                                  >
+                                    {savingActivity ? "…" : "Log session"}
+                                  </button>
+                                ) : isPast ? (
+                                  <button
+                                    type="button"
+                                    disabled={savingActivity}
+                                    onClick={() => { void handleLogDay(day); }}
+                                    style={{ padding: "5px 12px", borderRadius: 20, background: "transparent", color: "#C4831A", border: "1px solid #C4831A", fontSize: 11, fontWeight: 500, cursor: "pointer" }}
+                                  >
+                                    Log missed
+                                  </button>
+                                ) : (
+                                  <span style={{ fontSize: 11, color: "var(--text3)" }}>Upcoming</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Activity list (non-rest days, collapsed for future, expanded for today/past) */}
+                          {!isRestDay && required.length > 0 && (isToday || isPast || done) && (
+                            <div style={{ marginLeft: 30, display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
+                              {required.map((act) => (
+                                <div key={act.id} style={{ display: "flex", alignItems: "center", gap: 7 }}>
+                                  <div style={{ width: 5, height: 5, borderRadius: "50%", background: actTypeColor(act.type), flexShrink: 0 }} />
+                                  <span style={{ fontSize: 12, color: done ? "var(--text3)" : "var(--text2)", textDecoration: done ? "line-through" : "none" }}>{act.name}</span>
+                                  {act.durationMinutes > 0 && <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Future days: compact activity type tags only */}
+                          {!isRestDay && required.length > 0 && isFuture && !done && (
+                            <div style={{ marginLeft: 30, display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
+                              {required.map((act) => (
+                                <span key={act.id} style={{ fontSize: 10, color: actTypeColor(act.type), background: `${actTypeColor(act.type)}12`, border: `1px solid ${actTypeColor(act.type)}28`, borderRadius: 4, padding: "1px 7px", fontWeight: 500 }}>
+                                  {act.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Rest day */}
+                          {isRestDay && (
+                            <div style={{ marginLeft: 30, fontSize: 11, color: "var(--text3)", marginTop: 2, fontStyle: "italic" }}>Rest & recovery</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── Save message ── */}
+                {activitySavedMsg && (
+                  <div style={{ margin: "0 20px 12px", padding: "10px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.16)", borderRadius: "var(--r-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 13, color: "#4A7C59", fontWeight: 600 }}>{activitySavedMsg}</span>
+                    <button type="button" style={{ fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                      onClick={() => setActivitySavedMsg("")}>dismiss</button>
+                  </div>
+                )}
+
+                {/* ── Week status bar ── */}
+                {totalTraining > 0 && (
+                  <div style={{ padding: "16px 20px 20px", borderTop: "1px solid var(--border)" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                      <span style={{ fontSize: 32, fontFamily: "var(--serif)", fontWeight: 700, color: completedCount === totalTraining ? "#4A7C59" : "var(--text)", lineHeight: 1 }}>
+                        {completedCount}
+                      </span>
+                      <span style={{ fontSize: 15, color: "var(--text3)" }}>
+                        of {totalTraining} sessions complete this week
+                        {completedCount === totalTraining && <span style={{ marginLeft: 8, color: "#4A7C59", fontWeight: 600 }}>✓</span>}
+                      </span>
+                    </div>
+                  </div>
+                )}
 
               </div>
             );
