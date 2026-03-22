@@ -38,12 +38,21 @@ export async function GET() {
     if (!isCoachRole(context.role)) {
       return NextResponse.json({ success: false, error: "Coach access required." }, { status: 403 });
     }
-    const res = await context.supabase
+    // Try the full query with extended columns first; fall back if columns don't exist yet
+    const resExtended = await context.supabase
       .from("protocols")
       .select("id,name,description,target_system,tier,science_rationale,days_per_week,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes")
       .order("tier,name");
-    if (res.error) throw new Error(res.error.message);
-    return NextResponse.json({ success: true, protocols: res.data ?? [] });
+    if (!resExtended.error) {
+      return NextResponse.json({ success: true, protocols: resExtended.data ?? [] });
+    }
+    // Extended columns may not exist yet — fall back to legacy column set
+    const resLegacy = await context.supabase
+      .from("protocols")
+      .select("id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes")
+      .order("name");
+    if (resLegacy.error) throw new Error(resLegacy.error.message);
+    return NextResponse.json({ success: true, protocols: resLegacy.data ?? [] });
   } catch (err) {
     return NextResponse.json({ success: false, error: err instanceof Error ? err.message : "Failed to load protocols." }, { status: 500 });
   }
