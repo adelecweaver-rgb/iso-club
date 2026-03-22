@@ -218,7 +218,7 @@ export default async function OnboardingPage() {
       let notificationsEnabled = true;
       const applyNotifToggle = () => {
         if (!notifToggle || !notifThumb) return;
-        notifToggle.style.background = notificationsEnabled ? "var(--lime)" : "var(--bg4)";
+        notifToggle.style.background = notificationsEnabled ? "var(--green)" : "var(--bg4)";
         notifThumb.style.right = notificationsEnabled ? "3px" : "21px";
       };
       if (notifCard) {
@@ -245,7 +245,7 @@ export default async function OnboardingPage() {
         if (type === "error") {
           statusEl.style.color = "var(--coral)";
         } else if (type === "success") {
-          statusEl.style.color = "var(--lime)";
+          statusEl.style.color = "var(--green)";
         } else {
           statusEl.style.color = "var(--text3)";
         }
