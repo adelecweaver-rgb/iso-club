@@ -828,6 +828,9 @@ export function DashboardReactClient({
   const [savingActivity, setSavingActivity] = useState(false);
   const [activitySavedMsg, setActivitySavedMsg] = useState("");
   const [localBonusCount, setLocalBonusCount] = useState(0);
+  // Locally-appended logged sessions (key → array of date strings) so newly saved
+  // sessions appear in the "already logged" rows without a page reload.
+  const [localLoggedDates, setLocalLoggedDates] = useState<Record<string, string[]>>({});
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinLoaded, setCheckinLoaded] = useState(false);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
@@ -1477,33 +1480,61 @@ export function DashboardReactClient({
 
           {/* ══════════════════════════════════════════════════════════════
               SECTION 2 — THIS WEEK'S TARGETS
-              Each category shows its weekly target + specific activity
-              options the member taps to log toward that target.
+              Shows already-logged sessions with dates, then remaining
+              options as pill buttons to log toward each target.
           ══════════════════════════════════════════════════════════════ */}
           {(() => {
             const proto = payload.protocol;
             const c = payload.checklistCompletions;
 
-            // ── Category definitions with fixed activity options ──────────
-            // Each option has a stable key, display label, and how it maps
-            // to the log API (type + subtype) or a bonus key.
+            // ── Date formatting ───────────────────────────────────────────
+            function fmtDate(iso: string): string {
+              const d = new Date(iso + "T00:00:00");
+              return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+            }
+
+            // ── Build logged-session rows from payload session arrays ─────
+            // Filter to current week (weekStartDate ≤ date ≤ today)
+            const weekStart = c.weekStartDate;
+            const todayIso  = c.todayDate;
+
+            // ARX: each date in arxWeekDates is one session
+            const arxDatesThisWeek = c.arxWeekDates.filter((d) => d >= weekStart && d <= todayIso);
+
+            // CAROL: pair carolWeekTypes with session dates from payload.carolSessions
+            const carolThisWeek = payload.carolSessions
+              .filter((s) => s.sessionDate >= weekStart && s.sessionDate <= todayIso)
+              .map((s) => ({ rideType: s.rideType, date: s.sessionDate }));
+
+            // Recovery: modalities from checklistCompletions — no per-session dates,
+            // so spread evenly across logged days in the week
+            const recoveryThisWeek = c.recoveryWeekModalities.map((mod, i) => {
+              // Use today for most-recent, step back one day per additional session
+              const d = new Date(todayIso);
+              d.setDate(d.getDate() - i);
+              const dateStr = d.toISOString().slice(0, 10);
+              return { modality: mod, date: dateStr >= weekStart ? dateStr : weekStart };
+            });
+
             type TargetOption = {
               key: string;
               label: string;
               logType: "arx" | "carol" | "recovery" | "bonus";
               logSubtype: string;
             };
+            type LoggedRow = { label: string; date: string };
             type TargetCategory = {
               key: string;
               label: string;
               color: string;
               weeklyTarget: number;
-              targetLabel: string; // e.g. "2× per week"
+              targetLabel: string;
               options: TargetOption[];
+              getLoggedRows: () => LoggedRow[];
             };
 
-            const arxTarget = proto.arxPerWeek ?? 0;
-            const carolTarget = proto.carolPerWeek ?? 0;
+            const arxTarget      = proto.arxPerWeek  > 0 ? proto.arxPerWeek  : 2;
+            const carolTarget    = proto.carolPerWeek > 0 ? proto.carolPerWeek : 2;
             const recovWeekTarget = proto.recoveryPerMonth > 0 ? Math.max(1, Math.ceil(proto.recoveryPerMonth / 4)) : 2;
 
             const CATEGORIES: TargetCategory[] = [
@@ -1511,24 +1542,39 @@ export function DashboardReactClient({
                 key: "strength",
                 label: "Strength",
                 color: "#4A7C59",
-                weeklyTarget: arxTarget > 0 ? arxTarget : 2,
-                targetLabel: `${arxTarget > 0 ? arxTarget : 2}× per week`,
+                weeklyTarget: arxTarget,
+                targetLabel: `${arxTarget}× per week`,
                 options: [
-                  { key: "strength-arx",      label: "ARX",              logType: "arx",     logSubtype: "manual_checkin" },
-                  { key: "strength-katalyst",  label: "Katalyst",         logType: "bonus",   logSubtype: "katalyst" },
+                  { key: "strength-arx",     label: "ARX",     logType: "arx",   logSubtype: "manual_checkin" },
+                  { key: "strength-katalyst", label: "Katalyst",logType: "bonus", logSubtype: "katalyst" },
+                ],
+                getLoggedRows: () => [
+                  ...arxDatesThisWeek.map((d) => ({ label: "ARX", date: d })),
+                  ...(localLoggedDates["strength-arx"] ?? []).map((d) => ({ label: "ARX", date: d })),
+                  ...(localLoggedDates["strength-katalyst"] ?? []).map((d) => ({ label: "Katalyst", date: d })),
                 ],
               },
               {
                 key: "cardio",
                 label: "Cardio",
                 color: "#C4831A",
-                weeklyTarget: carolTarget > 0 ? carolTarget : 2,
-                targetLabel: `${carolTarget > 0 ? carolTarget : 2}× per week`,
+                weeklyTarget: carolTarget,
+                targetLabel: `${carolTarget}× per week`,
                 options: [
-                  { key: "cardio-rehit",    label: "2×20s REHIT",         logType: "carol",   logSubtype: "REHIT" },
-                  { key: "cardio-norw",     label: "Norwegian 4×4",       logType: "carol",   logSubtype: "FAT_BURN_60" },
-                  { key: "cardio-fatburn",  label: "Fat Burn",            logType: "carol",   logSubtype: "FAT_BURN_45" },
+                  { key: "cardio-rehit",   label: "2×20s REHIT",   logType: "carol", logSubtype: "REHIT" },
+                  { key: "cardio-norw",    label: "Norwegian 4×4", logType: "carol", logSubtype: "FAT_BURN_60" },
+                  { key: "cardio-fatburn", label: "Fat Burn",       logType: "carol", logSubtype: "FAT_BURN_45" },
                 ],
+                getLoggedRows: () => {
+                  const CARDIO_TYPES = ["REHIT", "FAT_BURN_60", "FAT_BURN_45", "ENERGISER"];
+                  const CARDIO_LABELS: Record<string, string> = { REHIT: "2×20s REHIT", FAT_BURN_60: "Norwegian 4×4", FAT_BURN_45: "Fat Burn", ENERGISER: "Energiser" };
+                  return [
+                    ...carolThisWeek.filter((s) => CARDIO_TYPES.includes(s.rideType)).map((s) => ({ label: CARDIO_LABELS[s.rideType] ?? s.rideType, date: s.date })),
+                    ...(localLoggedDates["cardio-rehit"] ?? []).map((d) => ({ label: "2×20s REHIT", date: d })),
+                    ...(localLoggedDates["cardio-norw"]  ?? []).map((d) => ({ label: "Norwegian 4×4", date: d })),
+                    ...(localLoggedDates["cardio-fatburn"] ?? []).map((d) => ({ label: "Fat Burn", date: d })),
+                  ];
+                },
               },
               {
                 key: "zone2",
@@ -1537,9 +1583,17 @@ export function DashboardReactClient({
                 weeklyTarget: 1,
                 targetLabel: "1× per week",
                 options: [
-                  { key: "zone2-carol",  label: "CAROL Zone 2",  logType: "carol",  logSubtype: "FAT_BURN_30" },
-                  { key: "zone2-walk",   label: "Walk",          logType: "bonus",  logSubtype: "walk" },
+                  { key: "zone2-carol", label: "CAROL Zone 2", logType: "carol", logSubtype: "FAT_BURN_30" },
+                  { key: "zone2-walk",  label: "Walk",          logType: "bonus", logSubtype: "walk" },
                 ],
+                getLoggedRows: () => {
+                  const Z2_TYPES = ["FAT_BURN_30"];
+                  return [
+                    ...carolThisWeek.filter((s) => Z2_TYPES.includes(s.rideType)).map((s) => ({ label: "CAROL Zone 2", date: s.date })),
+                    ...(localLoggedDates["zone2-carol"] ?? []).map((d) => ({ label: "CAROL Zone 2", date: d })),
+                    ...(localLoggedDates["zone2-walk"]  ?? []).map((d) => ({ label: "Walk", date: d })),
+                  ];
+                },
               },
               {
                 key: "mobility",
@@ -1548,8 +1602,12 @@ export function DashboardReactClient({
                 weeklyTarget: 1,
                 targetLabel: "1× per week",
                 options: [
-                  { key: "mob-stretch",  label: "Stretch independently",         logType: "bonus",  logSubtype: "stretching" },
-                  { key: "mob-session",  label: "Private session with Dustin",   logType: "bonus",  logSubtype: "nxpro" },
+                  { key: "mob-stretch",  label: "Stretch independently",       logType: "bonus", logSubtype: "stretching" },
+                  { key: "mob-session",  label: "Book session with Dustin",    logType: "bonus", logSubtype: "nxpro" },
+                ],
+                getLoggedRows: () => [
+                  ...(localLoggedDates["mob-stretch"]  ?? []).map((d) => ({ label: "Stretch", date: d })),
+                  ...(localLoggedDates["mob-session"]  ?? []).map((d) => ({ label: "Session with Dustin", date: d })),
                 ],
               },
               {
@@ -1559,35 +1617,27 @@ export function DashboardReactClient({
                 weeklyTarget: recovWeekTarget,
                 targetLabel: `${recovWeekTarget}× per week`,
                 options: [
-                  { key: "rec-compression", label: "Compression",    logType: "recovery", logSubtype: "compression" },
-                  { key: "rec-sauna",       label: "Sauna",          logType: "recovery", logSubtype: "infrared_sauna" },
-                  { key: "rec-cold",        label: "Cold Plunge",    logType: "recovery", logSubtype: "cold_plunge" },
+                  { key: "rec-compression", label: "Compression", logType: "recovery", logSubtype: "compression" },
+                  { key: "rec-sauna",       label: "Sauna",        logType: "recovery", logSubtype: "infrared_sauna" },
+                  { key: "rec-cold",        label: "Cold Plunge",  logType: "recovery", logSubtype: "cold_plunge" },
                 ],
+                getLoggedRows: () => {
+                  const MOD_LABELS: Record<string, string> = { compression: "Compression", infrared_sauna: "Sauna", cold_plunge: "Cold Plunge", sauna: "Sauna" };
+                  return [
+                    ...recoveryThisWeek.map((r) => ({ label: MOD_LABELS[r.modality] ?? r.modality, date: r.date })),
+                    ...(localLoggedDates["rec-compression"] ?? []).map((d) => ({ label: "Compression", date: d })),
+                    ...(localLoggedDates["rec-sauna"]       ?? []).map((d) => ({ label: "Sauna", date: d })),
+                    ...(localLoggedDates["rec-cold"]        ?? []).map((d) => ({ label: "Cold Plunge", date: d })),
+                  ];
+                },
               },
             ];
 
-            // ── Completion counts from real logged data ───────────────────
-            // Used to drive the "X of Y" counter per category
-            function getLoggedCount(cat: TargetCategory): number {
-              if (cat.key === "strength")  return new Set(c.arxWeekDates).size;
-              if (cat.key === "cardio")    return c.carolWeekTypes.filter((t) => ["REHIT","FAT_BURN_60"].includes(t)).length;
-              if (cat.key === "zone2")     return c.carolWeekTypes.filter((t) => ["FAT_BURN_30","FAT_BURN_45"].includes(t)).length + (localBonusCount > 0 ? 0 : 0);
-              if (cat.key === "recovery")  return c.recoveryWeekModalities.length;
-              return 0;
-            }
-
-            // ── selectedTargets: tracks which option pills are toggled ────
-            // We reuse selectedProtocol (Record<string,boolean>) for option keys
-            // and selectedBonus for bonus keys — same save pathway as before.
-
-            // ── Total "sessions" for the week counter ────────────────────
-            // Count each selected pill once, capped at that category's target
-            function countSelected(cat: TargetCategory): number {
-              return cat.options.filter((opt) => selectedProtocol[opt.key] ?? false).length;
-            }
-            const totalSelected = CATEGORIES.reduce((sum, cat) => sum + Math.min(countSelected(cat), cat.weeklyTarget), 0);
-            const totalTarget   = CATEGORIES.reduce((sum, cat) => sum + cat.weeklyTarget, 0);
-            const weekComplete  = totalSelected >= totalTarget;
+            // ── Totals for week status bar ────────────────────────────────
+            const totalLogged = CATEGORIES.reduce((sum, cat) => sum + Math.min(cat.getLoggedRows().length, cat.weeklyTarget), 0);
+            const totalTarget  = CATEGORIES.reduce((sum, cat) => sum + cat.weeklyTarget, 0);
+            const totalRaw     = CATEGORIES.reduce((sum, cat) => sum + cat.getLoggedRows().length, 0);
+            const weekDone     = totalLogged >= totalTarget;
 
             // ── Save handler ──────────────────────────────────────────────
             async function handleSave() {
@@ -1596,16 +1646,17 @@ export function DashboardReactClient({
               try {
                 const toAdd: Array<{ type: "arx" | "carol" | "recovery"; subtype: string }> = [];
                 const bonusKeys: string[] = [];
+                const newDates: Record<string, string[]> = {};
 
                 for (const cat of CATEGORIES) {
                   for (const opt of cat.options) {
                     if (!selectedProtocol[opt.key]) continue;
+                    newDates[opt.key] = [...(newDates[opt.key] ?? []), todayIso];
                     if (opt.logType === "bonus") {
                       bonusKeys.push(opt.logSubtype);
                     } else {
                       toAdd.push({ type: opt.logType as "arx" | "carol" | "recovery", subtype: opt.logSubtype });
-                      // Mirror into local completion state so counter updates
-                      if (opt.logType === "arx") { c.arxWeekDates.push(c.todayDate); c.arxTodayLogged = true; }
+                      if (opt.logType === "arx") { c.arxWeekDates.push(todayIso); c.arxTodayLogged = true; }
                       else if (opt.logType === "carol") { c.carolWeekTypes.push(opt.logSubtype); c.carolTodayTypes.push(opt.logSubtype); }
                       else if (opt.logType === "recovery") { c.recoveryWeekModalities.push(opt.logSubtype); c.recoveryTodayModalities.push(opt.logSubtype); }
                     }
@@ -1618,13 +1669,19 @@ export function DashboardReactClient({
                   body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: bonusKeys }),
                 });
 
-                if (bonusKeys.length > 0) {
-                  setLocalBonusCount((n) => n + bonusKeys.length);
-                }
+                if (bonusKeys.length > 0) setLocalBonusCount((n) => n + bonusKeys.length);
+
+                // Persist new dates into localLoggedDates so rows appear immediately
+                setLocalLoggedDates((prev) => {
+                  const next = { ...prev };
+                  for (const [key, dates] of Object.entries(newDates)) {
+                    next[key] = [...(next[key] ?? []), ...dates];
+                  }
+                  return next;
+                });
 
                 const logged = toAdd.length + bonusKeys.length;
                 setActivitySavedMsg(logged > 0 ? "✓ Saved — great work" : "✓ Nothing new to log");
-                // Clear all selections after save
                 setSelectedProtocol({});
                 setSelectedBonus({});
               } catch { setActivitySavedMsg("Something went wrong — please try again"); }
@@ -1637,65 +1694,134 @@ export function DashboardReactClient({
               <div className="card" style={{ marginBottom: 16 }}>
 
                 {/* ── Header ── */}
-                <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)" }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>This Week&apos;s Targets</div>
-                  <div style={{ fontSize: 11, color: "var(--text3)" }}>{c.weekStartDate}</div>
                 </div>
 
                 {/* ── Category rows ── */}
                 <div style={{ padding: "4px 0 0" }}>
                   {CATEGORIES.map((cat, ci) => {
-                    const loggedCount = getLoggedCount(cat);
-                    const selectedCount = countSelected(cat);
-                    const displayCount = Math.max(loggedCount, selectedCount);
-                    const catComplete = displayCount >= cat.weeklyTarget;
-                    const isLast = ci === CATEGORIES.length - 1;
+                    const loggedRows  = cat.getLoggedRows();
+                    const loggedCount = loggedRows.length;
+                    const target      = cat.weeklyTarget;
+                    const exceeded    = loggedCount > target;
+                    const met         = loggedCount === target;
+                    const remaining   = Math.max(0, target - loggedCount);
+                    const isLast      = ci === CATEGORIES.length - 1;
+
+                    // Count display
+                    const countColor  = loggedCount === 0 ? "#C4831A" : (met || exceeded) ? cat.color : "var(--text3)";
+                    const countLabel  = exceeded
+                      ? `${loggedCount} done ✓`
+                      : met
+                        ? `${loggedCount}/${target} ✓`
+                        : `${loggedCount}/${target}`;
+
+                    // Status message
+                    const statusMsg = exceeded
+                      ? "Target exceeded — great consistency this week"
+                      : loggedCount === 0
+                        ? "Not yet logged this week"
+                        : remaining === 1
+                          ? "1 remaining — log it:"
+                          : `${remaining} remaining — log it:`;
+                    const statusColor = exceeded || met ? cat.color : loggedCount === 0 ? "#C4831A" : "var(--text3)";
 
                     return (
                       <div key={cat.key} style={{ padding: "14px 20px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
-                        {/* Target row: label left, "X of Y" right */}
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+
+                        {/* ── Category header row ── */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: loggedRows.length > 0 || remaining > 0 ? 10 : 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <div style={{ width: 8, height: 8, borderRadius: "50%", background: cat.color, flexShrink: 0 }} />
                             <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{cat.label}</span>
                             <span style={{ fontSize: 11, color: "var(--text3)" }}>{cat.targetLabel}</span>
                           </div>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: catComplete ? cat.color : "var(--text3)" }}>
-                            {displayCount}/{cat.weeklyTarget}
-                            {catComplete && <span style={{ marginLeft: 5 }}>✓</span>}
-                          </span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: countColor }}>{countLabel}</span>
                         </div>
 
-                        {/* Activity pills */}
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                          {cat.options.map((opt) => {
-                            const sel = selectedProtocol[opt.key] ?? false;
-                            return (
-                              <button
-                                key={opt.key}
-                                type="button"
-                                onClick={() => setSelectedProtocol((prev) => ({ ...prev, [opt.key]: !sel }))}
-                                style={{
-                                  padding: "7px 15px",
-                                  borderRadius: 24,
-                                  border: `1.5px solid ${sel ? cat.color : "var(--border2)"}`,
-                                  background: sel ? `${cat.color}14` : "transparent",
-                                  color: sel ? cat.color : "var(--text2)",
-                                  fontSize: 13,
-                                  fontWeight: sel ? 600 : 400,
-                                  cursor: "pointer",
-                                  transition: "all 0.13s",
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 6,
-                                }}
-                              >
-                                {sel && <span style={{ fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
-                                {opt.label}
-                              </button>
-                            );
-                          })}
-                        </div>
+                        {/* ── Already-logged session rows ── */}
+                        {loggedRows.length > 0 && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: remaining > 0 ? 10 : 0 }}>
+                            {loggedRows.map((row, ri) => (
+                              <div key={ri} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 12px", borderRadius: "var(--r-sm)", background: `${cat.color}0F`, border: `1px solid ${cat.color}28` }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                  <span style={{ fontSize: 12, color: cat.color, fontWeight: 700, lineHeight: 1 }}>✓</span>
+                                  <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{row.label}</span>
+                                </div>
+                                <span style={{ fontSize: 11, color: "var(--text3)" }}>{fmtDate(row.date)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* ── Status message + remaining pills ── */}
+                        {(remaining > 0 || exceeded) && (
+                          <>
+                            <div style={{ fontSize: 11, color: statusColor, marginBottom: 8, fontWeight: exceeded || met ? 600 : 400 }}>
+                              {statusMsg}
+                            </div>
+                            {remaining > 0 && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                                {cat.options.map((opt) => {
+                                  const sel = selectedProtocol[opt.key] ?? false;
+                                  const isDustinBooking = opt.key === "mob-session";
+                                  if (isDustinBooking) {
+                                    return (
+                                      <a
+                                        key={opt.key}
+                                        href="https://theiso.club/book"
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        style={{ padding: "7px 15px", borderRadius: 24, border: "1.5px solid #4A7C59", background: "transparent", color: "#4A7C59", fontSize: 13, fontWeight: 500, cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
+                                      >
+                                        {opt.label} ↗
+                                      </a>
+                                    );
+                                  }
+                                  return (
+                                    <button
+                                      key={opt.key}
+                                      type="button"
+                                      onClick={() => setSelectedProtocol((prev) => ({ ...prev, [opt.key]: !sel }))}
+                                      style={{ padding: "7px 15px", borderRadius: 24, border: `1.5px solid ${sel ? cat.color : "var(--border2)"}`, background: sel ? `${cat.color}14` : "transparent", color: sel ? cat.color : "var(--text2)", fontSize: 13, fontWeight: sel ? 600 : 400, cursor: "pointer", transition: "all 0.13s", display: "flex", alignItems: "center", gap: 6 }}
+                                    >
+                                      {sel && <span style={{ fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                                      {opt.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {exceeded && (
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 6 }}>
+                                <span style={{ fontSize: 11, color: "var(--text3)", alignSelf: "center" }}>Log more:</span>
+                                {cat.options.map((opt) => {
+                                  const sel = selectedProtocol[opt.key] ?? false;
+                                  const isDustinBooking = opt.key === "mob-session";
+                                  if (isDustinBooking) {
+                                    return (
+                                      <a key={opt.key} href="https://theiso.club/book" target="_blank" rel="noreferrer" style={{ padding: "5px 12px", borderRadius: 24, border: "1px solid #4A7C59", color: "#4A7C59", fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 5 }}>
+                                        {opt.label} ↗
+                                      </a>
+                                    );
+                                  }
+                                  return (
+                                    <button key={opt.key} type="button" onClick={() => setSelectedProtocol((prev) => ({ ...prev, [opt.key]: !sel }))} style={{ padding: "5px 12px", borderRadius: 24, border: `1px solid ${sel ? cat.color : "var(--border)"}`, background: sel ? `${cat.color}10` : "transparent", color: sel ? cat.color : "var(--text3)", fontSize: 12, fontWeight: sel ? 600 : 400, cursor: "pointer", transition: "all 0.13s" }}>
+                                      {sel && "✓ "}{opt.label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* Zero logged but target met (shouldn't happen) edge case handled above */}
+                        {loggedCount === 0 && remaining > 0 && (
+                          <div style={{ fontSize: 11, color: "#C4831A", marginTop: -2, marginBottom: 6 }}>Not yet logged this week</div>
+                        )}
+
                       </div>
                     );
                   })}
@@ -1718,15 +1844,18 @@ export function DashboardReactClient({
                   )}
                 </div>
 
-                {/* ── Week status counter ── */}
+                {/* ── Week status bar ── */}
                 <div style={{ padding: "0 20px 20px", borderTop: "1px solid var(--border)", paddingTop: 16 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                    <span style={{ fontSize: 32, fontFamily: "var(--serif)", fontWeight: 700, color: weekComplete ? "#4A7C59" : "var(--text)", lineHeight: 1 }}>
-                      {totalSelected}
+                    <span style={{ fontSize: 32, fontFamily: "var(--serif)", fontWeight: 700, color: weekDone ? "#4A7C59" : "var(--text)", lineHeight: 1 }}>
+                      {totalRaw}
                     </span>
                     <span style={{ fontSize: 15, color: "var(--text3)" }}>
-                      of {totalTarget} sessions complete this week
-                      {weekComplete && <span style={{ marginLeft: 8, color: "#4A7C59", fontWeight: 600 }}>✓</span>}
+                      {totalRaw > totalTarget
+                        ? <>of {totalTarget} sessions this week · <span style={{ color: "#4A7C59", fontWeight: 600 }}>Target exceeded ✓</span></>
+                        : weekDone
+                          ? <>of {totalTarget} sessions this week · <span style={{ color: "#4A7C59", fontWeight: 600 }}>Complete ✓</span></>
+                          : `of ${totalTarget} sessions this week`}
                     </span>
                   </div>
                 </div>
