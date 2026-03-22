@@ -1295,6 +1295,22 @@ export function DashboardReactClient({
 
         <div id="view-dashboard" className="content" style={{ display: mode === "member" && memberView === "dashboard" ? "block" : "none" }}>
 
+          {/* ── Connect nudge — shown until at least one data source is linked ── */}
+          {payload.carolSessions.length === 0 && payload.arxSessions.length === 0 && payload.scanHistory.length === 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 14, background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.25)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 18 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>Connect your devices to see real data</div>
+                <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5 }}>Link ARX and CAROL in Settings to populate your Progress tab with strength and cardio metrics.</div>
+              </div>
+              <Link
+                href="/dashboard/settings"
+                style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#9dcc3a", textDecoration: "none", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}
+              >
+                Settings →
+              </Link>
+            </div>
+          )}
+
           {/* ══════════════════════════════════════════════════════════════
               SECTION 1 — TODAY'S FOCUS
               Check-in first. When "strong", reveal the day's protocol
