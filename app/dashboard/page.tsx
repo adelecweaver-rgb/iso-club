@@ -520,16 +520,27 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
       .gte("scheduled_at", new Date().toISOString())
       .order("scheduled_at", { ascending: true })
       .limit(5),
-    // Try new assignment system first; fall back to old per-member protocols table
+    // Try new assignment system — attempt with extended columns first, fall back gracefully
     (async () => {
-      const newRes = await supabase
+      // Full query including extended columns
+      const fullRes = await supabase
         .from("member_protocols")
         .select("id,start_date,coach_notes,days_per_week,protocols(id,name,description,target_system,tier,science_rationale,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
         .eq("member_id", memberId)
         .eq("status", "active")
         .order("assigned_at", { ascending: false })
         .limit(1);
-      if (!newRes.error) return newRes;
+      if (!fullRes.error) return fullRes;
+      // Extended columns (days_per_week / tier / science_rationale) may not exist yet — try base columns
+      const baseRes = await supabase
+        .from("member_protocols")
+        .select("id,start_date,coach_notes,protocols(id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes)")
+        .eq("member_id", memberId)
+        .eq("status", "active")
+        .order("assigned_at", { ascending: false })
+        .limit(1);
+      if (!baseRes.error) return baseRes;
+      // Last resort: legacy per-member protocols table
       return supabase
         .from("protocols")
         .select("id,name,week_current,week_total")
@@ -829,10 +840,10 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
     payload.protocol.id = stringOr(protocolLib.id, "");
     payload.protocol.name = stringOr(protocolLib.name, "");
     payload.protocol.targetSystem = stringOr(protocolLib.target_system, "");
-    payload.protocol.tier = stringOr(protocolLib.tier, "");
-    payload.protocol.description = stringOr(protocolLib.description, "");
-    payload.protocol.scienceRationale = stringOr(protocolLib.science_rationale, "");
-    payload.protocol.daysPerWeek = typeof protocolRow!.days_per_week === "number" ? protocolRow!.days_per_week : null;
+    payload.protocol.tier = protocolLib.tier != null ? stringOr(protocolLib.tier, "") : "";
+    payload.protocol.description = protocolLib.description != null ? stringOr(protocolLib.description, "") : "";
+    payload.protocol.scienceRationale = protocolLib.science_rationale != null ? stringOr(protocolLib.science_rationale, "") : "";
+    payload.protocol.daysPerWeek = protocolRow!.days_per_week != null ? Math.round(numberOr(protocolRow!.days_per_week, 0)) || null : null;
     payload.protocol.arxPerWeek = Math.round(numberOr(protocolLib.arx_frequency_per_week, 0));
     payload.protocol.carolPerWeek = Math.round(numberOr(protocolLib.carol_frequency_per_week, 0));
     payload.protocol.recoveryPerMonth = Math.round(numberOr(protocolLib.recovery_target_per_month, 0));
