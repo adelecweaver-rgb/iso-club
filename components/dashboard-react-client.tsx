@@ -1334,36 +1334,6 @@ export function DashboardReactClient({
               } catch { /* silent */ } finally { setSubmittingCheckin(false); }
             }
 
-            // One-tap "Log Complete" — logs all of today's not-yet-done protocol items
-            async function handleLogComplete() {
-              if (savingActivity) return;
-              setSavingActivity(true);
-              try {
-                const initState: Record<string, boolean> = {};
-                for (const item of cl) initState[item.id] = isChecklistItemDone(item, c, {});
-                const toAdd = cl
-                  .filter((item) => !initState[item.id])
-                  .map((item) => ({ type: item.type as "arx" | "carol" | "recovery", subtype: item.subtype }));
-                if (toAdd.length === 0) { setActivitySavedMsg("✓ Already logged — great work today"); setSavingActivity(false); return; }
-                await fetch("/api/member/activity-log", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: [] }),
-                });
-                for (const item of cl) {
-                  if (!initState[item.id]) {
-                    setChecklistChecked((prev) => ({ ...prev, [item.id]: true }));
-                    setSelectedProtocol((prev) => ({ ...prev, [item.id]: true }));
-                    if (item.type === "arx") { c.arxWeekDates.push(c.todayDate); c.arxTodayLogged = true; }
-                    else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); c.carolTodayTypes.push(item.subtype); }
-                    else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); c.recoveryTodayModalities.push(item.subtype); }
-                  }
-                }
-                setActivitySavedMsg("✓ Logged — great work today");
-              } catch { setActivitySavedMsg("Something went wrong — please try again"); }
-              finally { setSavingActivity(false); }
-            }
-
             const RECOVERY_ACTS = [
               { n: "Infrared Sauna", m: 20 }, { n: "Cold Plunge", m: 3 }, { n: "Compression Boots", m: 20 },
             ];
@@ -1440,28 +1410,11 @@ export function DashboardReactClient({
                           </div>
                         )}
 
-                        {/* Log Complete button */}
-                        {activitySavedMsg ? (
-                          <div style={{ padding: "10px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.18)", borderRadius: "var(--r-sm)" }}>
-                            <div style={{ fontSize: 13, color: "#4A7C59", fontWeight: 600 }}>{activitySavedMsg}</div>
-                            <button type="button" style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                              onClick={() => setActivitySavedMsg("")}>dismiss</button>
-                          </div>
-                        ) : (
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            <button type="button" className="btn btn-lime"
-                              disabled={savingActivity}
-                              style={{ fontSize: 13, fontWeight: 700, opacity: savingActivity ? 0.7 : 1, padding: "11px 24px" }}
-                              onClick={() => { void handleLogComplete(); }}>
-                              {savingActivity ? "Logging…" : "Log Complete"}
-                            </button>
-                            {tp && todayActivities.length > 0 && (
-                              <button type="button" className="btn btn-sm" style={{ fontSize: 12 }}
-                                onClick={() => { setSessionStep(0); setSessionCompleted(new Set()); setSessionGuideOpen(true); }}>
-                                View guided plan →
-                              </button>
-                            )}
-                          </div>
+                        {tp && todayActivities.length > 0 && (
+                          <button type="button" className="btn btn-sm" style={{ fontSize: 12 }}
+                            onClick={() => { setSessionStep(0); setSessionCompleted(new Set()); setSessionGuideOpen(true); }}>
+                            View guided plan →
+                          </button>
                         )}
                       </div>
                     )}
