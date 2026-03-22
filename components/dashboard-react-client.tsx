@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useClerk, useUser } from "@clerk/nextjs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { recommendProtocol, tierLabel, type ProtocolTier } from "@/lib/recommendProtocol";
 
 type MemberSection =
   | "dashboard"
@@ -596,7 +597,7 @@ const OPTIONAL_ADDONS = [
 
 
 
-function recommendProtocol(activeGoals: string[]): string | null {
+function recommendProtocolByGoals(activeGoals: string[]): string | null {
   const g = new Set(activeGoals);
   if (g.size === 0) return null;
   if ((g.has("gain_muscle") && g.has("lose_fat") && g.has("improve_cardio")) || g.size >= 4) return "Longevity Protocol";
@@ -779,7 +780,58 @@ export function DashboardReactClient({
   const [activeScanDot, setActiveScanDot] = useState<number | null>(null);
   const [checklistChecked, setChecklistChecked] = useState<Record<string, boolean>>({});
   const [coachProtocols, setCoachProtocols] = useState<Array<{ id: string; name: string; target_system: string; description: string }>>([]);
-  const [allMembers, setAllMembers] = useState<Array<{ id: string; name: string; tier: string }>>([]);
+
+  type FullMember = {
+    id: string;
+    name: string;
+    tier: string;
+    status: string;
+    primaryGoal: string;
+    secondaryGoals: string[];
+    healthConditions: string[];
+    injuryNotes: string;
+    daysAvailable: number | null;
+    contrastTherapyPreference: string;
+    motivationStyle: string;
+    ageRange: string;
+  };
+  const [allMembers, setAllMembers] = useState<FullMember[]>([]);
+  const [membersLoaded, setMembersLoaded] = useState(false);
+
+  // Member profile / protocol recommendation state
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [editProtocolOpen, setEditProtocolOpen] = useState(false);
+
+  // Draft override state — persisted to localStorage keyed by member id
+  type ProtocolDraftState = {
+    overrideTier: string | null;
+    overrideFrequency: number | null;
+    selectedDays: string[];
+    coachNote: string;
+  };
+
+  function loadDraft(memberId: string): ProtocolDraftState {
+    if (typeof window === "undefined") return { overrideTier: null, overrideFrequency: null, selectedDays: [], coachNote: "" };
+    try {
+      const raw = localStorage.getItem(`protocol_draft_${memberId}`);
+      if (raw) return JSON.parse(raw) as ProtocolDraftState;
+    } catch { /* */ }
+    return { overrideTier: null, overrideFrequency: null, selectedDays: [], coachNote: "" };
+  }
+
+  function saveDraft(memberId: string, draft: ProtocolDraftState) {
+    if (typeof window === "undefined") return;
+    try { localStorage.setItem(`protocol_draft_${memberId}`, JSON.stringify(draft)); } catch { /* */ }
+  }
+
+  function clearDraft(memberId: string) {
+    if (typeof window === "undefined") return;
+    try { localStorage.removeItem(`protocol_draft_${memberId}`); } catch { /* */ }
+  }
+
+  const [protocolDraft, setProtocolDraft] = useState<ProtocolDraftState>({ overrideTier: null, overrideFrequency: null, selectedDays: [], coachNote: "" });
+  const [activatingProtocol, setActivatingProtocol] = useState(false);
+  const [activateError, setActivateError] = useState("");
   const [assignMemberId, setAssignMemberId] = useState("");
   const [assignProtocolId, setAssignProtocolId] = useState("");
   const [localGoals, setLocalGoals] = useState<Record<string, boolean>>(() => {
@@ -1058,13 +1110,24 @@ export function DashboardReactClient({
           const res = await getJson<{ protocols: typeof coachProtocols }>("/api/coach/protocols");
           if (Array.isArray(res.protocols)) setCoachProtocols(res.protocols);
         }
-        if (allMembers.length === 0) {
+        if (!membersLoaded) {
           const res = await getJson<{ members: typeof allMembers }>("/api/coach/members");
-          if (Array.isArray(res.members)) setAllMembers(res.members);
+          if (Array.isArray(res.members)) { setAllMembers(res.members); setMembersLoaded(true); }
         }
       } catch { /* tables may not exist yet */ }
     })();
-  }, [coachView, isCoachAccount, mode, coachProtocols.length, allMembers.length]);
+  }, [coachView, isCoachAccount, mode, coachProtocols.length, membersLoaded]);
+
+  useEffect(() => {
+    if (!isCoachAccount || mode !== "coach" || coachView !== "members") return;
+    if (membersLoaded) return;
+    void (async () => {
+      try {
+        const res = await getJson<{ members: typeof allMembers }>("/api/coach/members");
+        if (Array.isArray(res.members)) { setAllMembers(res.members); setMembersLoaded(true); }
+      } catch { /* table may not exist yet */ }
+    })();
+  }, [coachView, isCoachAccount, mode, membersLoaded]);
 
   const sendMessage = useCallback(async () => {
     if (sendingMessage) return;
@@ -1753,7 +1816,7 @@ export function DashboardReactClient({
           {/* Protocol recommendation */}
           {(() => {
             const active = Object.entries(localGoals).filter(([, v]) => v).map(([k]) => k);
-            const rec = recommendProtocol(active);
+            const rec = recommendProtocolByGoals(active);
             if (!rec || active.length === 0) return null;
             const reason = PROTOCOL_REASONS[rec] ?? "Matched to your current goal combination.";
             async function handleAskCoach() {
@@ -3057,22 +3120,644 @@ export function DashboardReactClient({
         </div>
 
         <div id="coach-members" className="content" style={{ display: mode === "coach" && coachView === "members" ? "block" : "none" }}>
-          <div className="sec-header"><div className="sec-title">All members</div></div>
-          <div className="card">
-            {payload.coach.members.length ? (
-              payload.coach.members.map((member) => (
-                <div className="metric-row" key={member.id}>
-                  <div className="metric-label">{member.name}</div>
-                  <div className="metric-label">{member.tier}</div>
-                  <div className="metric-label">Recovery {member.recovery}</div>
-                  <div className="metric-label">Muscle {member.muscle}</div>
-                  <div className="metric-label">{member.session}</div>
+          {(() => {
+            const selectedMember = selectedMemberId ? allMembers.find((m) => m.id === selectedMemberId) ?? null : null;
+
+            // ── PROTOCOL RECOMMENDATION SCREEN ────────────────────────────────
+            if (selectedMember && selectedMember.status === "awaiting_protocol") {
+              const profile = {
+                primaryGoal: (selectedMember.primaryGoal as ProtocolTier | null) || null,
+                healthConditions: selectedMember.healthConditions as import("@/lib/recommendProtocol").HealthCondition[],
+                injuryNotes: selectedMember.injuryNotes ?? "",
+                daysAvailable: selectedMember.daysAvailable ?? 3,
+              };
+              const sysRec = recommendProtocol(profile);
+              const effectiveTier = (protocolDraft.overrideTier ?? sysRec.tier) as ProtocolTier;
+              const effectiveFreq = protocolDraft.overrideFrequency ?? sysRec.frequency;
+              const isModified = protocolDraft.overrideTier !== null || protocolDraft.overrideFrequency !== null;
+
+              const allDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+              const selectedDays = protocolDraft.selectedDays.length > 0
+                ? protocolDraft.selectedDays
+                : (() => {
+                    const defaults: string[] = [];
+                    const picks = ["Mon", "Wed", "Fri", "Sat", "Tue", "Thu", "Sun"];
+                    for (let i = 0; i < effectiveFreq && i < picks.length; i++) defaults.push(picks[i]);
+                    return defaults;
+                  })();
+
+              const FLAGGED_CONDITIONS = ["osteoporosis", "menopause", "cardiovascular", "t2d"];
+              const TIER_DESCRIPTIONS: Record<string, string> = {
+                longevity: "A balanced program targeting long-term health, strength, and cardiovascular fitness.",
+                bone_density: "Focuses on resistance and impact training to support and build bone density.",
+                body_composition: "Prioritises lean mass gain alongside metabolic conditioning.",
+                athletic_performance: "Performance-oriented training with higher intensity intervals and strength work.",
+                healthspan_elite: "The full-spectrum Iso Club protocol — the most comprehensive option for members committed to peak longevity.",
+              };
+              const TIER_OPTIONS: ProtocolTier[] = ["longevity", "bone_density", "body_composition", "athletic_performance", "healthspan_elite"];
+
+              const matchingProtocol = coachProtocols.find(
+                (p) => p.name.toLowerCase().replace(/\s/g, "_").includes(effectiveTier) || p.target_system?.toLowerCase().includes(effectiveTier),
+              );
+
+              function updateDraft(patch: Partial<ProtocolDraftState>) {
+                const next = { ...protocolDraft, ...patch };
+                setProtocolDraft(next);
+                saveDraft(selectedMember!.id, next);
+              }
+
+              return (
+                <div>
+                  <button
+                    type="button"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", fontSize: 12, padding: "0 0 16px", display: "flex", alignItems: "center", gap: 6 }}
+                    onClick={() => { setSelectedMemberId(null); setProtocolDraft({ overrideTier: null, overrideFrequency: null, selectedDays: [], coachNote: "" }); setActivateError(""); }}
+                  >
+                    ← All members
+                  </button>
+                  <div style={{ display: "grid", gridTemplateColumns: "35fr 65fr", gap: 20, alignItems: "start" }}>
+                    {/* LEFT — member snapshot */}
+                    <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px" }}>
+                      <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>{selectedMember.name}</div>
+                      {selectedMember.ageRange && <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>{selectedMember.ageRange}</div>}
+
+                      {selectedMember.primaryGoal && (
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 5 }}>Primary goal</div>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)", background: "rgba(74,124,89,0.08)", border: "1px solid rgba(74,124,89,0.18)", borderRadius: 4, padding: "3px 8px" }}>
+                            {selectedMember.primaryGoal.replace(/_/g, " ")}
+                          </span>
+                        </div>
+                      )}
+
+                      {selectedMember.secondaryGoals.length > 0 && (
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 5 }}>Secondary goals</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                            {selectedMember.secondaryGoals.map((g) => (
+                              <span key={g} style={{ fontSize: 11, color: "var(--text2)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: 3, padding: "2px 7px" }}>
+                                {g.replace(/_/g, " ")}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedMember.healthConditions.length > 0 && (
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 5 }}>Health conditions</div>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                            {selectedMember.healthConditions.map((c) => {
+                              const flagged = FLAGGED_CONDITIONS.includes(c);
+                              return (
+                                <span key={c} style={{ fontSize: 11, fontWeight: flagged ? 600 : 400, color: flagged ? "#B84040" : "var(--text2)", background: flagged ? "rgba(184,64,64,0.08)" : "var(--bg3)", border: `1px solid ${flagged ? "rgba(184,64,64,0.25)" : "var(--border)"}`, borderRadius: 3, padding: "2px 7px" }}>
+                                  {c.replace(/_/g, " ")}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      {selectedMember.injuryNotes?.trim() && (
+                        <div style={{ background: "rgba(196,131,26,0.07)", border: "1px solid rgba(196,131,26,0.25)", borderRadius: "var(--r-sm)", padding: "10px 12px", marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(196,131,26,0.8)", marginBottom: 4, fontWeight: 600 }}>⚠ Injury / joint notes</div>
+                          <p style={{ fontSize: 12, color: "var(--text2)", margin: 0, lineHeight: 1.55 }}>{selectedMember.injuryNotes}</p>
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                        {selectedMember.daysAvailable !== null && (
+                          <div>
+                            <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)" }}>Days available / week</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginLeft: 8 }}>{selectedMember.daysAvailable}</span>
+                          </div>
+                        )}
+                        {selectedMember.contrastTherapyPreference && (
+                          <div>
+                            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 2 }}>Contrast therapy</div>
+                            <div style={{ fontSize: 12, color: "var(--text2)" }}>{selectedMember.contrastTherapyPreference}</div>
+                          </div>
+                        )}
+                        {selectedMember.motivationStyle && (
+                          <div>
+                            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 2 }}>Motivation style</div>
+                            <div style={{ fontSize: 12, color: "var(--text2)" }}>{selectedMember.motivationStyle}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* RIGHT — protocol recommendation */}
+                    <div>
+                      {/* Header */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>Recommended protocol</div>
+                        <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 9px", borderRadius: 4, background: isModified ? "rgba(196,131,26,0.12)" : "rgba(74,124,89,0.10)", color: isModified ? "rgba(196,131,26,0.9)" : "#4A7C59", border: `1px solid ${isModified ? "rgba(196,131,26,0.3)" : "rgba(74,124,89,0.25)"}` }}>
+                          {isModified ? "Modified" : "System recommendation"}
+                        </span>
+                      </div>
+
+                      {/* Tier card */}
+                      <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>{tierLabel(effectiveTier)}</div>
+                        <div style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.55 }}>{TIER_DESCRIPTIONS[effectiveTier] ?? ""}</div>
+                        <div style={{ marginTop: 10, fontSize: 12, color: "var(--text3)" }}>
+                          <strong style={{ color: "var(--text2)" }}>{effectiveFreq}</strong> days / week
+                        </div>
+                      </div>
+
+                      {/* Diff when modified */}
+                      {isModified && (
+                        <div style={{ fontSize: 11.5, color: "var(--text2)", background: "rgba(196,131,26,0.05)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "8px 12px", marginBottom: 14 }}>
+                          System suggested: <strong>{tierLabel(sysRec.tier)}</strong> · {sysRec.frequency} days
+                          {" → "}You selected: <strong>{tierLabel(effectiveTier)}</strong> · {effectiveFreq} days
+                          <div style={{ fontSize: 11, color: "rgba(196,131,26,0.8)", marginTop: 4 }}>You&apos;ve changed the system recommendation. Make sure to explain why in your note to member.</div>
+                        </div>
+                      )}
+
+                      {/* Day selector */}
+                      <div style={{ marginBottom: 14 }}>
+                        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>Training days</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {allDays.map((day) => {
+                            const on = selectedDays.includes(day);
+                            return (
+                              <button
+                                key={day}
+                                type="button"
+                                onClick={() => {
+                                  const next = on ? selectedDays.filter((d) => d !== day) : [...selectedDays, day];
+                                  updateDraft({ selectedDays: next });
+                                }}
+                                style={{ width: 40, height: 36, borderRadius: "var(--r-sm)", fontSize: 11, fontWeight: on ? 700 : 400, cursor: "pointer", background: on ? "#4A7C59" : "var(--bg2)", color: on ? "white" : "var(--text3)", border: `1px solid ${on ? "#4A7C59" : "var(--border)"}`, transition: "all 0.15s" }}
+                              >
+                                {day}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Override controls */}
+                      <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "12px 16px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>Override</div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                          <div>
+                            <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 4 }}>Tier</label>
+                            <select
+                              className="form-input"
+                              style={{ fontSize: 12 }}
+                              value={protocolDraft.overrideTier ?? ""}
+                              onChange={(e) => updateDraft({ overrideTier: e.target.value || null })}
+                            >
+                              <option value="">System recommendation</option>
+                              {TIER_OPTIONS.map((t) => (
+                                <option key={t} value={t}>{tierLabel(t)}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 4 }}>Frequency</label>
+                            <select
+                              className="form-input"
+                              style={{ fontSize: 12 }}
+                              value={protocolDraft.overrideFrequency ?? ""}
+                              onChange={(e) => updateDraft({ overrideFrequency: e.target.value ? Number(e.target.value) : null })}
+                            >
+                              <option value="">System recommendation</option>
+                              {(effectiveTier === "healthspan_elite" ? [3, 4, 5, 6] : [1, 2, 3, 4, 5, 6]).map((n) => (
+                                <option key={n} value={n}>{n} days</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Reasons */}
+                      {sysRec.reasons.length > 0 && (
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 7 }}>Why we recommended this</div>
+                          <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                            {sysRec.reasons.map((r, i) => (
+                              <li key={i} style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.5 }}>{r}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      {/* Protocol library match */}
+                      {coachProtocols.length > 0 && !matchingProtocol && (
+                        <div style={{ marginBottom: 14 }}>
+                          <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 4 }}>Select protocol from library</label>
+                          <select
+                            className="form-input"
+                            style={{ fontSize: 12 }}
+                            value={assignProtocolId}
+                            onChange={(e) => setAssignProtocolId(e.target.value)}
+                          >
+                            <option value="">Select protocol…</option>
+                            {coachProtocols.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Coach note */}
+                      <div style={{ marginBottom: 14 }}>
+                        <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 4 }}>
+                          Note to member <span style={{ color: "#B84040" }}>*</span>
+                        </label>
+                        <textarea
+                          className="form-input"
+                          style={{ width: "100%", minHeight: 90, resize: "vertical", fontSize: 13, boxSizing: "border-box" }}
+                          maxLength={300}
+                          placeholder="Write a personal note to your member about their protocol…"
+                          value={protocolDraft.coachNote}
+                          onChange={(e) => updateDraft({ coachNote: e.target.value })}
+                        />
+                        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+                          <div style={{ fontSize: 10.5, color: "var(--text3)", lineHeight: 1.4 }}>Appears at the top of their Protocol tab, signed with your name. Keep it personal and specific.</div>
+                          <div style={{ fontSize: 10, color: "var(--text3)", flexShrink: 0, marginLeft: 8 }}>{protocolDraft.coachNote.length}/300</div>
+                        </div>
+                      </div>
+
+                      {activateError && (
+                        <div style={{ fontSize: 12, color: "#B84040", marginBottom: 12, background: "rgba(184,64,64,0.06)", border: "1px solid rgba(184,64,64,0.2)", borderRadius: "var(--r-sm)", padding: "8px 12px" }}>{activateError}</div>
+                      )}
+
+                      <button
+                        type="button"
+                        className="btn btn-lime"
+                        disabled={activatingProtocol}
+                        onClick={async () => {
+                          if (!protocolDraft.coachNote.trim()) {
+                            setActivateError("Add a note to your member before confirming. It makes a big difference.");
+                            return;
+                          }
+                          const protocolId = matchingProtocol?.id ?? assignProtocolId;
+                          if (!protocolId) {
+                            setActivateError("Select a protocol from the library first.");
+                            return;
+                          }
+                          setActivatingProtocol(true);
+                          setActivateError("");
+                          try {
+                            await fetch("/api/coach/activate-protocol", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                member_id: selectedMember.id,
+                                protocol_id: protocolId,
+                                coach_note: protocolDraft.coachNote.trim(),
+                                frequency: effectiveFreq,
+                                selected_days: selectedDays,
+                              }),
+                            }).then(async (r) => {
+                              const json = (await r.json()) as { success: boolean; error?: string };
+                              if (!json.success) throw new Error(json.error ?? "Failed");
+                            });
+                            clearDraft(selectedMember.id);
+                            setAllMembers((prev) =>
+                              prev.map((m) => m.id === selectedMember.id ? { ...m, status: "active" } : m),
+                            );
+                            setSelectedMemberId(null);
+                            setProtocolDraft({ overrideTier: null, overrideFrequency: null, selectedDays: [], coachNote: "" });
+                          } catch (err) {
+                            setActivateError(err instanceof Error ? err.message : "Failed to activate protocol.");
+                          } finally {
+                            setActivatingProtocol(false);
+                          }
+                        }}
+                      >
+                        {activatingProtocol ? "Confirming…" : "Confirm and activate protocol"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              ))
-            ) : (
-              <div className="card-body"><p style={{ color: "var(--text3)" }}>No members available.</p></div>
-            )}
-          </div>
+              );
+            }
+
+            // ── ACTIVE MEMBER PROFILE (with Edit Protocol) ────────────────────
+            if (selectedMember && selectedMember.status !== "awaiting_protocol") {
+              const allDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+              const selectedDays = protocolDraft.selectedDays.length > 0
+                ? protocolDraft.selectedDays
+                : ["Mon", "Wed", "Fri"];
+
+              return (
+                <div>
+                  <button
+                    type="button"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text3)", fontSize: 12, padding: "0 0 16px", display: "flex", alignItems: "center", gap: 6 }}
+                    onClick={() => { setSelectedMemberId(null); setEditProtocolOpen(false); setProtocolDraft({ overrideTier: null, overrideFrequency: null, selectedDays: [], coachNote: "" }); setActivateError(""); }}
+                  >
+                    ← All members
+                  </button>
+
+                  {!editProtocolOpen ? (
+                    <div className="card">
+                      <div className="card-header">
+                        <div className="card-title">{selectedMember.name}</div>
+                        <button
+                          type="button"
+                          className="btn btn-sm"
+                          style={{ fontSize: 11 }}
+                          onClick={() => {
+                            const draft = loadDraft(selectedMember.id);
+                            setProtocolDraft(draft);
+                            setEditProtocolOpen(true);
+                          }}
+                        >
+                          Edit protocol
+                        </button>
+                      </div>
+                      <div style={{ padding: "12px 20px 20px" }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                          {selectedMember.tier && <div style={{ fontSize: 12, color: "var(--text3)" }}>Tier: <strong style={{ color: "var(--text2)" }}>{selectedMember.tier}</strong></div>}
+                          {selectedMember.primaryGoal && <div style={{ fontSize: 12, color: "var(--text3)" }}>Goal: <strong style={{ color: "var(--text2)" }}>{selectedMember.primaryGoal.replace(/_/g, " ")}</strong></div>}
+                          {selectedMember.daysAvailable !== null && <div style={{ fontSize: 12, color: "var(--text3)" }}>Days/week: <strong style={{ color: "var(--text2)" }}>{selectedMember.daysAvailable}</strong></div>}
+                        </div>
+                        {selectedMember.injuryNotes?.trim() && (
+                          <div style={{ background: "rgba(196,131,26,0.07)", border: "1px solid rgba(196,131,26,0.25)", borderRadius: "var(--r-sm)", padding: "10px 12px", marginTop: 14 }}>
+                            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(196,131,26,0.8)", marginBottom: 4, fontWeight: 600 }}>⚠ Injury / joint notes</div>
+                            <p style={{ fontSize: 12, color: "var(--text2)", margin: 0, lineHeight: 1.55 }}>{selectedMember.injuryNotes}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    /* Edit protocol two-column view */
+                    <div style={{ display: "grid", gridTemplateColumns: "35fr 65fr", gap: 20, alignItems: "start" }}>
+                      {/* LEFT — member snapshot (same as recommend screen) */}
+                      <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px" }}>
+                        <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>{selectedMember.name}</div>
+                        {selectedMember.ageRange && <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>{selectedMember.ageRange}</div>}
+                        {selectedMember.primaryGoal && (
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 5 }}>Primary goal</div>
+                            <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)", background: "rgba(74,124,89,0.08)", border: "1px solid rgba(74,124,89,0.18)", borderRadius: 4, padding: "3px 8px" }}>
+                              {selectedMember.primaryGoal.replace(/_/g, " ")}
+                            </span>
+                          </div>
+                        )}
+                        {selectedMember.healthConditions.length > 0 && (
+                          <div style={{ marginBottom: 14 }}>
+                            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 5 }}>Health conditions</div>
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                              {selectedMember.healthConditions.map((c) => {
+                                const flagged = ["osteoporosis", "menopause", "cardiovascular", "t2d"].includes(c);
+                                return (
+                                  <span key={c} style={{ fontSize: 11, fontWeight: flagged ? 600 : 400, color: flagged ? "#B84040" : "var(--text2)", background: flagged ? "rgba(184,64,64,0.08)" : "var(--bg3)", border: `1px solid ${flagged ? "rgba(184,64,64,0.25)" : "var(--border)"}`, borderRadius: 3, padding: "2px 7px" }}>
+                                    {c.replace(/_/g, " ")}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {selectedMember.injuryNotes?.trim() && (
+                          <div style={{ background: "rgba(196,131,26,0.07)", border: "1px solid rgba(196,131,26,0.25)", borderRadius: "var(--r-sm)", padding: "10px 12px", marginBottom: 14 }}>
+                            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(196,131,26,0.8)", marginBottom: 4, fontWeight: 600 }}>⚠ Injury / joint notes</div>
+                            <p style={{ fontSize: 12, color: "var(--text2)", margin: 0, lineHeight: 1.55 }}>{selectedMember.injuryNotes}</p>
+                          </div>
+                        )}
+                        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                          {selectedMember.daysAvailable !== null && (
+                            <div>
+                              <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)" }}>Days available / week</span>
+                              <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginLeft: 8 }}>{selectedMember.daysAvailable}</span>
+                            </div>
+                          )}
+                          {selectedMember.contrastTherapyPreference && (
+                            <div>
+                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 2 }}>Contrast therapy</div>
+                              <div style={{ fontSize: 12, color: "var(--text2)" }}>{selectedMember.contrastTherapyPreference}</div>
+                            </div>
+                          )}
+                          {selectedMember.motivationStyle && (
+                            <div>
+                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 2 }}>Motivation style</div>
+                              <div style={{ fontSize: 12, color: "var(--text2)" }}>{selectedMember.motivationStyle}</div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* RIGHT — edit controls (no recommendation logic) */}
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 16 }}>Edit protocol</div>
+
+                        {/* Protocol select */}
+                        <div style={{ marginBottom: 14 }}>
+                          <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 4 }}>Protocol</label>
+                          <select
+                            className="form-input"
+                            style={{ fontSize: 12 }}
+                            value={assignProtocolId}
+                            onChange={(e) => setAssignProtocolId(e.target.value)}
+                          >
+                            <option value="">Select protocol…</option>
+                            {coachProtocols.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Day selector */}
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>Training days</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {allDays.map((day) => {
+                              const on = selectedDays.includes(day);
+                              return (
+                                <button
+                                  key={day}
+                                  type="button"
+                                  onClick={() => {
+                                    const next = on ? selectedDays.filter((d) => d !== day) : [...selectedDays, day];
+                                    const next2 = { ...protocolDraft, selectedDays: next };
+                                    setProtocolDraft(next2);
+                                    saveDraft(selectedMember.id, next2);
+                                  }}
+                                  style={{ width: 40, height: 36, borderRadius: "var(--r-sm)", fontSize: 11, fontWeight: on ? 700 : 400, cursor: "pointer", background: on ? "#4A7C59" : "var(--bg2)", color: on ? "white" : "var(--text3)", border: `1px solid ${on ? "#4A7C59" : "var(--border)"}`, transition: "all 0.15s" }}
+                                >
+                                  {day}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Coach note */}
+                        <div style={{ marginBottom: 14 }}>
+                          <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 4 }}>Note to member</label>
+                          <textarea
+                            className="form-input"
+                            style={{ width: "100%", minHeight: 90, resize: "vertical", fontSize: 13, boxSizing: "border-box" }}
+                            maxLength={300}
+                            placeholder="Optional note about what changed and why…"
+                            value={protocolDraft.coachNote}
+                            onChange={(e) => {
+                              const next = { ...protocolDraft, coachNote: e.target.value };
+                              setProtocolDraft(next);
+                              saveDraft(selectedMember.id, next);
+                            }}
+                          />
+                          <div style={{ fontSize: 10, color: "var(--text3)", textAlign: "right", marginTop: 2 }}>{protocolDraft.coachNote.length}/300</div>
+                        </div>
+
+                        {activateError && (
+                          <div style={{ fontSize: 12, color: "#B84040", marginBottom: 12, background: "rgba(184,64,64,0.06)", border: "1px solid rgba(184,64,64,0.2)", borderRadius: "var(--r-sm)", padding: "8px 12px" }}>{activateError}</div>
+                        )}
+
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <button
+                            type="button"
+                            className="btn btn-lime"
+                            disabled={activatingProtocol}
+                            onClick={async () => {
+                              setActivatingProtocol(true);
+                              setActivateError("");
+                              try {
+                                await fetch("/api/coach/activate-protocol", {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({
+                                    member_id: selectedMember.id,
+                                    protocol_id: assignProtocolId || undefined,
+                                    coach_note: protocolDraft.coachNote.trim() || undefined,
+                                    selected_days: selectedDays,
+                                  }),
+                                }).then(async (r) => {
+                                  const json = (await r.json()) as { success: boolean; error?: string };
+                                  if (!json.success) throw new Error(json.error ?? "Failed");
+                                });
+                                clearDraft(selectedMember.id);
+                                setEditProtocolOpen(false);
+                                setProtocolDraft({ overrideTier: null, overrideFrequency: null, selectedDays: [], coachNote: "" });
+                                setAssignProtocolId("");
+                              } catch (err) {
+                                setActivateError(err instanceof Error ? err.message : "Failed to save protocol.");
+                              } finally {
+                                setActivatingProtocol(false);
+                              }
+                            }}
+                          >
+                            {activatingProtocol ? "Saving…" : "Save and notify member"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            style={{ fontSize: 12 }}
+                            onClick={() => { setEditProtocolOpen(false); setProtocolDraft({ overrideTier: null, overrideFrequency: null, selectedDays: [], coachNote: "" }); setActivateError(""); }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            // ── MEMBER LIST ────────────────────────────────────────────────────
+            const source = allMembers.length > 0 ? allMembers : payload.coach.members.map((m) => ({ ...m, status: "active", primaryGoal: "", secondaryGoals: [] as string[], healthConditions: [] as string[], injuryNotes: "", daysAvailable: null as number | null, contrastTherapyPreference: "", motivationStyle: "", ageRange: "" }));
+            const awaitingMembers = source.filter((m) => m.status === "awaiting_protocol");
+            const activeMembers = source.filter((m) => m.status !== "awaiting_protocol");
+
+            return (
+              <div>
+                <div className="sec-header"><div className="sec-title">All members</div></div>
+
+                {awaitingMembers.length > 0 && (
+                  <div style={{ marginBottom: 20 }}>
+                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "#20908C", fontWeight: 700, marginBottom: 8, paddingLeft: 2 }}>Needs protocol</div>
+                    <div className="card" style={{ padding: 0 }}>
+                      {awaitingMembers.map((member, idx) => (
+                        <div
+                          key={member.id}
+                          onClick={() => {
+                            const draft = loadDraft(member.id);
+                            setProtocolDraft(draft);
+                            setSelectedMemberId(member.id);
+                            setEditProtocolOpen(false);
+                            setActivateError("");
+                            if (coachProtocols.length === 0) {
+                              void getJson<{ protocols: typeof coachProtocols }>("/api/coach/protocols").then((res) => {
+                                if (Array.isArray(res.protocols)) setCoachProtocols(res.protocols);
+                              }).catch(() => { /* */ });
+                            }
+                          }}
+                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", cursor: "pointer", borderBottom: idx < awaitingMembers.length - 1 ? "1px solid var(--border)" : "none", transition: "background 0.1s" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg2)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                        >
+                          <div>
+                            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{member.name}</div>
+                            {member.primaryGoal && <div style={{ fontSize: 11, color: "var(--text3)" }}>{member.primaryGoal.replace(/_/g, " ")}</div>}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", padding: "3px 8px", borderRadius: 4, background: "rgba(32,144,140,0.10)", color: "#20908C", border: "1px solid rgba(32,144,140,0.25)" }}>
+                              Needs protocol
+                            </span>
+                            <span style={{ color: "var(--text3)", fontSize: 16 }}>›</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {activeMembers.length > 0 && (
+                  <div>
+                    {awaitingMembers.length > 0 && (
+                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", fontWeight: 700, marginBottom: 8, paddingLeft: 2 }}>Active members</div>
+                    )}
+                    <div className="card" style={{ padding: 0 }}>
+                      {activeMembers.map((member, idx) => (
+                        <div
+                          key={member.id}
+                          onClick={() => {
+                            const draft = loadDraft(member.id);
+                            setProtocolDraft(draft);
+                            setSelectedMemberId(member.id);
+                            setEditProtocolOpen(false);
+                            setActivateError("");
+                            if (coachProtocols.length === 0) {
+                              void getJson<{ protocols: typeof coachProtocols }>("/api/coach/protocols").then((res) => {
+                                if (Array.isArray(res.protocols)) setCoachProtocols(res.protocols);
+                              }).catch(() => { /* */ });
+                            }
+                          }}
+                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", cursor: "pointer", borderBottom: idx < activeMembers.length - 1 ? "1px solid var(--border)" : "none", transition: "background 0.1s" }}
+                          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg2)")}
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "")}
+                        >
+                          <div>
+                            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{member.name}</div>
+                            {member.primaryGoal && <div style={{ fontSize: 11, color: "var(--text3)" }}>{member.primaryGoal.replace(/_/g, " ")}</div>}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            {member.tier && <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "capitalize" }}>{member.tier}</span>}
+                            <span style={{ color: "var(--text3)", fontSize: 16 }}>›</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {source.length === 0 && (
+                  <div className="card">
+                    <div className="card-body"><p style={{ color: "var(--text3)" }}>No members found.</p></div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <div id="coach-log" className="content" style={{ display: mode === "coach" && coachView === "log" ? "block" : "none" }}>
@@ -3226,7 +3911,7 @@ export function DashboardReactClient({
                   {/* Protocol recommendation + quick-assign */}
                   {(() => {
                     const active = Object.entries(memberGoals).filter(([, v]) => v).map(([k]) => k);
-                    const rec = recommendProtocol(active);
+                    const rec = recommendProtocolByGoals(active);
                     if (!rec || active.length === 0) return null;
                     const recProtocol = coachProtocols.find((p) => p.name === rec);
                     return (
