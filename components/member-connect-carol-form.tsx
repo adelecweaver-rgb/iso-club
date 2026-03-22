@@ -153,7 +153,7 @@ export function MemberConnectCarolForm({
                 {isSyncing ? "Syncing…" : "Sync CAROL Data"}
               </button>
               <Link
-                href="/dashboard"
+                href="/dashboard/settings"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -165,7 +165,7 @@ export function MemberConnectCarolForm({
                   padding: "10px 14px",
                 }}
               >
-                Back to Dashboard
+                Back to Settings
               </Link>
             </div>
           </form>

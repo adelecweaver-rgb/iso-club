@@ -1203,31 +1203,28 @@ export function DashboardReactClient({
         <div className="sidebar-user">
           <div className="user-row">
             <div className="user-av">{userInitials}</div>
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div className="user-name">{displayName}</div>
               <div className="user-tier">{payload.tier}</div>
             </div>
           </div>
-          <div className="wearable-dots">
-            <div className="w-dot connected">
-              <div className="w-dot-circle" />
-              Whoop
-            </div>
-            <div className="w-dot connected">
-              <div className="w-dot-circle" />
-              Oura
-            </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+            <Link
+              href="/dashboard/settings"
+              className="btn btn-sm"
+              style={{ width: "100%", textAlign: "center", textDecoration: "none" }}
+            >
+              Settings &amp; Connections
+            </Link>
+            <button
+              className="btn btn-sm"
+              type="button"
+              style={{ width: "100%" }}
+              onClick={() => { void handleSignOut(); }}
+            >
+              Sign Out
+            </button>
           </div>
-          <button
-            className="btn btn-sm"
-            type="button"
-            style={{ width: "100%", marginTop: 10 }}
-            onClick={() => {
-              void handleSignOut();
-            }}
-          >
-            Sign Out
-          </button>
         </div>
       </nav>
 

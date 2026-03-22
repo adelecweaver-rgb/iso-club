@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { isClerkConfigured } from "@/lib/server/clerk";
+import { isClerkConfigured, safeCurrentUser } from "@/lib/server/clerk";
 import { getCurrentAuthState, routeForRole } from "@/lib/server/roles";
-import { MemberSettingsForm } from "@/components/member-settings-form";
+import { getActorContext } from "@/lib/server/actor";
+import { MemberSettingsClient } from "@/components/member-settings-client";
 
 export default async function DashboardSettingsPage() {
   if (!isClerkConfigured()) {
@@ -17,32 +18,28 @@ export default async function DashboardSettingsPage() {
   }
 
   const authState = await getCurrentAuthState();
-  if (!authState.isAuthenticated) {
-    redirect("/sign-in");
-  }
-  if (authState.role !== "member") {
-    redirect(routeForRole(authState.role));
-  }
-  if (!authState.onboardingComplete) {
-    redirect("/onboarding");
-  }
+  if (!authState.isAuthenticated) redirect("/sign-in");
+  if (authState.role !== "member") redirect(routeForRole(authState.role));
+  if (!authState.onboardingComplete) redirect("/onboarding");
+
+  const { context } = await getActorContext();
+  if (!context) redirect("/sign-in");
+
+  const clerkUser = await safeCurrentUser();
+  const displayName =
+    [clerkUser?.firstName, clerkUser?.lastName].filter(Boolean).join(" ").trim() ||
+    clerkUser?.username ||
+    "Member";
+
+  const arxUsername = typeof context.dbUser.arx_username === "string" ? context.dbUser.arx_username : "";
+  const carolUsername = typeof context.dbUser.carol_username === "string" ? context.dbUser.carol_username : "";
+  const carolConnected = typeof context.dbUser.carol_token === "string" && context.dbUser.carol_token.trim().length > 0;
 
   return (
-    <main className="shell">
-      <div className="card">
-        <div className="top-strip">
-          <h1 className="title" style={{ marginBottom: 0 }}>
-            Profile settings
-          </h1>
-          <Link className="btn secondary" href="/dashboard">
-            Back to dashboard
-          </Link>
-        </div>
-        <p className="muted" style={{ marginTop: 10 }}>
-          Keep your phone current so SMS alerts can reach you.
-        </p>
-        <MemberSettingsForm />
-      </div>
-    </main>
+    <MemberSettingsClient
+      displayName={displayName}
+      arxConnected={arxUsername.length > 0}
+      carolConnected={carolConnected}
+    />
   );
 }

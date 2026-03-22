@@ -120,7 +120,7 @@ export function MemberConnectArxForm({ memberName, savedArxUsername, hasStoredUs
                 {isSyncing ? "Syncing…" : "Sync ARX Data"}
               </button>
               <Link
-                href="/dashboard"
+                href="/dashboard/settings"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -133,7 +133,7 @@ export function MemberConnectArxForm({ memberName, savedArxUsername, hasStoredUs
                   fontSize: 13,
                 }}
               >
-                Back to Dashboard
+                Back to Settings
               </Link>
             </div>
           </form>
@@ -168,8 +168,8 @@ export function MemberConnectArxForm({ memberName, savedArxUsername, hasStoredUs
                 </div>
               </div>
             )}
-            <Link href="/dashboard" style={{ fontSize: 12, color: "#c9f055", textDecoration: "underline", display: "inline-block", marginTop: 4 }}>
-              View your ARX data →
+            <Link href="/dashboard/settings" style={{ fontSize: 12, color: "#c9f055", textDecoration: "underline", display: "inline-block", marginTop: 4 }}>
+              Back to Settings →
             </Link>
           </div>
         )}
