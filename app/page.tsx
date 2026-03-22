@@ -11,7 +11,7 @@ export default async function HomePage() {
     }
   }
 
-  const landing = await loadPrototypeFromFiles(["iso-club-landing.html"], "Iso Club");
+  const landing = await loadPrototypeFromFiles(["iso-club-platform.html"], "Iso Club");
 
   return (
     <>
