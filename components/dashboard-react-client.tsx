@@ -1511,18 +1511,20 @@ export function DashboardReactClient({
             const todayFocus: FocusCategory = hasProtocol ? computeTodaysFocus(focusInput) : "Strength";
             const focusMeta = FOCUS_META[todayFocus];
 
-            // Checklist tallies for progress section
-            const doneCount = cl.filter((item) => isChecklistItemDone(item, c, checklistChecked)).length;
-            const totalCount = cl.length;
-            const weekPct = totalCount > 0 ? Math.min(100, Math.round((doneCount / totalCount) * 100)) : 0;
-
-            // Per-category progress bars
+            // Weekly progress — sourced entirely from actual logged sessions in comp
+            // (arxWeekDates / carolWeekTypes / recoveryWeekModalities come from the DB
+            //  and are mutated in place when a session is saved, so they stay current)
             const arxTarget = proto.arxPerWeek;
-            const arxDone = new Set(comp.arxWeekDates).size;
+            const arxDone = new Set(comp.arxWeekDates).size;   // unique days with an ARX session
             const carolTarget = proto.carolPerWeek;
-            const carolDone = carolThisWeek;
+            const carolDone = carolThisWeek;                    // all carol rides logged this week
             const recovWeekTarget = proto.recoveryPerMonth > 0 ? Math.max(1, Math.ceil(proto.recoveryPerMonth / 4)) : 0;
             const recovWeekDone = comp.recoveryWeekModalities.length;
+
+            // Overall: sum of all actual logged sessions vs protocol targets this week
+            const totalDone = arxDone + carolDone + recovWeekDone;
+            const totalTarget = arxTarget + carolTarget + recovWeekTarget;
+            const weekPct = totalTarget > 0 ? Math.min(100, Math.round((totalDone / totalTarget) * 100)) : 0;
 
             // Save handler (same logic as before — log selected protocol + bonus items)
             async function handleSave() {
@@ -1965,7 +1967,7 @@ export function DashboardReactClient({
                       {/* Overall bar */}
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                          {doneCount} of {totalCount} sessions
+                          {totalDone} of {totalTarget} sessions
                         </span>
                         <span style={{ fontSize: 12, color: weekPct >= 100 ? "#9dcc3a" : "var(--text3)", fontWeight: weekPct >= 100 ? 700 : 400 }}>
                           {weekPct >= 100 ? "Complete ✓" : `${weekPct}%`}
