@@ -254,7 +254,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     <h1 class="screen-title">What matters<br>most to you?</h1>
     <p class="screen-sub">Select all that apply. Dustin will use these to build your protocol.</p>
 
-    <div class="option-grid cols-2" style="margin-bottom:28px">
+    <div class="option-grid cols-2" style="margin-bottom:16px">
       <div class="option-card" onclick="toggleGoal(this)">
         <span class="option-card-icon">💪</span>
         <div class="option-card-title">Build muscle</div>
@@ -287,6 +287,16 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
       </div>
     </div>
 
+    <!-- Healthspan Elite — full-width card, visually distinct -->
+    <div class="option-card option-card-elite" id="goal-elite" onclick="toggleGoal(this)" style="margin-bottom:28px;border-color:var(--amber);position:relative;padding:20px">
+      <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--amber);color:#fff;font-size:9px;padding:3px 10px;border-radius:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;white-space:nowrap">Maximum Protocol</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:24px">🏆</span>
+        <div class="option-card-title" style="font-size:15px">Healthspan Elite</div>
+      </div>
+      <div class="option-card-sub" style="font-size:13px;line-height:1.6">Maximum evidence-based protocol — I've made my health a top priority and want to use every tool available. Time is not a constraint.</div>
+    </div>
+
     <div class="btn-row">
       <button class="btn-secondary" onclick="prevScreen()">← Back</button>
       <button class="btn-primary" onclick="nextScreen()">Continue →</button>
@@ -310,6 +320,48 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         <option>Active — exercise 3–5x per week</option>
         <option>Very active — daily intense training</option>
       </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">How many days per week can you commit to training?</label>
+      <div class="option-grid" style="grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:0" id="days-grid">
+        <div class="option-card" onclick="selectDays(this,'1')" data-days="1" style="padding:14px 8px;text-align:center">
+          <div class="option-card-title" style="font-size:20px;margin-bottom:2px">1</div>
+          <div class="option-card-sub">day</div>
+        </div>
+        <div class="option-card" onclick="selectDays(this,'2')" data-days="2" style="padding:14px 8px;text-align:center">
+          <div class="option-card-title" style="font-size:20px;margin-bottom:2px">2</div>
+          <div class="option-card-sub">days</div>
+        </div>
+        <div class="option-card" onclick="selectDays(this,'3')" data-days="3" style="padding:14px 8px;text-align:center">
+          <div class="option-card-title" style="font-size:20px;margin-bottom:2px">3</div>
+          <div class="option-card-sub">days</div>
+        </div>
+        <div class="option-card" onclick="selectDays(this,'4')" data-days="4" style="padding:14px 8px;text-align:center">
+          <div class="option-card-title" style="font-size:20px;margin-bottom:2px">4</div>
+          <div class="option-card-sub">days</div>
+        </div>
+        <div class="option-card" onclick="selectDays(this,'5')" data-days="5" style="padding:14px 8px;text-align:center">
+          <div class="option-card-title" style="font-size:20px;margin-bottom:2px">5+</div>
+          <div class="option-card-sub">days</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contrast therapy — appears when 3+ days selected -->
+    <div class="form-group" id="contrast-therapy-wrap" style="display:none;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:16px 18px;margin-bottom:16px">
+      <label class="form-label" style="margin-bottom:12px">Are you interested in contrast therapy (alternating sauna and cold plunge) on recovery days?</label>
+      <div class="option-grid" style="grid-template-columns:1fr;gap:8px;margin-bottom:0">
+        <div class="option-card" onclick="selectContrast(this,'yes')" data-contrast="yes" style="padding:12px 16px">
+          <div class="option-card-title">Yes, I'd like to include it</div>
+        </div>
+        <div class="option-card" onclick="selectContrast(this,'cold_plunge_only')" data-contrast="cold_plunge_only" style="padding:12px 16px">
+          <div class="option-card-title">Cold plunge before workouts only</div>
+        </div>
+        <div class="option-card" onclick="selectContrast(this,'no_preference')" data-contrast="no_preference" style="padding:12px 16px">
+          <div class="option-card-title">No preference</div>
+        </div>
+      </div>
     </div>
 
     <div class="form-group">
@@ -422,6 +474,10 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
       </div>
       <div style="font-family:var(--serif);font-size:20px;color:var(--text);margin-bottom:6px">Setup complete</div>
       <div style="font-size:13px;color:var(--text3)">Your intake has been sent to Dustin</div>
+      <div id="elite-badge-wrap" style="display:none;margin-top:14px;padding:14px 16px;background:rgba(139,105,20,0.08);border:1px solid rgba(139,105,20,0.25);border-radius:var(--r-sm)">
+        <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--amber);margin-bottom:4px;font-weight:600">Healthspan Elite</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">Maximum evidence-based protocol. NXPro is a prescribed session, not an optional add-on. Dustin will confirm your frequency (3–6 days) based on your health history.</div>
+      </div>
 
       <div class="pending-steps">
         <div class="pending-step">
@@ -496,6 +552,18 @@ function prevScreen() {
 
 function toggleGoal(el) {
   el.classList.toggle('selected');
+}
+
+function selectDays(el, days) {
+  document.querySelectorAll('#days-grid .option-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const wrap = document.getElementById('contrast-therapy-wrap');
+  if (wrap) wrap.style.display = parseInt(days) >= 3 ? 'block' : 'none';
+}
+
+function selectContrast(el, value) {
+  document.querySelectorAll('#contrast-therapy-wrap .option-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
 }
 
 function selectDevice(el) {

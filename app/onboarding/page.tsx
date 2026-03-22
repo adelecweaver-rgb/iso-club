@@ -155,6 +155,8 @@ export default async function OnboardingPage() {
       window.nextScreen = nextScreen;
       window.prevScreen = prevScreen;
       window.toggleGoal = toggleGoal;
+      window.selectDays = selectDays;
+      window.selectContrast = selectContrast;
       window.selectDevice = selectDevice;
       window.toggleCheck = toggleCheck;
 
@@ -212,7 +214,7 @@ export default async function OnboardingPage() {
       statusEl.style.marginTop = "10px";
       statusEl.style.fontSize = "12px";
       statusEl.style.color = "var(--text3)";
-      const finalScreen = document.getElementById("screen-7");
+      const finalScreen = document.getElementById("screen-6");
       if (finalScreen) {
         finalScreen.appendChild(statusEl);
       }
@@ -242,6 +244,96 @@ export default async function OnboardingPage() {
           .map((label) => String(label.textContent || "").trim())
           .filter(Boolean);
 
+      const selectedGoals = () =>
+        Array.from(document.querySelectorAll("#screen-3 .option-card.selected .option-card-title"))
+          .map((el) => String(el.textContent || "").trim())
+          .filter(Boolean);
+
+      const selectedDays = () => {
+        const card = document.querySelector("#days-grid .option-card.selected");
+        return card ? parseInt(String(card.getAttribute("data-days") || "0"), 10) : 0;
+      };
+
+      const selectedContrastPref = () => {
+        const card = document.querySelector("#contrast-therapy-wrap .option-card.selected");
+        return card ? String(card.getAttribute("data-contrast") || "") : "";
+      };
+
+      const selectedMedicalConditions = () => {
+        const root = document.getElementById("screen-4");
+        if (!root) return "";
+        const inputs = Array.from(root.querySelectorAll('input[type="text"]'));
+        return inputs.map((i) => ("value" in i ? String(i.value || "").trim() : "")).filter(Boolean).join("; ");
+      };
+
+      // ── Protocol tier scoring logic ─────────────────────────────────────
+      const computeProtocolRouting = (goals, days, limitations, medConditions) => {
+        const SIGNIFICANT_INJURIES = ["lower back", "knees", "hips", "neck", "pelvic floor"];
+        const hasSignificantInjury = limitations.some((l) =>
+          SIGNIFICANT_INJURIES.some((s) => l.toLowerCase().includes(s))
+        );
+        const hasOsteoporosis = /osteopor/i.test(medConditions);
+        const effectiveDays = hasSignificantInjury ? Math.min(days || 3, 3) : (days || 3);
+
+        if (hasOsteoporosis) {
+          return {
+            tier: "bone_density",
+            effectiveDays,
+            note: [
+              "Osteoporosis flag: routed to Bone Density protocol regardless of stated goal.",
+              hasSignificantInjury ? "Significant injury also noted: capped at 3 days/week." : null,
+            ].filter(Boolean).join(" "),
+          };
+        }
+
+        if (goals.includes("Healthspan Elite")) {
+          return {
+            tier: "healthspan_elite",
+            effectiveDays: Math.max(Math.min(effectiveDays, 6), 3),
+            note: [
+              "Goal: Healthspan Elite — full protocol suite. NXPro prescribed.",
+              hasSignificantInjury ? "Significant injury noted: coach review recommended before session 1. Capped at 3 days/week." : null,
+            ].filter(Boolean).join(" "),
+          };
+        }
+
+        if (goals.includes("Longevity")) {
+          return {
+            tier: "longevity",
+            effectiveDays,
+            note: hasSignificantInjury ? "Significant injury: capped at 3 days/week. Review limitations before session 1." : null,
+          };
+        }
+
+        if (goals.includes("Bone density")) {
+          return {
+            tier: "bone_density",
+            effectiveDays,
+            note: hasSignificantInjury ? "Significant injury: capped at 3 days/week." : null,
+          };
+        }
+
+        return {
+          tier: "standard",
+          effectiveDays,
+          note: hasSignificantInjury ? "Significant injury: capped at 3 days/week. Review limitations before session 1." : null,
+        };
+      };
+
+      // Show Elite badge on final screen when Elite tier is selected
+      const updateEliteBadge = () => {
+        const badge = document.getElementById("elite-badge-wrap");
+        if (!badge) return;
+        const goals = selectedGoals();
+        badge.style.display = goals.includes("Healthspan Elite") ? "block" : "none";
+      };
+      // Re-evaluate badge when final screen becomes active
+      const origShowScreen = window.showScreen;
+      window.showScreen = (n) => {
+        origShowScreen(n);
+        if (Number(n) === 6) updateEliteBadge();
+      };
+
       window.goToDashboard = async () => {
         try {
           const firstName =
@@ -266,13 +358,20 @@ export default async function OnboardingPage() {
             heightInput && "value" in heightInput ? String(heightInput.value || "").trim() : "";
           const heightInches = parseHeightInches(heightRaw);
           const devices = selectedDeviceNames();
+          const goals = selectedGoals();
+          const days = selectedDays();
+          const contrastPref = selectedContrastPref();
+          const medConditions = selectedMedicalConditions();
+          const routing = computeProtocolRouting(goals, days, selectedLimitationItems, medConditions);
+
           const limitationsSummary = selectedLimitationItems.length
             ? "Physical limitations: " + selectedLimitationItems.join(", ")
             : "";
           const limitationsOtherSummary = limitationsOther
             ? "Other limitation detail: " + limitationsOther
             : "";
-          const combinedNotes = [notes, limitationsSummary, limitationsOtherSummary]
+          const goalsSummary = goals.length ? "Goals: " + goals.join(", ") : "";
+          const combinedNotes = [goalsSummary, notes, limitationsSummary, limitationsOtherSummary]
             .filter(Boolean)
             .join("\\n");
 
@@ -293,6 +392,10 @@ export default async function OnboardingPage() {
               height_inches: heightInches,
               membership_tier: "essential",
               notes: combinedNotes || null,
+              days_available_per_week: days || null,
+              contrast_therapy_pref: contrastPref || null,
+              protocol_tier_suggestion: routing.tier,
+              coach_routing_note: routing.note || null,
               whoop_connected: devices.some((name) => name.includes("whoop")),
               oura_connected: devices.some((name) => name.includes("oura")),
               notification_preferences: {

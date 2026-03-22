@@ -16,6 +16,11 @@ type Body = {
   oura_connected?: boolean;
   whoop_user_id?: string;
   oura_user_id?: string;
+  // onboarding routing fields
+  days_available_per_week?: number;
+  contrast_therapy_pref?: string;
+  protocol_tier_suggestion?: string;
+  coach_routing_note?: string;
   notification_preferences?: {
     welcome_sms?: boolean;
     protocol_ready_sms?: boolean;
@@ -114,6 +119,14 @@ export async function POST(request: Request) {
         typeof body.oura_user_id === "string" ? body.oura_user_id.trim() || null : null,
       is_active: true,
       avatar_url: String(context.dbUser.avatar_url ?? "") || null,
+      days_available_per_week:
+        typeof body.days_available_per_week === "number" ? body.days_available_per_week : null,
+      contrast_therapy_pref:
+        typeof body.contrast_therapy_pref === "string" ? body.contrast_therapy_pref.trim() || null : null,
+      protocol_tier_suggestion:
+        typeof body.protocol_tier_suggestion === "string" ? body.protocol_tier_suggestion.trim() || null : null,
+      coach_routing_note:
+        typeof body.coach_routing_note === "string" ? body.coach_routing_note.trim() || null : null,
     };
 
     const upserted = await supabaseAdmin
