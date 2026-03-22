@@ -48,15 +48,14 @@ export default async function OnboardingPage() {
   const onboardingBootstrapScript = `
     (() => {
       let currentScreen = 1;
-      const totalScreens = 7;
+      const totalScreens = 6;
       const progressMap = {
-        1: 14,
-        2: 28,
-        3: 42,
-        4: 56,
-        5: 70,
-        6: 85,
-        7: 100,
+        1: 17,
+        2: 33,
+        3: 50,
+        4: 67,
+        5: 83,
+        6: 100,
       };
 
       const showScreen = (screenNumber) => {
@@ -74,7 +73,7 @@ export default async function OnboardingPage() {
         }
         const stepEl = document.getElementById("step-indicator");
         if (stepEl) {
-          stepEl.textContent = target < totalScreens ? "Step " + target + " of 7" : "Complete";
+          stepEl.textContent = target < totalScreens ? "Step " + target + " of " + (totalScreens - 1) : "Complete";
         }
         currentScreen = target;
       };
@@ -87,14 +86,8 @@ export default async function OnboardingPage() {
         if (currentScreen > 1) showScreen(currentScreen - 1);
       };
 
-      const selectOption = (element) => {
-        const root = element?.closest?.(".option-grid");
-        if (root) {
-          root.querySelectorAll(".option-card").forEach((card) => card.classList.remove("selected"));
-        }
-        if (element?.classList) {
-          element.classList.add("selected");
-        }
+      const toggleGoal = (element) => {
+        if (element?.classList) element.classList.toggle("selected");
       };
 
       const selectDevice = (element) => {
@@ -109,13 +102,6 @@ export default async function OnboardingPage() {
           return;
         }
         prompt.style.display = "block";
-      };
-
-      const selectTier = (element) => {
-        document.querySelectorAll(".tier-card").forEach((card) => card.classList.remove("selected"));
-        if (element?.classList) {
-          element.classList.add("selected");
-        }
       };
 
       const setOtherLimitationsVisibility = (isVisible) => {
@@ -168,17 +154,9 @@ export default async function OnboardingPage() {
       window.showScreen = showScreen;
       window.nextScreen = nextScreen;
       window.prevScreen = prevScreen;
-      window.selectOption = selectOption;
+      window.toggleGoal = toggleGoal;
       window.selectDevice = selectDevice;
-      window.selectTier = selectTier;
       window.toggleCheck = toggleCheck;
-
-      const normalizeTier = (input) => {
-        const value = String(input || "").trim().toLowerCase();
-        if (value.includes("concierge")) return "concierge";
-        if (value.includes("premier")) return "premier";
-        return "essential";
-      };
 
       const parseHeightInches = (raw) => {
         const value = String(raw || "").trim();
@@ -251,11 +229,6 @@ export default async function OnboardingPage() {
         }
       };
 
-      const selectedTierName = () => {
-        const selectedTier = document.querySelector("#screen-6 .tier-card.selected .tier-name");
-        return selectedTier && selectedTier.textContent ? selectedTier.textContent : "";
-      };
-
       const selectedDeviceNames = () =>
         deviceCards()
           .map((card) => {
@@ -318,7 +291,7 @@ export default async function OnboardingPage() {
               date_of_birth: dateOfBirth || null,
               gender: gender || null,
               height_inches: heightInches,
-              membership_tier: normalizeTier(selectedTierName()),
+              membership_tier: "essential",
               notes: combinedNotes || null,
               whoop_connected: devices.some((name) => name.includes("whoop")),
               oura_connected: devices.some((name) => name.includes("oura")),

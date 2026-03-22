@@ -252,35 +252,35 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   <div class="screen" id="screen-3">
     <div class="screen-eyebrow">Your goals</div>
     <h1 class="screen-title">What matters<br>most to you?</h1>
-    <p class="screen-sub">Pick the one that resonates most. Dustin uses this to choose your track — you can refine it later.</p>
+    <p class="screen-sub">Select all that apply. Dustin will use these to build your protocol.</p>
 
     <div class="option-grid cols-2" style="margin-bottom:28px">
-      <div class="option-card" onclick="selectOption(this, 'goal')">
+      <div class="option-card" onclick="toggleGoal(this)">
         <span class="option-card-icon">💪</span>
         <div class="option-card-title">Build muscle</div>
         <div class="option-card-sub">Increase lean mass and strength through ARX adaptive resistance</div>
       </div>
-      <div class="option-card" onclick="selectOption(this, 'goal')">
+      <div class="option-card" onclick="toggleGoal(this)">
         <span class="option-card-icon">🫀</span>
         <div class="option-card-title">Cardio fitness</div>
         <div class="option-card-sub">Improve VO₂ max and cardiovascular health via CAROL REHIT</div>
       </div>
-      <div class="option-card" onclick="selectOption(this, 'goal')">
+      <div class="option-card" onclick="toggleGoal(this)">
         <span class="option-card-icon">⚖️</span>
         <div class="option-card-title">Lose body fat</div>
         <div class="option-card-sub">Reduce fat mass while preserving lean tissue and metabolic rate</div>
       </div>
-      <div class="option-card" onclick="selectOption(this, 'goal')">
+      <div class="option-card" onclick="toggleGoal(this)">
         <span class="option-card-icon">🦴</span>
         <div class="option-card-title">Bone density</div>
         <div class="option-card-sub">Strengthen skeletal structure — critical for longevity after 40</div>
       </div>
-      <div class="option-card" onclick="selectOption(this, 'goal')">
+      <div class="option-card" onclick="toggleGoal(this)">
         <span class="option-card-icon">🧠</span>
         <div class="option-card-title">Longevity</div>
         <div class="option-card-sub">Optimize all 5 Healthspan systems for a longer, healthier life</div>
       </div>
-      <div class="option-card" onclick="selectOption(this, 'goal')">
+      <div class="option-card" onclick="toggleGoal(this)">
         <span class="option-card-icon">⚡</span>
         <div class="option-card-title">Energy & recovery</div>
         <div class="option-card-sub">Improve sleep quality, HRV, and daily energy levels</div>
@@ -409,72 +409,9 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
   </div>
 
   <!-- ======================== -->
-  <!-- SCREEN 6: MEMBERSHIP     -->
+  <!-- SCREEN 6: PROTOCOL PENDING -->
   <!-- ======================== -->
   <div class="screen" id="screen-6">
-    <div class="screen-eyebrow">Your membership</div>
-    <h1 class="screen-title">Choose your<br>level of access</h1>
-    <p class="screen-sub">Every tier includes the full Healthspan OS dashboard. Higher tiers add direct access to Dustin.</p>
-
-    <div class="tier-grid" style="margin-bottom:24px">
-      <div class="tier-card" onclick="selectTier(this)">
-        <div class="tier-name">Essential</div>
-        <div class="tier-price">$249</div>
-        <div class="tier-price-sub">per month</div>
-        <div class="tier-features">
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Full dashboard access</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Your protocol visible</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Session history</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Healthspan OS scores</div>
-          <div class="tier-feature"><div class="tier-feature-dot muted"></div><span style="color:var(--text3)">Direct messaging</span></div>
-          <div class="tier-feature"><div class="tier-feature-dot muted"></div><span style="color:var(--text3)">1:1 reviews</span></div>
-        </div>
-      </div>
-
-      <div class="tier-card featured" onclick="selectTier(this)">
-        <div class="tier-badge">Most popular</div>
-        <div class="tier-name">Premier</div>
-        <div class="tier-price">$449</div>
-        <div class="tier-price-sub">per month</div>
-        <div class="tier-features">
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Everything in Essential</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Direct messaging Dustin</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Scan analysis reports</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Monthly progress report</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Priority scheduling</div>
-          <div class="tier-feature"><div class="tier-feature-dot muted"></div><span style="color:var(--text3)">Quarterly 1:1 review</span></div>
-        </div>
-      </div>
-
-      <div class="tier-card" onclick="selectTier(this)">
-        <div class="tier-name">Concierge</div>
-        <div class="tier-price">$699</div>
-        <div class="tier-price-sub">per month</div>
-        <div class="tier-features">
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Everything in Premier</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Monthly 1:1 with Dustin</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Monthly scan analysis</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Nutrition protocol</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>Direct Dustin access</div>
-          <div class="tier-feature"><div class="tier-feature-dot"></div>First available booking</div>
-        </div>
-      </div>
-    </div>
-
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:24px;font-size:12.5px;color:var(--text3);text-align:center">
-      Not sure? Start with Essential — you can upgrade anytime from your dashboard.
-    </div>
-
-    <div class="btn-row">
-      <button class="btn-secondary" onclick="prevScreen()">← Back</button>
-      <button class="btn-primary" onclick="nextScreen()">Continue →</button>
-    </div>
-  </div>
-
-  <!-- ======================== -->
-  <!-- SCREEN 7: PROTOCOL PENDING -->
-  <!-- ======================== -->
-  <div class="screen" id="screen-7">
     <div class="screen-eyebrow">You're in</div>
     <h1 class="screen-title">Welcome to<br><em>Iso Club.</em></h1>
     <p class="screen-sub">Dustin has been notified. He'll review your intake and build your protocol. Here's what to expect.</p>
@@ -526,10 +463,10 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
 <script>
 let currentScreen = 1;
-const totalScreens = 7;
+const totalScreens = 6;
 
 const progressMap = {
-  1: 14, 2: 28, 3: 42, 4: 56, 5: 70, 6: 85, 7: 100
+  1: 17, 2: 33, 3: 50, 4: 67, 5: 83, 6: 100
 };
 
 function showScreen(n) {
@@ -540,7 +477,7 @@ function showScreen(n) {
     window.scrollTo(0, 0);
   }
   document.getElementById('progress-fill').style.width = progressMap[n] + '%';
-  document.getElementById('step-indicator').textContent = n < 7 ? `Step ${n} of 7` : 'Complete';
+  document.getElementById('step-indicator').textContent = n < totalScreens ? `Step ${n} of ${totalScreens - 1}` : 'Complete';
   currentScreen = n;
 }
 
@@ -552,9 +489,8 @@ function prevScreen() {
   if (currentScreen > 1) showScreen(currentScreen - 1);
 }
 
-function selectOption(el, group) {
-  el.closest('.option-grid').querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
-  el.classList.add('selected');
+function toggleGoal(el) {
+  el.classList.toggle('selected');
 }
 
 function selectDevice(el) {
@@ -568,11 +504,6 @@ function selectDevice(el) {
     prompt.querySelector('.device-name, div').textContent = el.querySelector('.device-name').textContent + ' selected';
     prompt.querySelector('button').textContent = 'Connect ' + el.querySelector('.device-name').textContent + ' now →';
   }
-}
-
-function selectTier(el) {
-  document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
-  el.classList.add('selected');
 }
 
 function toggleCheck(el) {
