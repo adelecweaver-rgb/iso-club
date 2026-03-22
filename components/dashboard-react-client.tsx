@@ -6,17 +6,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type MemberSection =
   | "dashboard"
+  | "progress"
+  | "history"
   | "protocol"
-  | "carol"
-  | "arx"
-  | "scans"
   | "recovery"
   | "wearables"
   | "messages"
   | "reports"
   | "schedule"
-  | "goals"
-  | "history";
+  | "goals";
 
 type CoachSection = "morning" | "members" | "messages" | "log" | "protocols";
 type ActorRole = "member" | "coach" | "admin" | "staff" | "unknown";
@@ -808,6 +806,9 @@ export function DashboardReactClient({
   const [movingDay, setMovingDay] = useState(false);
   const [bonusCelebration, setBonusCelebration] = useState("");
   const [selectedArxExercise, setSelectedArxExercise] = useState<string | null>(null);
+  const [progressExpandBody, setProgressExpandBody] = useState(false);
+  const [progressExpandStrength, setProgressExpandStrength] = useState(false);
+  const [progressExpandCardio, setProgressExpandCardio] = useState(false);
   type DayActivity = { date: string; arx: Array<{ exercise: string; concentricMax: number | null; eccentricMax: number | null }>; carol: Array<{ rideType: string; manp: number | null; peakPower: number | null }>; recovery: Array<{ modality: string }>; manual: Array<{ equipment: string }> };
   const [historyDays, setHistoryDays] = useState<DayActivity[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
@@ -1157,52 +1158,17 @@ export function DashboardReactClient({
 
         <div className="nav" id="member-nav" style={{ display: mode === "member" ? "block" : "none" }}>
           <div className="nav-group">
-            <div className="nav-group-label">Overview</div>
             <button className={activeMemberView("dashboard")} onClick={() => setMemberSection("dashboard")} type="button">
               Dashboard
             </button>
-            <button className={activeMemberView("protocol")} onClick={() => setMemberSection("protocol")} type="button">
-              My Protocol
+            <button className={activeMemberView("progress")} onClick={() => setMemberSection("progress")} type="button">
+              Progress
             </button>
-            <Link className="nav-item" href="/member/progress">
-              Healthspan Progress
-            </Link>
-          </div>
-          <div className="nav-group">
-            <div className="nav-group-label">Machine Data</div>
             <button className={activeMemberView("history")} onClick={() => setMemberSection("history")} type="button">
-              Workout History
+              History
             </button>
-            <button className={activeMemberView("carol")} onClick={() => setMemberSection("carol")} type="button">
-              CAROL
-            </button>
-            <button className={activeMemberView("arx")} onClick={() => setMemberSection("arx")} type="button">
-              ARX Strength
-            </button>
-            <button className={activeMemberView("scans")} onClick={() => setMemberSection("scans")} type="button">
-              Body Scans
-            </button>
-          </div>
-          <div className="nav-group">
-            <div className="nav-group-label">Recovery</div>
-            <button className={activeMemberView("recovery")} onClick={() => setMemberSection("recovery")} type="button">
-              Recovery
-            </button>
-            <button className={activeMemberView("wearables")} onClick={() => setMemberSection("wearables")} type="button">
-              Wearables
-            </button>
-          </div>
-          <div className="nav-group">
-            <div className="nav-group-label">Connect</div>
-            <button className={activeMemberView("messages")} onClick={() => setMemberSection("messages")} type="button">
-              Messages
-              {messageBadge ? <span className="nav-badge">{messageBadge}</span> : null}
-            </button>
-            <button className={activeMemberView("reports")} onClick={() => setMemberSection("reports")} type="button">
-              Reports
-            </button>
-            <button className={activeMemberView("schedule")} onClick={() => setMemberSection("schedule")} type="button">
-              Schedule
+            <button className={activeMemberView("protocol")} onClick={() => setMemberSection("protocol")} type="button">
+              Protocol
             </button>
           </div>
         </div>
@@ -1712,9 +1678,9 @@ export function DashboardReactClient({
             type SI = { label: string; value: string; sub: string | null; subLabel: string; subColor: string; href: string | null; tab: string | null };
             const strip: SI[] = [
               { label: "Vitality Age", value: payload.vitalityAge.estimated !== null ? String(payload.vitalityAge.estimated) : "—", sub: payload.vitalityAge.difference !== null ? (payload.vitalityAge.difference > 0 ? `-${payload.vitalityAge.difference} yrs` : `+${Math.abs(payload.vitalityAge.difference)} yrs`) : null, subLabel: "vs real age", subColor: (payload.vitalityAge.difference ?? 0) > 0 ? "#9dcc3a" : "#e05252", href: "/member/progress", tab: null },
-              { label: "Lean Mass", value: payload.scan.leanMassLbs !== "--" ? `${payload.scan.leanMassLbs} lbs` : "—", sub: payload.goalDetails.gain_muscle.sinceJoining !== "--" ? payload.goalDetails.gain_muscle.sinceJoining.replace(" lean mass", "").replace(" lbs lean mass", "") : null, subLabel: "since joining", subColor: payload.goalDetails.gain_muscle.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "scans" },
-              { label: "Body Fat", value: payload.scan.bodyFatPct !== "--" ? `${payload.scan.bodyFatPct}%` : "—", sub: payload.goalDetails.lose_fat.sinceJoining !== "--" ? payload.goalDetails.lose_fat.sinceJoining.replace(" body fat", "") : null, subLabel: "since joining", subColor: payload.goalDetails.lose_fat.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "scans" },
-              { label: "Peak Power", value: peakPow > 0 ? `${Math.round(peakPow)}W` : "—", sub: payload.goalDetails.improve_cardio.sinceJoining !== "--" ? payload.goalDetails.improve_cardio.sinceJoining.replace(" cardio power", "") : null, subLabel: "since joining", subColor: payload.goalDetails.improve_cardio.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "carol" },
+              { label: "Lean Mass", value: payload.scan.leanMassLbs !== "--" ? `${payload.scan.leanMassLbs} lbs` : "—", sub: payload.goalDetails.gain_muscle.sinceJoining !== "--" ? payload.goalDetails.gain_muscle.sinceJoining.replace(" lean mass", "").replace(" lbs lean mass", "") : null, subLabel: "since joining", subColor: payload.goalDetails.gain_muscle.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "progress" },
+              { label: "Body Fat", value: payload.scan.bodyFatPct !== "--" ? `${payload.scan.bodyFatPct}%` : "—", sub: payload.goalDetails.lose_fat.sinceJoining !== "--" ? payload.goalDetails.lose_fat.sinceJoining.replace(" body fat", "") : null, subLabel: "since joining", subColor: payload.goalDetails.lose_fat.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "progress" },
+              { label: "Peak Power", value: peakPow > 0 ? `${Math.round(peakPow)}W` : "—", sub: payload.goalDetails.improve_cardio.sinceJoining !== "--" ? payload.goalDetails.improve_cardio.sinceJoining.replace(" cardio power", "") : null, subLabel: "since joining", subColor: payload.goalDetails.improve_cardio.sinceJoiningDir === "up" ? "#9dcc3a" : "#e05252", href: null, tab: "progress" },
             ];
             return (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
@@ -2137,7 +2103,7 @@ export function DashboardReactClient({
             return (
               <>
                 <div className="sec-header">
-                  <div className="sec-title">Workout History</div>
+                  <div className="sec-title">History</div>
                   {totalDaysWithActivity > 0 && (
                     <div style={{ fontSize: 11, color: "var(--text3)" }}>{totalDaysWithActivity} active days</div>
                   )}
@@ -2288,22 +2254,69 @@ export function DashboardReactClient({
           })()}
         </div>
 
-        <div id="view-carol" className="content" style={{ display: mode === "member" && memberView === "carol" ? "block" : "none" }}>
+        {/* ── Progress Tab ─────────────────────────────────────────────────── */}
+        <div id="view-progress" className="content" style={{ display: mode === "member" && memberView === "progress" ? "block" : "none" }}>
           {(() => {
+            // ── Shared data ───────────────────────────────────────────────────────
             const allCarol = Array.isArray(payload.carolSessions) ? payload.carolSessions : [];
+
+            // ── 1. Healthspan ─────────────────────────────────────────────────────
+            const va = payload.vitalityAge;
+
+            // ── 2. Body Composition ───────────────────────────────────────────────
+            const currentScan = payload.scanHistory[0];
+            const prevScan = payload.scanHistory[1];
+            const scansAsc = [...payload.scanHistory].reverse();
+            const leanSparkVals = scansAsc.map((s) => s.leanMassLbsRaw);
+            const fatSparkVals = scansAsc.map((s) => s.bodyFatPctRaw);
+            const wtSparkVals = scansAsc.map((s) => s.weightLbsRaw);
+            const leanFirst = leanSparkVals.find((v) => v !== null) ?? null;
+            const leanLast = [...leanSparkVals].reverse().find((v) => v !== null) ?? null;
+            const fatFirst = fatSparkVals.find((v) => v !== null) ?? null;
+            const fatLast = [...fatSparkVals].reverse().find((v) => v !== null) ?? null;
+            const leanTrendGood = leanFirst !== null && leanLast !== null ? leanLast >= leanFirst : true;
+            const fatTrendGood = fatFirst !== null && fatLast !== null ? fatLast <= fatFirst : true;
+            const scanMetrics: Array<{ label: string; value: string; raw: number | null; prevRaw: number | null; good: "up" | "down" | "neutral"; unit?: string }> = [
+              { label: "Lean mass", value: payload.scan.leanMassLbs, raw: currentScan?.leanMassLbsRaw ?? null, prevRaw: prevScan?.leanMassLbsRaw ?? null, good: "up", unit: "lbs" },
+              { label: "Body fat %", value: payload.scan.bodyFatPct, raw: currentScan?.bodyFatPctRaw ?? null, prevRaw: prevScan?.bodyFatPctRaw ?? null, good: "down", unit: "%" },
+              { label: "Weight", value: payload.scan.weightLbs, raw: currentScan?.weightLbsRaw ?? null, prevRaw: prevScan?.weightLbsRaw ?? null, good: "neutral", unit: "lbs" },
+              { label: "Fat mass", value: payload.scan.fatMassLbs, raw: currentScan?.fatMassLbsRaw ?? null, prevRaw: prevScan?.fatMassLbsRaw ?? null, good: "down", unit: "lbs" },
+              { label: "Body shape", value: payload.scan.bodyShapeRating, raw: currentScan?.bodyShapeRatingRaw ?? null, prevRaw: prevScan?.bodyShapeRatingRaw ?? null, good: "up" },
+              { label: "Waist", value: payload.scan.waistIn, raw: currentScan?.waistInRaw ?? null, prevRaw: prevScan?.waistInRaw ?? null, good: "down", unit: "\"" },
+              { label: "Hips", value: payload.scan.hipsIn, raw: currentScan?.hipsInRaw ?? null, prevRaw: prevScan?.hipsInRaw ?? null, good: "down", unit: "\"" },
+            ];
+
+            // ── 3. Strength ───────────────────────────────────────────────────────
+            const arxGroups = buildArxByExercise(payload.arxSessions);
+            const arxNow = new Date();
+            const arxMonthStart = new Date(arxNow.getFullYear(), arxNow.getMonth(), 1).toISOString().slice(0, 10);
+            const arxSessionsThisMonth = payload.arxSessions.filter((s) => s.sessionDate >= arxMonthStart).length;
+            const topExercise = arxGroups[0];
+            const topConc = topExercise?.sessions[0]?.concentricMax ?? null;
+            const topConcHistory = topExercise?.sessions.slice(0, 12).reverse().map((s) => s.concentricMax) ?? [];
+            const topConcPrev = topExercise?.sessions.slice(1, 4).reduce((mx, s) => Math.max(mx, s.concentricMax ?? 0), 0) ?? 0;
+            const strengthTrend = topConc !== null && topConcPrev > 0
+              ? topConc > topConcPrev ? "improving" : topConc < topConcPrev ? "declining" : "stable"
+              : null;
+            const latestArxDate = payload.arxSessions[0]?.sessionDate?.slice(0, 10);
+            const latestArxSessions = latestArxDate
+              ? payload.arxSessions.filter((s) => s.sessionDate.slice(0, 10) === latestArxDate)
+              : [];
+            const latestArxByEx = new Map<string, { conc: number | null; ecc: number | null }>();
+            for (const s of latestArxSessions) {
+              const cur = latestArxByEx.get(s.exercise);
+              if (!cur || (s.concentricMax ?? 0) > (cur.conc ?? 0)) latestArxByEx.set(s.exercise, { conc: s.concentricMax, ecc: s.eccentricMax });
+            }
+            const latestConcByEx = arxGroups.map(({ exercise, sessions }) => ({ exercise, value: sessions[0]?.concentricMax ?? 0 }));
+            const maxConcAll = latestConcByEx.reduce((m, e) => Math.max(m, e.value), 0);
+
+            // ── 4. Cardio ─────────────────────────────────────────────────────────
             const rehitSessions = allCarol.filter((s) => normalizeCarolTabKey(s.rideType) === "rehit");
             const rehitWithManp = rehitSessions.filter((s) => (carolNum(s.manp) ?? 0) > 0);
             const latestManp = carolNum(rehitWithManp[0]?.manp ?? "");
-            const weightLbs = carolNum(payload.scan.weightLbs);
-            const vo2 = latestManp && weightLbs ? estimateVo2Max(latestManp, weightLbs) : null;
+            const weightLbsNum = carolNum(payload.scan.weightLbs);
+            const vo2 = latestManp && weightLbsNum ? estimateVo2Max(latestManp, weightLbsNum) : null;
             const vo2Cat = vo2 ? vo2Category(vo2) : null;
-            const now = new Date();
-            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-            const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().slice(0, 10);
-            const sessionsThisMonth = allCarol.filter((s) => s.sessionDate >= monthStart).length;
-            const sessionsPrevMonth = allCarol.filter((s) => s.sessionDate >= prevMonthStart && s.sessionDate < monthStart).length;
-
-            // MANP trend
             let manpTrendLabel = "";
             let manpTrendColor = "var(--text3)";
             if (rehitWithManp.length >= 6) {
@@ -2311,498 +2324,503 @@ export function DashboardReactClient({
               const olderAvg = rehitWithManp.slice(3, 6).reduce((s, r) => s + (carolNum(r.manp) ?? 0), 0) / 3;
               if (olderAvg > 0) {
                 const pct = ((recentAvg - olderAvg) / olderAvg) * 100;
-                if (pct > 3) { manpTrendLabel = `↑ ${pct.toFixed(0)}%`; manpTrendColor = "#9dcc3a"; }
-                else if (pct < -3) { manpTrendLabel = `↓ ${Math.abs(pct).toFixed(0)}%`; manpTrendColor = "#e05252"; }
+                if (pct > 3) { manpTrendLabel = `\u2191 ${pct.toFixed(0)}% vs prior`; manpTrendColor = "#9dcc3a"; }
+                else if (pct < -3) { manpTrendLabel = `\u2193 ${Math.abs(pct).toFixed(0)}% vs prior`; manpTrendColor = "#e05252"; }
                 else { manpTrendLabel = "Stable"; manpTrendColor = "var(--text3)"; }
               }
             } else if (rehitWithManp.length >= 2) {
-              manpTrendLabel = "Building history…";
+              manpTrendLabel = "Building\u2026";
+              manpTrendColor = "var(--text3)";
             }
+            const carolNow = new Date();
+            const carolMonthStart = new Date(carolNow.getFullYear(), carolNow.getMonth(), 1).toISOString().slice(0, 10);
+            const carolPrevMonthStart = new Date(carolNow.getFullYear(), carolNow.getMonth() - 1, 1).toISOString().slice(0, 10);
+            const carolThisMonth = allCarol.filter((s) => s.sessionDate >= carolMonthStart).length;
+            const carolPrevMonth = allCarol.filter((s) => s.sessionDate >= carolPrevMonthStart && s.sessionDate < carolMonthStart).length;
+            const RIDE_TYPE_LABELS: Record<string, string> = { REHIT: "REHIT", FAT_BURN_30: "Fat Burn 30", FAT_BURN_45: "Fat Burn 45", FAT_BURN_60: "Fat Burn 60", ENERGISER: "Energiser" };
+
+            const sectionLabelStyle: React.CSSProperties = { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 12, fontWeight: 600 };
+            const detailBtnStyle: React.CSSProperties = { background: "none", border: "none", padding: "8px 0 0", fontSize: 11, color: "#9dcc3a", cursor: "pointer", fontWeight: 500, textAlign: "left" };
 
             return (
               <>
                 <div className="sec-header">
-                  <div className="sec-title">CAROL Rides</div>
-                  <Link className="btn btn-sm" href="/member/connect/carol">
-                    ↩ Load CAROL data
-                  </Link>
+                  <div className="sec-title">Progress</div>
                 </div>
 
-                {/* Empty state */}
-                {allCarol.length === 0 && (
-                  <div className="card" style={{ marginBottom: 16, textAlign: "center", padding: "32px 24px" }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>No CAROL data yet</div>
-                    <p style={{ fontSize: 13, color: "var(--text3)", marginBottom: 20, lineHeight: 1.6 }}>
-                      Connect your CAROL account to see your ride history, MANP fitness score, and estimated VO2 max.
-                    </p>
-                    <Link className="btn btn-lime btn-sm" href="/member/connect/carol">
-                      Connect CAROL account →
-                    </Link>
+                {/* ── 1. Healthspan ──────────────────────────────────────────────── */}
+                <div style={{ marginBottom: 28 }}>
+                  <div style={sectionLabelStyle}>Healthspan</div>
+                  <div className="card" style={{ padding: "20px 22px" }}>
+                    {va.hasEnoughData && va.estimated !== null ? (
+                      <>
+                        <div style={{ display: "flex", alignItems: "flex-end", gap: 12, marginBottom: 8 }}>
+                          <div style={{ fontSize: 52, fontWeight: 800, color: "var(--text)", lineHeight: 1 }}>{va.estimated}</div>
+                          <div style={{ paddingBottom: 6 }}>
+                            <div style={{ fontSize: 11, color: "var(--text3)" }}>vitality age</div>
+                            {va.chronological !== null && (
+                              <div style={{ fontSize: 12, color: "var(--text2)" }}>vs {va.chronological} chronological</div>
+                            )}
+                          </div>
+                        </div>
+                        {va.difference !== null && va.difference !== 0 && (
+                          <div style={{ fontSize: 13, color: va.difference > 0 ? "#9dcc3a" : "#e05252", fontWeight: 500, marginBottom: 4 }}>
+                            {va.difference > 0
+                              ? `Functioning ${va.difference} year${va.difference !== 1 ? "s" : ""} younger than your age`
+                              : `Vitality age is ${Math.abs(va.difference)} year${Math.abs(va.difference) !== 1 ? "s" : ""} above chronological`}
+                          </div>
+                        )}
+                        {va.trend !== null && va.trend !== 0 && (
+                          <div style={{ fontSize: 12, color: va.trend > 0 ? "#9dcc3a" : "#e05252" }}>
+                            {va.trend > 0
+                              ? `\u2191 Improved ${va.trend} year${va.trend !== 1 ? "s" : ""} since joining`
+                              : `\u2193 Up ${Math.abs(va.trend)} year${Math.abs(va.trend) !== 1 ? "s" : ""} since last calculation`}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Vitality Age</div>
+                        <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
+                          Complete your first body scan and a CAROL session to calculate your Vitality Age.
+                        </p>
+                      </>
+                    )}
                   </div>
-                )}
+                </div>
 
-                {/* Health snapshot */}
-                {allCarol.length > 0 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14, marginBottom: 16 }}>
-                    {/* VO2 Max */}
-                    <div className="card" style={{ padding: "14px 16px" }}>
-                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Est. VO2 Max</div>
-                      {vo2 && vo2Cat ? (
-                        <>
-                          <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
-                            <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{vo2.toFixed(0)}</span>
-                            <span style={{ fontSize: 10, color: "var(--text3)" }}>ml/kg/min</span>
-                          </div>
-                          <div style={{ height: 4, background: "var(--bg3)", borderRadius: 2, marginBottom: 6, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${vo2Cat.barPct}%`, background: vo2Cat.color, borderRadius: 2 }} />
-                          </div>
-                          <span style={{ fontSize: 10, color: vo2Cat.color, fontWeight: 600 }}>{vo2Cat.label}</span>
-                        </>
-                      ) : (
+                {/* ── 2. Body Composition ────────────────────────────────────────── */}
+                <div style={{ marginBottom: 28 }}>
+                  <div style={sectionLabelStyle}>
+                    Body Composition{currentScan?.scanDate ? ` \u00b7 Last scan ${currentScan.scanDate}` : ""}
+                  </div>
+
+                  {!currentScan ? (
+                    <div className="card" style={{ padding: "20px 22px" }}>
+                      <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
+                        No body scan data yet. Complete a Fit3D scan to track muscle mass and body fat over time.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="card" style={{ padding: "16px 18px" }}>
+                      {/* Summary row */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                         <div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>--</div>
-                          <div style={{ fontSize: 10, color: "var(--text3)", lineHeight: 1.5 }}>
-                            {latestManp ? "Complete a body scan to estimate" : "Needs REHIT data"}
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text3)", marginBottom: 6 }}>Muscle Mass</div>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: 6 }}>
+                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{payload.scan.leanMassLbs !== "--" ? payload.scan.leanMassLbs : "\u2014"}</span>
+                            {payload.scan.leanMassLbs !== "--" && <span style={{ fontSize: 10, color: "var(--text3)" }}>lbs</span>}
                           </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* MANP / Aerobic power */}
-                    <div className="card" style={{ padding: "14px 16px" }}>
-                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Aerobic Power (MANP)</div>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
-                        <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "--"}</span>
-                        {latestManp ? <span style={{ fontSize: 10, color: "var(--text3)" }}>W</span> : null}
-                      </div>
-                      {manpTrendLabel ? (
-                        <span style={{ fontSize: 11, color: manpTrendColor, fontWeight: 500 }}>{manpTrendLabel} vs prior sessions</span>
-                      ) : (
-                        <span style={{ fontSize: 10, color: "var(--text3)" }}>{rehitSessions.length < 2 ? "More REHIT sessions needed" : "Trend building…"}</span>
-                      )}
-                    </div>
-
-                    {/* Training consistency */}
-                    <div className="card" style={{ padding: "14px 16px" }}>
-                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>This Month</div>
-                      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
-                        <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{sessionsThisMonth}</span>
-                        <span style={{ fontSize: 10, color: "var(--text3)" }}>sessions</span>
-                      </div>
-                      {sessionsPrevMonth > 0 ? (
-                        <span style={{ fontSize: 11, color: sessionsThisMonth >= sessionsPrevMonth ? "#9dcc3a" : "var(--text3)" }}>
-                          {sessionsThisMonth >= sessionsPrevMonth ? "↑" : "↓"} vs {sessionsPrevMonth} last month
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 10, color: "var(--text3)" }}>{allCarol.length} rides total</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Dustin's Analysis */}
-                {allCarol.length > 0 && (
-                  <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Dustin&apos;s Analysis</div>
-                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>
-                      {buildCarolInsight(allCarol, payload.scan.weightLbs)}
-                    </p>
-                  </div>
-                )}
-
-                {/* Tab filter + stat cards + ride history */}
-                {allCarol.length > 0 && (
-                  <>
-                    <div className="tabs">
-                      <button className={`tab ${carolTab === "rehit" ? "active" : ""}`} onClick={() => setCarolTab("rehit")} type="button">REHIT</button>
-                      <button className={`tab ${carolTab === "fat_burn" ? "active" : ""}`} onClick={() => setCarolTab("fat_burn")} type="button">Fat Burn</button>
-                      <button className={`tab ${carolTab === "free_custom" ? "active" : ""}`} onClick={() => setCarolTab("free_custom")} type="button">Free &amp; Custom</button>
-                      <button className={`tab ${carolTab === "fitness_tests" ? "active" : ""}`} onClick={() => setCarolTab("fitness_tests")} type="button">Fitness Tests</button>
-                    </div>
-                    <div className="grid-4" style={{ marginBottom: 16 }}>
-                      <div className="stat-card"><div className="stat-label">MANP</div><div className="stat-val">{latestCarol?.manp || "--"}</div></div>
-                      <div className="stat-card amber"><div className="stat-label">Avg sprint power</div><div className="stat-val">{peakAvgSprintPower > 0 ? Math.round(peakAvgSprintPower) : "--"}</div></div>
-                      <div className="stat-card blue"><div className="stat-label">Total rides</div><div className="stat-val">{memberCarolRows.length}</div></div>
-                      <div className="stat-card"><div className="stat-label">Last max HR</div><div className="stat-val">{latestCarol?.heartRateMax || "--"}</div></div>
-                    </div>
-                    <div className="card">
-                      <div className="card-header"><div className="card-title">Ride history</div></div>
-                      {memberCarolRows.length ? (
-                        memberCarolRows.slice(0, 25).map((row) => (
-                          <div className="metric-row" key={`${row.sessionDate}-${row.sequentialNumber}`}>
-                            <div className="metric-label">
-                              {row.sessionDate || "Recent"} · Ride #{row.sequentialNumber}
-                            </div>
-                            <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>MANP <b style={{ color: "var(--text)" }}>{row.manp}</b></span>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Avg Sprint <b style={{ color: "var(--text)" }}>{row.avgSprintPower}W</b></span>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Cal+EPOC <b style={{ color: "var(--text)" }}>{row.caloriesInclEpoc}</b></span>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Max HR <b style={{ color: "var(--text)" }}>{row.heartRateMax}</b></span>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="card-body"><p style={{ color: "var(--text3)" }}>No rides logged for this tab yet.</p></div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </>
-            );
-          })()}
-        </div>
-
-        <div id="view-arx" className="content" style={{ display: mode === "member" && memberView === "arx" ? "block" : "none" }}>
-          {(() => {
-            const arxGroups = buildArxByExercise(payload.arxSessions);
-            const totalSessions = payload.arxSessions.length;
-            const allConc = payload.arxSessions.map((s) => s.concentricMax ?? 0);
-            const peakOutput = allConc.length ? Math.max(...allConc) : 0;
-            const now = new Date();
-            const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
-            const sessionsThisMonth = payload.arxSessions.filter((s) => s.sessionDate >= monthStart).length;
-            const peakExercise = arxGroups[0]?.exercise ?? "--";
-
-            // Latest concentric per exercise for comparison bars
-            const latestConc = arxGroups.map(({ exercise, sessions }) => ({
-              exercise,
-              value: sessions[0]?.concentricMax ?? 0,
-            }));
-            const maxConc = latestConc.reduce((m, e) => Math.max(m, e.value), 0);
-
-            return (
-              <>
-                <div className="sec-header">
-                  <div className="sec-title">ARX Strength</div>
-                  <Link className="btn btn-sm" href="/member/connect/arx">
-                    ↩ Load ARX data
-                  </Link>
-                </div>
-
-                {/* Summary cards */}
-                <div className="grid-4" style={{ marginBottom: 16 }}>
-                  <div className="stat-card"><div className="stat-label">Total sessions</div><div className="stat-val">{totalSessions || "--"}</div></div>
-                  <div className="stat-card amber"><div className="stat-label">Peak concentric</div><div className="stat-val">{peakOutput > 0 ? Math.round(peakOutput) : "--"}</div></div>
-                  <div className="stat-card blue"><div className="stat-label">This month</div><div className="stat-val">{sessionsThisMonth}</div></div>
-                  <div className="stat-card"><div className="stat-label">Top exercise</div><div className="stat-val" style={{ fontSize: 13 }}>{peakExercise}</div></div>
-                </div>
-
-                {/* Last workout summary */}
-                {(() => {
-                  const latestDate = payload.arxSessions[0]?.sessionDate?.slice(0, 10);
-                  if (!latestDate) return null;
-                  const lastSessions = payload.arxSessions.filter((s) => s.sessionDate.slice(0, 10) === latestDate);
-                  // Best set per exercise that day
-                  const byEx = new Map<string, { conc: number | null; ecc: number | null }>();
-                  for (const s of lastSessions) {
-                    const cur = byEx.get(s.exercise);
-                    if (!cur || (s.concentricMax ?? 0) > (cur.conc ?? 0)) {
-                      byEx.set(s.exercise, { conc: s.concentricMax, ecc: s.eccentricMax });
-                    }
-                  }
-                  const dateLabel = new Date(latestDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-                  return (
-                    <div className="card" style={{ marginBottom: 16 }}>
-                      <div style={{ padding: "12px 18px 4px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>Last workout</div>
-                        <div style={{ fontSize: 11, color: "var(--text3)" }}>{dateLabel}</div>
-                      </div>
-                      {Array.from(byEx.entries()).map(([ex, vals]) => {
-                        const ratio = vals.conc && vals.ecc ? vals.ecc / vals.conc : null;
-                        return (
-                          <div key={ex} style={{ display: "flex", alignItems: "center", padding: "8px 18px", borderTop: "1px solid var(--border)" }}>
-                            <div style={{ flex: 1, fontSize: 13, color: "var(--text2)", fontWeight: 500 }}>{ex}</div>
-                            <div style={{ display: "flex", gap: 16, fontSize: 11, color: "var(--text3)" }}>
-                              {vals.conc != null && <span>Conc <b style={{ color: "var(--text)" }}>{Math.round(vals.conc)} lbs</b></span>}
-                              {vals.ecc != null && <span>Ecc <b style={{ color: "var(--text)" }}>{Math.round(vals.ecc)} lbs</b></span>}
-                              {ratio != null && <span style={{ color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}×</span>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <div style={{ padding: "8px 18px 12px", fontSize: 10, color: "var(--text3)" }}>
-                        {byEx.size} exercise{byEx.size !== 1 ? "s" : ""} · tap an exercise card below for full history
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Coaching insight */}
-                {totalSessions > 0 && (
-                  <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Dustin&apos;s Analysis</div>
-                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{buildArxInsight(arxGroups)}</p>
-                  </div>
-                )}
-
-                {/* Per-exercise cards — click to view history */}
-                {arxGroups.length > 0 ? (
-                  <>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginBottom: 16 }}>
-                    {arxGroups.map(({ exercise, sessions }) => {
-                      const latest = sessions[0];
-                      const conc = latest?.concentricMax ?? null;
-                      const ecc = latest?.eccentricMax ?? null;
-                      const ratio = conc && ecc ? ecc / conc : null;
-                      const ratioInfo = ratio !== null ? eccRatioLabel(ratio) : null;
-                      const pr = conc !== null ? Math.max(...sessions.map((s) => s.concentricMax ?? 0)) : 0;
-                      const isPR = conc !== null && conc >= pr && sessions.length > 1;
-                      const sparkVals = sessions.slice(0, 12).reverse().map((s) => s.concentricMax);
-                      const sparkFirst = sparkVals.find((v) => v !== null) ?? null;
-                      const sparkLast = [...sparkVals].reverse().find((v) => v !== null) ?? null;
-                      const trending = sparkFirst !== null && sparkLast !== null && sparkLast > sparkFirst;
-                      const path = sparklinePath(sparkVals, 100, 32);
-                      const isSelected = selectedArxExercise === exercise;
-
-                      return (
-                        <div key={exercise} className="card"
-                          style={{ padding: "16px 18px", cursor: "pointer", border: isSelected ? "1px solid rgba(157,204,58,0.4)" : undefined, background: isSelected ? "rgba(157,204,58,0.04)" : undefined }}
-                          onClick={() => setSelectedArxExercise(isSelected ? null : exercise)}>
-                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
-                            <div>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", letterSpacing: "0.04em", textTransform: "uppercase" }}>{exercise}</div>
-                              <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 2 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""} · {isSelected ? "tap to close" : "tap for history"}</div>
-                            </div>
-                            {isPR && <span style={{ fontSize: 9, background: "rgba(157,204,58,0.15)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.3)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
-                          </div>
-
-                          {/* Conc / Ecc row */}
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-                            <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "8px 10px" }}>
-                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.1em" }}>Concentric</div>
-                              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{conc !== null ? Math.round(conc) : "--"}</div>
-                              <div style={{ fontSize: 9, color: "var(--text3)" }}>lbs</div>
-                            </div>
-                            <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "8px 10px" }}>
-                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.1em" }}>Eccentric</div>
-                              <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{ecc !== null ? Math.round(ecc) : "--"}</div>
-                              <div style={{ fontSize: 9, color: "var(--text3)" }}>lbs</div>
-                            </div>
-                          </div>
-
-                          {/* Ecc:Conc ratio */}
-                          {ratioInfo && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                              <div style={{ fontSize: 11, color: "var(--text3)" }}>Ecc:Conc</div>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: ratioInfo.color }}>{ratio!.toFixed(2)}×</div>
-                              <span style={{ fontSize: 10, color: ratioInfo.color, background: `${ratioInfo.color}18`, border: `1px solid ${ratioInfo.color}40`, borderRadius: 4, padding: "1px 6px" }}>{ratioInfo.label}</span>
-                            </div>
-                          )}
-
-                          {/* Sparkline */}
-                          {path ? (
-                            <div>
-                              <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Concentric trend</div>
-                              <svg viewBox="0 0 100 32" style={{ width: "100%", height: 32, display: "block" }}>
-                                <path d={path} fill="none" stroke={trending ? "#9dcc3a" : "#e05252"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                              </svg>
-                            </div>
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  </>
-                ) : (
-                  <div className="card" style={{ textAlign: "center", padding: "32px 24px" }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>No ARX data yet</div>
-                    <p style={{ fontSize: 13, color: "var(--text3)", marginBottom: 20, lineHeight: 1.6 }}>
-                      Export your workout history from the ARX member portal and upload it here to see your strength analytics.
-                    </p>
-                    <Link className="btn btn-lime btn-sm" href="/member/connect/arx">
-                      Import ARX data →
-                    </Link>
-                  </div>
-                )}
-
-                {/* Exercise comparison */}
-                {latestConc.length > 1 && maxConc > 0 && (
-                  <div className="card">
-                    <div className="card-header"><div className="card-title">Latest output by exercise</div></div>
-                    <div style={{ padding: "8px 0" }}>
-                      {latestConc.sort((a, b) => b.value - a.value).map(({ exercise, value }) => (
-                        <div key={exercise} style={{ padding: "6px 20px 6px 20px" }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                            <span style={{ fontSize: 11.5, color: "var(--text2)" }}>{exercise}</span>
-                            <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--text)" }}>{value > 0 ? `${Math.round(value)} lbs` : "--"}</span>
-                          </div>
-                          <div style={{ height: 6, background: "var(--bg3)", borderRadius: 3, overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${(value / maxConc) * 100}%`, background: "#9dcc3a", borderRadius: 3, transition: "width 0.4s ease" }} />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })()}
-        </div>
-
-        <div id="view-scans" className="content" style={{ display: mode === "member" && memberView === "scans" ? "block" : "none" }}>
-          {(() => {
-            const current = payload.scanHistory[0];
-            const previous = payload.scanHistory[1];
-            const scansAsc = [...payload.scanHistory].reverse();
-
-            const metrics: Array<{
-              label: string;
-              value: string;
-              raw: number | null;
-              prevRaw: number | null;
-              good: "up" | "down" | "neutral";
-              unit?: string;
-            }> = [
-              { label: "Weight", value: payload.scan.weightLbs, raw: current?.weightLbsRaw ?? null, prevRaw: previous?.weightLbsRaw ?? null, good: "neutral", unit: "lbs" },
-              { label: "Body fat %", value: payload.scan.bodyFatPct, raw: current?.bodyFatPctRaw ?? null, prevRaw: previous?.bodyFatPctRaw ?? null, good: "down", unit: "%" },
-              { label: "Lean mass", value: payload.scan.leanMassLbs, raw: current?.leanMassLbsRaw ?? null, prevRaw: previous?.leanMassLbsRaw ?? null, good: "up", unit: "lbs" },
-              { label: "Fat mass", value: payload.scan.fatMassLbs, raw: current?.fatMassLbsRaw ?? null, prevRaw: previous?.fatMassLbsRaw ?? null, good: "down", unit: "lbs" },
-              { label: "Body shape", value: payload.scan.bodyShapeRating, raw: current?.bodyShapeRatingRaw ?? null, prevRaw: previous?.bodyShapeRatingRaw ?? null, good: "up" },
-              { label: "Waist", value: payload.scan.waistIn, raw: current?.waistInRaw ?? null, prevRaw: previous?.waistInRaw ?? null, good: "down", unit: "\"" },
-              { label: "Hips", value: payload.scan.hipsIn, raw: current?.hipsInRaw ?? null, prevRaw: previous?.hipsInRaw ?? null, good: "down", unit: "\"" },
-            ];
-
-            const bfSparkVals = scansAsc.map((s) => s.bodyFatPctRaw);
-            const leanSparkVals = scansAsc.map((s) => s.leanMassLbsRaw);
-            const wtSparkVals = scansAsc.map((s) => s.weightLbsRaw);
-            const bfFirst = bfSparkVals.find((v) => v !== null) ?? null;
-            const bfLast = [...bfSparkVals].reverse().find((v) => v !== null) ?? null;
-            const leanFirst = leanSparkVals.find((v) => v !== null) ?? null;
-            const leanLast = [...leanSparkVals].reverse().find((v) => v !== null) ?? null;
-
-            return (
-              <>
-                <div className="sec-header">
-                  <div className="sec-title">
-                    Body Composition{payload.scan.scanDate ? ` — Last scan: ${payload.scan.scanDate}` : ""}
-                  </div>
-                </div>
-
-                {/* AI insight */}
-                <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Dustin&apos;s Analysis</div>
-                  <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>
-                    {scanInsight(current, previous)}
-                  </p>
-                </div>
-
-                {/* Metrics grid */}
-                <div className="card" style={{ marginBottom: 14 }}>
-                  <div className="card-header"><div className="card-title">Metrics</div></div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0 }}>
-                    {metrics.map((m) => {
-                      const change = scanPctChange(m.raw, m.prevRaw);
-                      const color = scanChangeColor(change, m.good);
-                      const arrow = change ? (change.direction === "up" ? "↑" : "↓") : null;
-                      return (
-                        <div key={m.label} className="metric-row" style={{ borderRight: "none" }}>
-                          <div className="metric-label">{m.label}</div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>
-                              {m.value}{m.value !== "--" && m.unit ? m.unit : ""}
-                            </span>
-                            {change && (
-                              <span style={{ fontSize: 11, color, fontWeight: 500 }}>
-                                {arrow} {change.display}
-                              </span>
-                            )}
-                            {!change && previous && (
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>—</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Posture */}
-                <div className="card" style={{ marginBottom: 14 }}>
-                  <div className="card-header"><div className="card-title">Posture analysis</div></div>
-                  <div className="metric-row"><div className="metric-label">Head forward</div><div className="metric-val">{payload.scan.headForwardIn}&quot;</div></div>
-                  <div className="metric-row"><div className="metric-label">Shoulder forward</div><div className="metric-val">{payload.scan.shoulderForwardIn}&quot;</div></div>
-                  <div className="metric-row"><div className="metric-label">Hip forward</div><div className="metric-val">{payload.scan.hipForwardIn}&quot;</div></div>
-                </div>
-
-                {/* Timeline */}
-                {scansAsc.length > 0 && (
-                  <div className="card" style={{ marginBottom: 14 }}>
-                    <div className="card-header"><div className="card-title">Scan journey</div></div>
-                    <div style={{ padding: "8px 16px 20px", overflowX: "auto" }}>
-                      <div style={{ position: "relative", height: 130, minWidth: Math.max(scansAsc.length * 90, 280) }}>
-                        {/* Line segments */}
-                        {scansAsc.length > 1 && scansAsc.slice(1).map((scan, i) => {
-                          const prev = scansAsc[i];
-                          const fatDown = (scan.bodyFatPctRaw ?? 99) < (prev.bodyFatPctRaw ?? 99);
-                          const leftPct = (i / (scansAsc.length - 1)) * 100;
-                          const widthPct = (1 / (scansAsc.length - 1)) * 100;
-                          return (
-                            <div key={i} style={{ position: "absolute", top: 20, left: `${leftPct}%`, width: `${widthPct}%`, height: 2, background: fatDown ? "#9dcc3a" : "#e05252" }} />
-                          );
-                        })}
-                        {/* Dots */}
-                        {scansAsc.map((scan, i) => {
-                          const leftPct = scansAsc.length === 1 ? 50 : (i / (scansAsc.length - 1)) * 100;
-                          const isActive = activeScanDot === i;
-                          return (
-                            <div key={i} style={{ position: "absolute", left: `${leftPct}%`, top: 12, transform: "translateX(-50%)" }}>
-                              <button
-                                type="button"
-                                onClick={() => setActiveScanDot(isActive ? null : i)}
-                                style={{ width: 16, height: 16, borderRadius: "50%", background: isActive ? "#9dcc3a" : "var(--bg3)", border: "2px solid #9dcc3a", cursor: "pointer", padding: 0, display: "block" }}
-                              />
-                              <div style={{ fontSize: 9, marginTop: 6, color: "var(--text3)", whiteSpace: "nowrap", textAlign: "center", transform: "translateX(-30%)" }}>
-                                {scan.scanDate}
-                              </div>
-                              {isActive && (
-                                <div style={{ position: "absolute", top: "calc(100% + 10px)", left: "50%", transform: "translateX(-50%)", background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 14px", zIndex: 20, whiteSpace: "nowrap", boxShadow: "0 6px 24px rgba(0,0,0,0.35)" }}>
-                                  <div style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>{scan.scanDate}</div>
-                                  <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 3 }}>Weight: <b>{scan.weightLbs} lbs</b></div>
-                                  <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 3 }}>Body fat: <b>{scan.bodyFatPct}%</b></div>
-                                  <div style={{ fontSize: 11, color: "var(--text2)" }}>Lean mass: <b>{scan.leanMassLbs} lbs</b></div>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Sparklines */}
-                {scansAsc.length >= 2 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
-                    {[
-                      { label: "Body fat %", vals: bfSparkVals, current: current?.bodyFatPct, good: "down" as const, first: bfFirst, last: bfLast },
-                      { label: "Lean mass", vals: leanSparkVals, current: current?.leanMassLbs, good: "up" as const, first: leanFirst, last: leanLast },
-                      { label: "Weight", vals: wtSparkVals, current: current?.weightLbs, good: "neutral" as const, first: null, last: null },
-                    ].map((chart) => {
-                      const path = sparklinePath(chart.vals, 100, 36);
-                      const trendGood =
-                        chart.good === "neutral" ? true :
-                        chart.good === "down" ? (chart.last ?? 0) <= (chart.first ?? 0) :
-                        (chart.last ?? 0) >= (chart.first ?? 0);
-                      const lineColor = chart.good === "neutral" ? "var(--text3)" : trendGood ? "#9dcc3a" : "#e05252";
-                      return (
-                        <div key={chart.label} className="card" style={{ padding: "14px 16px" }}>
-                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{chart.label}</div>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>{chart.current ?? "--"}</div>
-                          {path ? (
-                            <svg viewBox="0 0 100 36" style={{ width: "100%", height: 36, display: "block" }}>
-                              <path d={path} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          {leanSparkVals.some((v) => v !== null) && sparklinePath(leanSparkVals, 100, 28) ? (
+                            <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 4 }}>
+                              <path d={sparklinePath(leanSparkVals, 100, 28)} fill="none" stroke={leanTrendGood ? "#9dcc3a" : "#e05252"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
-                          ) : (
-                            <div style={{ height: 36, display: "flex", alignItems: "center" }}>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Not enough data</span>
+                          ) : null}
+                          {leanFirst !== null && leanLast !== null && (
+                            <div style={{ fontSize: 10, color: leanTrendGood ? "#9dcc3a" : "#e05252" }}>
+                              {leanTrendGood ? "\u2191" : "\u2193"} {Math.abs(leanLast - leanFirst).toFixed(1)} lbs since first scan
                             </div>
                           )}
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <div>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text3)", marginBottom: 6 }}>Body Fat</div>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: 6 }}>
+                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{payload.scan.bodyFatPct !== "--" ? payload.scan.bodyFatPct : "\u2014"}</span>
+                            {payload.scan.bodyFatPct !== "--" && <span style={{ fontSize: 10, color: "var(--text3)" }}>%</span>}
+                          </div>
+                          {fatSparkVals.some((v) => v !== null) && sparklinePath(fatSparkVals, 100, 28) ? (
+                            <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 4 }}>
+                              <path d={sparklinePath(fatSparkVals, 100, 28)} fill="none" stroke={fatTrendGood ? "#9dcc3a" : "#e05252"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          ) : null}
+                          {fatFirst !== null && fatLast !== null && (
+                            <div style={{ fontSize: 10, color: fatTrendGood ? "#9dcc3a" : "#e05252" }}>
+                              {fatTrendGood ? "\u2193" : "\u2191"} {Math.abs(fatLast - fatFirst).toFixed(1)}% since first scan
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Coach insight */}
+                      {(currentScan || prevScan) && (
+                        <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                          <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
+                          <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{scanInsight(currentScan, prevScan)}</p>
+                        </div>
+                      )}
+
+                      {/* View Details toggle */}
+                      <button type="button" style={detailBtnStyle} onClick={() => setProgressExpandBody((v) => !v)}>
+                        {progressExpandBody ? "Hide details \u2191" : "View details \u2193"}
+                      </button>
+
+                      {/* ── Expanded: full Fit3D data ─────────────────────────────── */}
+                      {progressExpandBody && (
+                        <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>All metrics</div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, marginBottom: 16 }}>
+                            {scanMetrics.map((m) => {
+                              const change = scanPctChange(m.raw, m.prevRaw);
+                              const color = scanChangeColor(change, m.good);
+                              const arrow = change ? (change.direction === "up" ? "\u2191" : "\u2193") : null;
+                              return (
+                                <div key={m.label} className="metric-row" style={{ borderRight: "none" }}>
+                                  <div className="metric-label">{m.label}</div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
+                                      {m.value}{m.value !== "--" && m.unit ? m.unit : ""}
+                                    </span>
+                                    {change && (
+                                      <span style={{ fontSize: 11, color, fontWeight: 500 }}>{arrow} {change.display}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {(payload.scan.headForwardIn !== "--" || payload.scan.shoulderForwardIn !== "--") && (
+                            <>
+                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>Posture</div>
+                              <div style={{ marginBottom: 16 }}>
+                                <div className="metric-row"><div className="metric-label">Head forward</div><div className="metric-val">{payload.scan.headForwardIn}&quot;</div></div>
+                                <div className="metric-row"><div className="metric-label">Shoulder forward</div><div className="metric-val">{payload.scan.shoulderForwardIn}&quot;</div></div>
+                                <div className="metric-row"><div className="metric-label">Hip forward</div><div className="metric-val">{payload.scan.hipForwardIn}&quot;</div></div>
+                              </div>
+                            </>
+                          )}
+
+                          {scansAsc.length > 0 && (
+                            <>
+                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 10 }}>Scan history</div>
+                              <div style={{ overflowX: "auto", marginBottom: 8 }}>
+                                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                                  <thead>
+                                    <tr>
+                                      {["Date", "Lean (lbs)", "Fat %", "Weight (lbs)", "Shape"].map((h) => (
+                                        <th key={h} style={{ textAlign: "left", padding: "4px 8px 8px 0", color: "var(--text3)", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {[...scansAsc].reverse().map((scan, i) => (
+                                      <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
+                                        <td style={{ padding: "7px 8px 7px 0", color: "var(--text3)", whiteSpace: "nowrap" }}>{scan.scanDate}</td>
+                                        <td style={{ padding: "7px 8px 7px 0", color: "var(--text)", fontWeight: 500 }}>{scan.leanMassLbs}</td>
+                                        <td style={{ padding: "7px 8px 7px 0", color: "var(--text)", fontWeight: 500 }}>{scan.bodyFatPct}%</td>
+                                        <td style={{ padding: "7px 8px 7px 0", color: "var(--text)" }}>{scan.weightLbs}</td>
+                                        <td style={{ padding: "7px 8px 7px 0", color: "var(--text)" }}>{scan.bodyShapeRating}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </>
+                          )}
+
+                          {scansAsc.length >= 2 && (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                              {[
+                                { label: "Lean mass", vals: leanSparkVals, good: "up" as const, first: leanFirst, last: leanLast },
+                                { label: "Body fat %", vals: fatSparkVals, good: "down" as const, first: fatFirst, last: fatLast },
+                                { label: "Weight", vals: wtSparkVals, good: "neutral" as const, first: null, last: null },
+                              ].map((chart) => {
+                                const path = sparklinePath(chart.vals, 100, 36);
+                                const trendGood = chart.good === "neutral" ? true : chart.good === "down" ? (chart.last ?? 0) <= (chart.first ?? 0) : (chart.last ?? 0) >= (chart.first ?? 0);
+                                const lineColor = chart.good === "neutral" ? "var(--text3)" : trendGood ? "#9dcc3a" : "#e05252";
+                                return (
+                                  <div key={chart.label} style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                                    <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{chart.label}</div>
+                                    {path ? (
+                                      <svg viewBox="0 0 100 36" style={{ width: "100%", height: 36, display: "block" }}>
+                                        <path d={path} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                    ) : (
+                                      <div style={{ height: 36, display: "flex", alignItems: "center" }}>
+                                        <span style={{ fontSize: 10, color: "var(--text3)" }}>Not enough data</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── 3. Strength ────────────────────────────────────────────────── */}
+                <div style={{ marginBottom: 28 }}>
+                  <div style={sectionLabelStyle}>Strength</div>
+
+                  {arxGroups.length === 0 ? (
+                    <div className="card" style={{ padding: "20px 22px" }}>
+                      <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
+                        No strength data yet.{" "}
+                        <Link href="/member/connect/arx" style={{ color: "#9dcc3a", textDecoration: "none" }}>Import ARX data \u2192</Link>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="card" style={{ padding: "16px 18px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>Top exercise \u00b7 {topExercise?.exercise}</div>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{topConc !== null ? Math.round(topConc) : "\u2014"}</span>
+                            {topConc !== null && <span style={{ fontSize: 10, color: "var(--text3)" }}>lbs concentric</span>}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: "right" }}>
+                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>This month</div>
+                          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{arxSessionsThisMonth}</div>
+                        </div>
+                      </div>
+
+                      {topConcHistory.length >= 2 && sparklinePath(topConcHistory, 100, 28) ? (
+                        <>
+                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Concentric trend</div>
+                          <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 6 }}>
+                            <path d={sparklinePath(topConcHistory, 100, 28)} fill="none" stroke={strengthTrend === "improving" ? "#9dcc3a" : strengthTrend === "declining" ? "#e05252" : "var(--text3)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </>
+                      ) : null}
+
+                      {strengthTrend && (
+                        <div style={{ fontSize: 11, color: strengthTrend === "improving" ? "#9dcc3a" : strengthTrend === "declining" ? "#e05252" : "var(--text3)", fontWeight: 500, marginBottom: 8 }}>
+                          {strengthTrend === "improving" ? "\u2191 Trending up" : strengthTrend === "declining" ? "\u2193 Trending down" : "Stable"}
+                        </div>
+                      )}
+
+                      <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                        <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
+                        <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{buildArxInsight(arxGroups)}</p>
+                      </div>
+
+                      <button type="button" style={detailBtnStyle} onClick={() => setProgressExpandStrength((v) => !v)}>
+                        {progressExpandStrength ? "Hide details \u2191" : `View all ${arxGroups.length} exercise${arxGroups.length !== 1 ? "s" : ""} \u2193`}
+                      </button>
+
+                      {progressExpandStrength && (
+                        <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+                          {latestArxDate && latestArxByEx.size > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>
+                                Last workout \u00b7 {new Date(latestArxDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                              </div>
+                              {Array.from(latestArxByEx.entries()).map(([ex, vals]) => {
+                                const ratio = vals.conc && vals.ecc ? vals.ecc / vals.conc : null;
+                                return (
+                                  <div key={ex} style={{ display: "flex", alignItems: "center", padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
+                                    <div style={{ flex: 1, fontSize: 12, color: "var(--text2)", fontWeight: 500 }}>{ex}</div>
+                                    <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--text3)" }}>
+                                      {vals.conc != null && <span>Conc <b style={{ color: "var(--text)" }}>{Math.round(vals.conc)} lbs</b></span>}
+                                      {vals.ecc != null && <span>Ecc <b style={{ color: "var(--text)" }}>{Math.round(vals.ecc)} lbs</b></span>}
+                                      {ratio != null && <span style={{ color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}\u00d7</span>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {latestConcByEx.length > 1 && maxConcAll > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>Output by exercise</div>
+                              {[...latestConcByEx].sort((a, b) => b.value - a.value).map(({ exercise, value }) => (
+                                <div key={exercise} style={{ marginBottom: 8 }}>
+                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                                    <span style={{ fontSize: 11, color: "var(--text2)" }}>{exercise}</span>
+                                    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>{value > 0 ? `${Math.round(value)} lbs` : "\u2014"}</span>
+                                  </div>
+                                  <div style={{ height: 5, background: "var(--bg3)", borderRadius: 3, overflow: "hidden" }}>
+                                    <div style={{ height: "100%", width: `${(value / maxConcAll) * 100}%`, background: "#9dcc3a", borderRadius: 3 }} />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>All exercises</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {arxGroups.map(({ exercise, sessions }) => {
+                              const latest = sessions[0];
+                              const conc = latest?.concentricMax ?? null;
+                              const ecc = latest?.eccentricMax ?? null;
+                              const ratio = conc && ecc ? ecc / conc : null;
+                              const ratioInfo = ratio !== null ? eccRatioLabel(ratio) : null;
+                              const pr = conc !== null ? Math.max(...sessions.map((s) => s.concentricMax ?? 0)) : 0;
+                              const isPR = conc !== null && conc >= pr && sessions.length > 1;
+                              const sparkVals = sessions.slice(0, 12).reverse().map((s) => s.concentricMax);
+                              const sparkFirst = sparkVals.find((v) => v !== null) ?? null;
+                              const sparkLast = [...sparkVals].reverse().find((v) => v !== null) ?? null;
+                              const trending = sparkFirst !== null && sparkLast !== null && sparkLast > sparkFirst;
+                              const path = sparklinePath(sparkVals, 100, 28);
+                              const isSelected = selectedArxExercise === exercise;
+                              return (
+                                <div key={exercise} className="card"
+                                  style={{ padding: "14px 16px", cursor: "pointer", border: isSelected ? "1px solid rgba(157,204,58,0.4)" : undefined, background: isSelected ? "rgba(157,204,58,0.04)" : undefined }}
+                                  onClick={() => setSelectedArxExercise(isSelected ? null : exercise)}>
+                                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
+                                    <div>
+                                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{exercise}</div>
+                                      <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""} \u00b7 {isSelected ? "tap to close" : "tap for full history"}</div>
+                                    </div>
+                                    {isPR && <span style={{ fontSize: 9, background: "rgba(157,204,58,0.15)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.3)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
+                                  </div>
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: path ? 8 : 0 }}>
+                                    <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "7px 10px" }}>
+                                      <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Concentric</div>
+                                      <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{conc !== null ? Math.round(conc) : "--"} <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span></div>
+                                    </div>
+                                    <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "7px 10px" }}>
+                                      <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Eccentric</div>
+                                      <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{ecc !== null ? Math.round(ecc) : "--"} <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span></div>
+                                    </div>
+                                  </div>
+                                  {ratioInfo && (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: path ? 8 : 0 }}>
+                                      <span style={{ fontSize: 10, color: "var(--text3)" }}>Ecc:Conc</span>
+                                      <span style={{ fontSize: 11, fontWeight: 600, color: ratioInfo.color }}>{ratio!.toFixed(2)}\u00d7</span>
+                                      <span style={{ fontSize: 9, color: ratioInfo.color, background: `${ratioInfo.color}18`, border: `1px solid ${ratioInfo.color}40`, borderRadius: 4, padding: "1px 5px" }}>{ratioInfo.label}</span>
+                                    </div>
+                                  )}
+                                  {path ? (
+                                    <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block" }}>
+                                      <path d={path} fill="none" stroke={trending ? "#9dcc3a" : "#e05252"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* ── 4. Cardio ──────────────────────────────────────────────────── */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={sectionLabelStyle}>Cardio</div>
+
+                  {allCarol.length === 0 ? (
+                    <div className="card" style={{ padding: "20px 22px" }}>
+                      <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
+                        No cardio data yet.{" "}
+                        <Link href="/member/connect/carol" style={{ color: "#9dcc3a", textDecoration: "none" }}>Connect CAROL account \u2192</Link>
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="card" style={{ padding: "16px 18px" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Est. VO2 Max</div>
+                          {vo2 && vo2Cat ? (
+                            <>
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
+                                <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{vo2.toFixed(0)}</span>
+                                <span style={{ fontSize: 9, color: "var(--text3)" }}>ml/kg/min</span>
+                              </div>
+                              <div style={{ height: 3, background: "var(--bg3)", borderRadius: 2, marginBottom: 4, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${vo2Cat.barPct}%`, background: vo2Cat.color, borderRadius: 2 }} />
+                              </div>
+                              <span style={{ fontSize: 10, color: vo2Cat.color, fontWeight: 600 }}>{vo2Cat.label}</span>
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text2)" }}>\u2014</div>
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Aerobic Power</div>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
+                            <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "\u2014"}</span>
+                            {latestManp ? <span style={{ fontSize: 9, color: "var(--text3)" }}>W MANP</span> : null}
+                          </div>
+                          {manpTrendLabel ? (
+                            <div style={{ fontSize: 10, color: manpTrendColor, fontWeight: 500 }}>{manpTrendLabel}</div>
+                          ) : (
+                            <div style={{ fontSize: 10, color: "var(--text3)" }}>
+                              {rehitWithManp.length < 2 ? "More REHIT sessions needed" : "Building\u2026"}
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>This Month</div>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
+                            <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{carolThisMonth}</span>
+                            <span style={{ fontSize: 9, color: "var(--text3)" }}>sessions</span>
+                          </div>
+                          {carolPrevMonth > 0 ? (
+                            <div style={{ fontSize: 10, color: carolThisMonth >= carolPrevMonth ? "#9dcc3a" : "var(--text3)" }}>
+                              {carolThisMonth >= carolPrevMonth ? "\u2191" : "\u2193"} vs {carolPrevMonth} last month
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: 10, color: "var(--text3)" }}>{allCarol.length} total rides</div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                        <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
+                        <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{buildCarolInsight(allCarol, payload.scan.weightLbs)}</p>
+                      </div>
+
+                      <button type="button" style={detailBtnStyle} onClick={() => setProgressExpandCardio((v) => !v)}>
+                        {progressExpandCardio ? "Hide details \u2191" : `View all ${allCarol.length} ride${allCarol.length !== 1 ? "s" : ""} \u2193`}
+                      </button>
+
+                      {progressExpandCardio && (
+                        <div style={{ marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
+                          {rehitWithManp.length > 0 && (
+                            <div style={{ marginBottom: 16 }}>
+                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>REHIT performance</div>
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
+                                <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                                  <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Latest MANP</div>
+                                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "\u2014"} <span style={{ fontSize: 9, color: "var(--text3)" }}>W</span></div>
+                                  {manpTrendLabel && <div style={{ fontSize: 10, color: manpTrendColor, marginTop: 3 }}>{manpTrendLabel}</div>}
+                                </div>
+                                <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
+                                  <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Est. VO2 Max</div>
+                                  {vo2 && vo2Cat ? (
+                                    <>
+                                      <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{vo2.toFixed(0)} <span style={{ fontSize: 9, color: "var(--text3)" }}>ml/kg/min</span></div>
+                                      <div style={{ fontSize: 10, color: vo2Cat.color, marginTop: 3 }}>{vo2Cat.label}</div>
+                                    </>
+                                  ) : (
+                                    <div style={{ fontSize: 14, color: "var(--text3)" }}>\u2014</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>All rides</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                            {allCarol.slice(0, 50).map((row, i) => (
+                              <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+                                <div>
+                                  <div style={{ fontSize: 12, color: "var(--text2)", fontWeight: 500 }}>{RIDE_TYPE_LABELS[row.rideType] ?? row.rideType.replace(/_/g, " ")}</div>
+                                  <div style={{ fontSize: 10, color: "var(--text3)" }}>{row.sessionDate}</div>
+                                </div>
+                                <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--text3)", textAlign: "right" }}>
+                                  {carolNum(row.manp) !== null && carolNum(row.manp)! > 0 && <span>MANP <b style={{ color: "var(--text)" }}>{row.manp}</b></span>}
+                                  {carolNum(row.avgSprintPower) !== null && carolNum(row.avgSprintPower)! > 0 && <span>Avg <b style={{ color: "var(--text)" }}>{Math.round(carolNum(row.avgSprintPower)!)}W</b></span>}
+                                  {carolNum(row.heartRateMax) !== null && carolNum(row.heartRateMax)! > 0 && <span>HR <b style={{ color: "var(--text)" }}>{row.heartRateMax}</b></span>}
+                                </div>
+                              </div>
+                            ))}
+                            {allCarol.length > 50 && (
+                              <div style={{ fontSize: 11, color: "var(--text3)", paddingTop: 8 }}>Showing 50 of {allCarol.length} rides</div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </>
             );
           })()}
