@@ -1586,145 +1586,182 @@ export function DashboardReactClient({
               finally { setSavingActivity(false); }
             }
 
-            const totalBonusThisWeek = (payload.bonusActivitiesThisWeek ?? 0) + localBonusCount;
-            const hasAnyProtocolItems = cl.length > 0;
+            // ── Rich display metadata for protocol checklist rows ──────────
+            const CAROL_RIDE_DETAIL: Record<string, { name: string; detail: string }> = {
+              REHIT:       { name: "CAROL REHIT",       detail: "8 min · 2 × 20 sec max sprint" },
+              FAT_BURN_30: { name: "CAROL Fat Burn 30", detail: "30 min · Zone 2 steady state" },
+              FAT_BURN_45: { name: "CAROL Fat Burn 45", detail: "45 min · Zone 2 aerobic base" },
+              FAT_BURN_60: { name: "CAROL Fat Burn 60", detail: "60 min · Norwegian 4×4 / Zone 2" },
+              ENERGISER:   { name: "CAROL Energiser",   detail: "10 min · low intensity warm-up" },
+            };
+            const RECOVERY_DETAIL: Record<string, { name: string; detail: string }> = {
+              cold_plunge:    { name: "Cold Plunge",       detail: "3 min · cold exposure" },
+              sauna:          { name: "Sauna",             detail: "20 min · heat therapy" },
+              infrared_sauna: { name: "Infrared Sauna",    detail: "20 min · deep tissue heat" },
+              compression:    { name: "Compression",       detail: "20 min · circulation recovery" },
+              nxpro:          { name: "NxPro / Red Light", detail: "20 min · photobiomodulation" },
+            };
+            const exerciseNames = proto.arxExercises.map(formatExerciseName);
 
-            // Groups for detailed log section
-            const logGroups = [
-              { key: "strength", label: "Strength", items: cl.filter((i) => i.category === "strength") },
-              { key: "cardio", label: "Cardio", items: cl.filter((i) => i.category === "cardio") },
-              { key: "recovery", label: "Recovery", items: cl.filter((i) => i.category === "recovery") },
+            type RichItem = { item: ChecklistItem; name: string; detail: string; accentColor: string };
+            function toRich(item: ChecklistItem): RichItem {
+              if (item.type === "arx") {
+                const n = parseInt(item.id.split("-")[1] ?? "0", 10) + 1;
+                return {
+                  item,
+                  name: `ARX Full Body${proto.arxPerWeek > 1 ? ` — Session ${n}` : ""}`,
+                  detail: exerciseNames.length > 0 ? exerciseNames.join(" · ") : "Adaptive resistance training",
+                  accentColor: "#9dcc3a",
+                };
+              }
+              if (item.type === "carol") {
+                const rd = CAROL_RIDE_DETAIL[item.subtype] ?? { name: `CAROL ${item.subtype.replace(/_/g, " ")}`, detail: "CAROL ride" };
+                return { item, name: rd.name, detail: rd.detail, accentColor: item.subtype === "REHIT" || item.subtype === "ENERGISER" ? "#e8a838" : "#2ec8c8" };
+              }
+              const rd = RECOVERY_DETAIL[item.subtype] ?? { name: RECOVERY_LABELS[item.subtype] ?? item.subtype, detail: "Recovery session" };
+              return { item, name: rd.name, detail: rd.detail, accentColor: "#f472b6" };
+            }
+
+            const PROTOCOL_GROUPS: Array<{ key: string; label: string; color: string; items: RichItem[] }> = [
+              { key: "strength", label: "Strength",  color: "#9dcc3a", items: cl.filter((i) => i.category === "strength").map(toRich) },
+              { key: "cardio",   label: "Cardio",    color: "#e8a838", items: cl.filter((i) => i.category === "cardio").map(toRich) },
+              { key: "recovery", label: "Recovery",  color: "#f472b6", items: cl.filter((i) => i.category === "recovery").map(toRich) },
             ].filter((g) => g.items.length > 0);
+
+            // Add-on pills with category color coding
+            const BONUS_META: Array<{ key: string; label: string; color: string; bg: string }> = [
+              { key: "katalyst",          label: "Katalyst EMS",       color: "#9dcc3a", bg: "rgba(157,204,58,0.10)" },
+              { key: "vasper",            label: "Vasper",             color: "#e8a838", bg: "rgba(232,168,56,0.10)" },
+              { key: "walk",              label: "Walk",               color: "#e8a838", bg: "rgba(232,168,56,0.10)" },
+              { key: "other_cardio",      label: "Other Cardio",       color: "#e8a838", bg: "rgba(232,168,56,0.10)" },
+              { key: "stretching",        label: "Stretching",         color: "#a78bfa", bg: "rgba(167,139,250,0.10)" },
+              { key: "quickboard",        label: "Quickboard",         color: "#a78bfa", bg: "rgba(167,139,250,0.10)" },
+              { key: "nxpro",             label: "NxPro / Red Light",  color: "#f472b6", bg: "rgba(244,114,182,0.10)" },
+              { key: "extra_sauna",       label: "Extra Sauna",        color: "#f472b6", bg: "rgba(244,114,182,0.10)" },
+              { key: "extra_cold_plunge", label: "Extra Cold Plunge",  color: "#f472b6", bg: "rgba(244,114,182,0.10)" },
+            ];
+
+            // Live checked count — updates as boxes are ticked, drives the week status bar
+            const checkedNow = cl.filter((item) => selectedProtocol[item.id] ?? isChecklistItemDone(item, c, {})).length;
+            const weekTotal = cl.length;
+            const weekPctLive = weekTotal > 0 ? Math.min(100, Math.round((checkedNow / weekTotal) * 100)) : 0;
+            const weekComplete = checkedNow >= weekTotal && weekTotal > 0;
+
+            // Active goals for display tags
+            const activeGoalLabels: Array<{ label: string; color: string }> = [];
+            if (payload.goals.activeGoals.includes("gain_muscle"))   activeGoalLabels.push({ label: "Gain Muscle",    color: "#9dcc3a" });
+            if (payload.goals.activeGoals.includes("lose_fat"))      activeGoalLabels.push({ label: "Lose Fat",       color: "#e8a838" });
+            if (payload.goals.activeGoals.includes("improve_cardio"))activeGoalLabels.push({ label: "Cardio Fitness", color: "#2ec8c8" });
+            if (payload.goals.activeGoals.includes("attendance"))    activeGoalLabels.push({ label: "Consistency",    color: "#a78bfa" });
+
+            const totalBonusThisWeek = (payload.bonusActivitiesThisWeek ?? 0) + localBonusCount;
 
             return (
               <>
-                {/* ── Section 1: Protocol Header ───────────────────────────── */}
+                {/* ── Header: greeting ─────────────────────────────────────── */}
                 <div style={{ marginBottom: 20 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-                    <div style={{ fontSize: 11, color: "var(--text3)", letterSpacing: "0.04em" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                    <div style={{ fontSize: 11, color: "var(--text3)" }}>
                       {hasProtocol ? proto.name : "No protocol assigned"}
                     </div>
                     <div style={{ fontSize: 11, color: "var(--text3)" }}>
-                      {new Date().toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}
+                      {new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                     </div>
                   </div>
-                  <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", lineHeight: 1.2, marginBottom: 4 }}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
                     {`Good ${new Date().getHours() < 12 ? "morning" : new Date().getHours() < 17 ? "afternoon" : "evening"}, ${greetingName}`}
                   </div>
-                  {hasProtocol && proto.startDate && (
-                    <div style={{ fontSize: 11, color: "var(--text3)" }}>
-                      {formatTargetSystem(proto.targetSystem)} protocol · started {proto.startDate}
-                    </div>
-                  )}
                 </div>
 
-                {/* ── Section 2: Today's Focus ─────────────────────────────── */}
+                {/* ═══════════════════════════════════════════════════════════ */}
+                {/* SECTION 1 — Today's Focus                                  */}
+                {/* ═══════════════════════════════════════════════════════════ */}
                 {hasProtocol ? (
                   <div style={{
                     background: "var(--bg3)",
                     border: `1px solid ${focusMeta.color}33`,
                     borderRadius: "var(--r)",
                     padding: "20px 22px",
-                    marginBottom: 16,
+                    marginBottom: 14,
                     position: "relative",
                     overflow: "hidden",
                   }}>
-                    {/* Subtle glow accent */}
                     <div style={{
                       position: "absolute", top: 0, left: 0, right: 0, height: 3,
-                      background: `linear-gradient(90deg, ${focusMeta.color}88, ${focusMeta.color}22)`,
-                      borderRadius: "var(--r) var(--r) 0 0",
+                      background: `linear-gradient(90deg, ${focusMeta.color}99, ${focusMeta.color}11)`,
                     }} />
 
-                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 10 }}>
+                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 12 }}>
                       Today&apos;s Focus
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 14 }}>
-                      {/* Icon */}
+                    <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 16 }}>
                       <div style={{
-                        width: 48, height: 48, borderRadius: 12, flexShrink: 0,
-                        background: `${focusMeta.color}18`,
-                        border: `1.5px solid ${focusMeta.color}44`,
+                        width: 44, height: 44, borderRadius: 10, flexShrink: 0,
+                        background: `${focusMeta.color}18`, border: `1.5px solid ${focusMeta.color}44`,
                         display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: 20, color: focusMeta.color,
+                        fontSize: 18, color: focusMeta.color,
                       }}>
                         {focusMeta.icon}
                       </div>
                       <div>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", lineHeight: 1.1, marginBottom: 4 }}>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", lineHeight: 1.1, marginBottom: 3 }}>
                           {todayFocus}
                         </div>
-                        <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 2 }}>
-                          {focusMeta.machine}
-                        </div>
-                        <div style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.55 }}>
-                          {focusMeta.tagline}
-                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 3 }}>{focusMeta.machine}</div>
+                        <div style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.5 }}>{focusMeta.tagline}</div>
                       </div>
                     </div>
 
-                    {/* Today's plan activities (if available) */}
-                    {payload.todaysPlan && !payload.todaysPlan.isRestDay && payload.todaysPlan.activities.length > 0 && (
-                      <div style={{ background: "rgba(0,0,0,0.18)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 14 }}>
+                    {/* Today's plan activities */}
+                    {payload.todaysPlan && !payload.todaysPlan.isRestDay && payload.todaysPlan.activities.filter((a) => !a.isOptional).length > 0 && (
+                      <div style={{ background: "rgba(0,0,0,0.18)", borderRadius: 8, padding: "3px 0", marginBottom: 14 }}>
                         {payload.todaysPlan.activities.filter((a) => !a.isOptional).map((act, i, arr) => (
-                          <div key={act.id} style={{
-                            display: "flex", alignItems: "center", padding: "8px 14px",
-                            borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none",
-                          }}>
-                            <span style={{ fontSize: 10, color: `${focusMeta.color}88`, width: 18, flexShrink: 0, fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
-                            <span style={{ flex: 1, fontSize: 13, color: "var(--text2)", fontWeight: 500 }}>{act.name}</span>
+                          <div key={act.id} style={{ display: "flex", alignItems: "center", padding: "7px 14px", borderBottom: i < arr.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
+                            <span style={{ fontSize: 10, color: `${focusMeta.color}77`, width: 16, flexShrink: 0 }}>{i + 1}</span>
+                            <span style={{ flex: 1, fontSize: 12.5, color: "var(--text2)", fontWeight: 500 }}>{act.name}</span>
                             <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>
                           </div>
                         ))}
                       </div>
                     )}
 
-                    {/* Quick-log button + start plan */}
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {/* Log button */}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       {focusMeta.logType && !activitySavedMsg && (
                         <button
                           type="button"
                           disabled={savingActivity}
                           onClick={() => { void handleFocusLog(); }}
                           style={{
-                            padding: "10px 20px", borderRadius: 8,
+                            padding: "10px 22px", borderRadius: 8,
                             background: focusMeta.color, color: "#0b0c09",
                             border: "none", cursor: savingActivity ? "not-allowed" : "pointer",
-                            fontSize: 13, fontWeight: 700,
-                            opacity: savingActivity ? 0.7 : 1,
-                            transition: "opacity 0.15s",
+                            fontSize: 13, fontWeight: 700, opacity: savingActivity ? 0.7 : 1,
                           }}
                         >
                           {savingActivity ? "Logging…" : `Log ${todayFocus}`}
                         </button>
                       )}
                       {payload.todaysPlan && payload.todaysPlan.activities.length > 0 && (
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          style={{ fontSize: 12 }}
-                          onClick={() => { setSessionStep(0); setSessionCompleted(new Set()); setSessionGuideOpen(true); }}
-                        >
-                          Start guided plan →
+                        <button type="button" className="btn btn-sm" style={{ fontSize: 12 }}
+                          onClick={() => { setSessionStep(0); setSessionCompleted(new Set()); setSessionGuideOpen(true); }}>
+                          View full plan →
                         </button>
                       )}
+                      {activitySavedMsg && (
+                        <div style={{ fontSize: 13, color: "#9dcc3a", fontWeight: 600 }}>
+                          {activitySavedMsg}
+                          <button type="button" style={{ marginLeft: 10, fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                            onClick={() => { setActivitySavedMsg(""); }}>
+                            dismiss
+                          </button>
+                        </div>
+                      )}
                     </div>
-
-                    {/* Success state */}
-                    {activitySavedMsg && (
-                      <div style={{ marginTop: 10, padding: "10px 14px", background: "rgba(157,204,58,0.07)", border: "1px solid rgba(157,204,58,0.2)", borderRadius: "var(--r-sm)" }}>
-                        <div style={{ fontSize: 13, color: "#9dcc3a", fontWeight: 600 }}>{activitySavedMsg}</div>
-                        <button type="button" style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                          onClick={() => { setActivitySavedMsg(""); setBonusCelebration(""); }}>
-                          Log more →
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ) : (
-                  /* No protocol state */
-                  <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 16 }}>
+                  <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 14 }}>
                     <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 10 }}>Today&apos;s Focus</div>
                     <div style={{ fontSize: 15, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>Your plan is being prepared</div>
                     <p style={{ fontSize: 13, color: "var(--text3)", margin: "0 0 14px 0", lineHeight: 1.6 }}>Dustin will assign your protocol after your first session.</p>
@@ -1734,339 +1771,214 @@ export function DashboardReactClient({
                   </div>
                 )}
 
-                {/* ── Section 3: Log Activity ───────────────────────────────── */}
-                {hasAnyProtocolItems && (() => {
-                  // Rich display metadata for each checklist item using real protocol data
-                  type RichItem = {
-                    item: ChecklistItem;
-                    name: string;
-                    detail: string;
-                    badge: string;
-                    accentColor: string;
-                  };
+                {/* ═══════════════════════════════════════════════════════════ */}
+                {/* SECTION 2 — Your Protocol This Week                        */}
+                {/* ═══════════════════════════════════════════════════════════ */}
+                {hasProtocol && cl.length > 0 && (
+                  <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", marginBottom: 14, overflow: "hidden" }}>
 
-                  const CAROL_RIDE_DETAIL: Record<string, { name: string; detail: string }> = {
-                    REHIT:       { name: "CAROL REHIT",       detail: "8 min · 2 × 20 sec max sprint" },
-                    FAT_BURN_30: { name: "CAROL Fat Burn 30", detail: "30 min · Zone 2 steady state" },
-                    FAT_BURN_45: { name: "CAROL Fat Burn 45", detail: "45 min · Zone 2 aerobic base" },
-                    FAT_BURN_60: { name: "CAROL Fat Burn 60", detail: "60 min · Norwegian 4×4 / Zone 2" },
-                    ENERGISER:   { name: "CAROL Energiser",   detail: "10 min · low intensity warm-up" },
-                  };
-                  const RECOVERY_DETAIL: Record<string, { name: string; detail: string }> = {
-                    cold_plunge:     { name: "Cold Plunge",      detail: "3 min · cold exposure" },
-                    sauna:           { name: "Sauna",            detail: "20 min · heat therapy" },
-                    infrared_sauna:  { name: "Infrared Sauna",   detail: "20 min · deep tissue heat" },
-                    compression:     { name: "Compression",      detail: "20 min · circulation recovery" },
-                    nxpro:           { name: "NxPro / Red Light",detail: "20 min · photobiomodulation" },
-                  };
-
-                  const exerciseNames = proto.arxExercises.map(formatExerciseName);
-
-                  function toRich(item: ChecklistItem): RichItem {
-                    if (item.type === "arx") {
-                      const sessionNum = parseInt(item.id.split("-")[1] ?? "0", 10) + 1;
-                      const sessionLabel = proto.arxPerWeek > 1 ? `Session ${sessionNum}` : "";
-                      return {
-                        item,
-                        name: `ARX Full Body${sessionLabel ? ` — ${sessionLabel}` : ""}`,
-                        detail: exerciseNames.length > 0
-                          ? exerciseNames.join(" · ")
-                          : "Adaptive resistance training",
-                        badge: "ARX",
-                        accentColor: "#9dcc3a",
-                      };
-                    }
-                    if (item.type === "carol") {
-                      const rd = CAROL_RIDE_DETAIL[item.subtype] ?? { name: `CAROL ${item.subtype.replace(/_/g, " ")}`, detail: "CAROL ride" };
-                      const isZone2 = item.subtype !== "REHIT" && item.subtype !== "ENERGISER";
-                      return {
-                        item,
-                        name: rd.name,
-                        detail: rd.detail,
-                        badge: "CAROL",
-                        accentColor: isZone2 ? "#2ec8c8" : "#e8a838",
-                      };
-                    }
-                    // recovery
-                    const rd = RECOVERY_DETAIL[item.subtype] ?? { name: RECOVERY_LABELS[item.subtype] ?? item.subtype, detail: "Recovery session" };
-                    return {
-                      item,
-                      name: rd.name,
-                      detail: rd.detail,
-                      badge: "Recovery",
-                      accentColor: "#f472b6",
-                    };
-                  }
-
-                  const richGroups = logGroups.map((g) => ({
-                    ...g,
-                    richItems: g.items.map(toRich),
-                  }));
-
-                  return (
-                    <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", marginBottom: 16, overflow: "hidden" }}>
-
-                      {/* ── Protocol snapshot header ── */}
-                      <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)" }}>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Log Activity</div>
-                          <div style={{ fontSize: 10, color: "var(--text3)" }}>{comp.todayDate}</div>
-                        </div>
-                        {/* Protocol summary row */}
-                        <div style={{ background: "rgba(0,0,0,0.18)", borderRadius: 8, padding: "10px 14px" }}>
-                          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
-                            {proto.name}
-                            <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#9dcc3a", background: "rgba(157,204,58,0.12)", border: "1px solid rgba(157,204,58,0.25)", borderRadius: 4, padding: "1px 6px" }}>
-                              {formatTargetSystem(proto.targetSystem)}
+                    {/* Card header */}
+                    <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Your Protocol This Week</div>
+                      {/* Goal tags */}
+                      {activeGoalLabels.length > 0 && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {activeGoalLabels.map((g) => (
+                            <span key={g.label} style={{ fontSize: 10, fontWeight: 600, color: g.color, background: `${g.color}15`, border: `1px solid ${g.color}35`, borderRadius: 5, padding: "2px 8px" }}>
+                              {g.label}
                             </span>
-                          </div>
-                          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-                            {proto.arxPerWeek > 0 && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#9dcc3a", flexShrink: 0 }} />
-                                <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                                  ARX <strong style={{ color: "var(--text2)" }}>{proto.arxPerWeek}×/wk</strong>
-                                  {exerciseNames.length > 0 && (
-                                    <span style={{ color: "var(--text3)", marginLeft: 4 }}>· {exerciseNames.slice(0, 3).join(", ")}{exerciseNames.length > 3 ? ` +${exerciseNames.length - 3}` : ""}</span>
-                                  )}
-                                </span>
-                              </div>
-                            )}
-                            {proto.carolPerWeek > 0 && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#2ec8c8", flexShrink: 0 }} />
-                                <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                                  CAROL <strong style={{ color: "var(--text2)" }}>{proto.carolPerWeek}×/wk</strong>
-                                  {proto.carolRideTypes.length > 0 && (
-                                    <span style={{ color: "var(--text3)", marginLeft: 4 }}>· {proto.carolRideTypes.map((r) => CAROL_RIDE_LABELS[r] ?? r).join(", ")}</span>
-                                  )}
-                                </span>
-                              </div>
-                            )}
-                            {proto.recoveryPerMonth > 0 && (
-                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#f472b6", flexShrink: 0 }} />
-                                <span style={{ fontSize: 11, color: "var(--text3)" }}>
-                                  Recovery <strong style={{ color: "var(--text2)" }}>{proto.recoveryPerMonth}×/mo</strong>
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* ── Checklist rows — one per session ── */}
-                      {richGroups.map((group, gi) => (
-                        <div key={group.key}>
-                          <div style={{ padding: "10px 20px 4px", display: "flex", alignItems: "center", gap: 8 }}>
-                            <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)" }}>{group.label}</div>
-                            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-                          </div>
-                          {group.richItems.map((ri, idx) => {
-                            const serverDone = isChecklistItemDone(ri.item, c, {});
-                            const sel = selectedProtocol[ri.item.id] ?? serverDone;
-                            const isLast = idx === group.richItems.length - 1;
-                            return (
-                              <div
-                                key={ri.item.id}
-                                style={{
-                                  display: "flex", alignItems: "center", gap: 14,
-                                  padding: "11px 20px",
-                                  borderBottom: !isLast || gi < richGroups.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
-                                  cursor: "pointer",
-                                  background: sel ? "rgba(157,204,58,0.03)" : "transparent",
-                                  transition: "background 0.15s",
-                                }}
-                                onClick={() => setSelectedProtocol((prev) => ({ ...prev, [ri.item.id]: !sel }))}
-                              >
-                                {/* Checkbox */}
-                                <div style={{
-                                  width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                                  background: sel ? ri.accentColor : "transparent",
-                                  border: `2px solid ${sel ? ri.accentColor : "rgba(255,255,255,0.18)"}`,
-                                  display: "flex", alignItems: "center", justifyContent: "center",
-                                  transition: "all 0.14s",
-                                }}>
-                                  {sel && <span style={{ color: "#0b0c09", fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
-                                </div>
-
-                                {/* Content */}
-                                <div style={{ flex: 1, minWidth: 0 }}>
-                                  <div style={{ fontSize: 13, fontWeight: 600, color: sel ? "var(--text3)" : "var(--text)", textDecoration: sel ? "line-through" : "none", transition: "color 0.14s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {ri.name}
-                                  </div>
-                                  <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                                    {ri.detail}
-                                  </div>
-                                </div>
-
-                                {/* Badge */}
-                                <div style={{
-                                  fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em",
-                                  color: ri.accentColor, background: `${ri.accentColor}15`,
-                                  border: `1px solid ${ri.accentColor}35`,
-                                  borderRadius: 5, padding: "2px 7px", flexShrink: 0,
-                                  opacity: sel ? 0.5 : 1,
-                                }}>
-                                  {ri.badge}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ))}
-
-                      {/* ── Add-ons section ── */}
-                      <div style={{ padding: "10px 20px 14px", borderTop: "1px solid var(--border)" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                          <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)" }}>Add-ons</div>
-                          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
-                        </div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                          {BONUS_ACTIVITIES.map(({ key, label }) => {
-                            const sel = selectedBonus[key] ?? false;
-                            return (
-                              <button key={key} type="button"
-                                onClick={() => setSelectedBonus((prev) => ({ ...prev, [key]: !sel }))}
-                                style={{ padding: "6px 12px", borderRadius: 20, border: `1.5px solid ${sel ? "#2ec8c8" : "var(--border)"}`, background: sel ? "rgba(46,200,200,0.10)" : "transparent", color: sel ? "#2ec8c8" : "var(--text3)", fontSize: 12, cursor: "pointer", transition: "all 0.14s", fontWeight: sel ? 600 : 400 }}>
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {bonusCelebration && (
-                        <div style={{ padding: "7px 20px", background: "rgba(46,200,200,0.07)", borderTop: "1px solid rgba(46,200,200,0.14)" }}>
-                          <div style={{ fontSize: 12, color: "#2ec8c8", fontWeight: 500 }}>{bonusCelebration}</div>
+                          ))}
                         </div>
                       )}
-
-                      {/* Save button */}
-                      <div style={{ padding: "0 20px 16px" }}>
-                        <button
-                          type="button"
-                          className="btn btn-lime"
-                          disabled={savingActivity}
-                          style={{ width: "100%", fontSize: 13, fontWeight: 600, opacity: savingActivity ? 0.7 : 1 }}
-                          onClick={() => { void handleSave(); }}
-                        >
-                          {savingActivity ? "Saving…" : "Save activity"}
-                        </button>
-                      </div>
                     </div>
-                  );
-                })()}
 
-                {/* ── Section 4: Weekly Progress ───────────────────────────── */}
-                <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "18px 20px", marginBottom: 16 }}>
-                  <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 14 }}>This Week</div>
-
-                  {hasAnyProtocolItems ? (
-                    <>
-                      {/* Overall bar */}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>
-                          {totalDone} of {totalTarget} sessions
-                        </span>
-                        <span style={{ fontSize: 12, color: weekPct >= 100 ? "#9dcc3a" : "var(--text3)", fontWeight: weekPct >= 100 ? 700 : 400 }}>
-                          {weekPct >= 100 ? "Complete ✓" : `${weekPct}%`}
-                        </span>
-                      </div>
-                      <div style={{ height: 6, background: "rgba(255,255,255,0.06)", borderRadius: 4, overflow: "hidden", marginBottom: 16 }}>
-                        <div style={{ height: "100%", width: `${weekPct}%`, background: weekPct >= 100 ? "#9dcc3a" : "rgba(157,204,58,0.7)", borderRadius: 4, transition: "width 0.4s ease" }} />
-                      </div>
-
-                      {/* Per-category mini-progress */}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 16px" }}>
-                        {arxTarget > 0 && (
-                          <div>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Strength</span>
-                              <span style={{ fontSize: 11, color: arxDone >= arxTarget ? "#9dcc3a" : "var(--text2)", fontWeight: 600 }}>{arxDone}/{arxTarget}</span>
+                    {/* Protocol session rows grouped by category */}
+                    {PROTOCOL_GROUPS.map((group, gi) => (
+                      <div key={group.key}>
+                        {/* Category divider */}
+                        <div style={{ padding: "10px 20px 4px", display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: group.color, flexShrink: 0 }} />
+                          <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)" }}>{group.label}</div>
+                          <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+                        </div>
+                        {group.items.map((ri, idx) => {
+                          const serverDone = isChecklistItemDone(ri.item, c, {});
+                          const sel = selectedProtocol[ri.item.id] ?? serverDone;
+                          const isLastInGroup = idx === group.items.length - 1;
+                          const isLastGroup = gi === PROTOCOL_GROUPS.length - 1;
+                          return (
+                            <div
+                              key={ri.item.id}
+                              role="button"
+                              tabIndex={0}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 14,
+                                padding: "12px 20px",
+                                borderBottom: !isLastInGroup || !isLastGroup ? "1px solid rgba(255,255,255,0.04)" : "none",
+                                cursor: "pointer",
+                                background: sel ? `${ri.accentColor}08` : "transparent",
+                                transition: "background 0.14s",
+                              }}
+                              onClick={() => setSelectedProtocol((prev) => ({ ...prev, [ri.item.id]: !sel }))}
+                              onKeyDown={(e) => e.key === " " && setSelectedProtocol((prev) => ({ ...prev, [ri.item.id]: !sel }))}
+                            >
+                              {/* Square checkbox */}
+                              <div style={{
+                                width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                                background: sel ? ri.accentColor : "transparent",
+                                border: `2px solid ${sel ? ri.accentColor : "rgba(255,255,255,0.2)"}`,
+                                display: "flex", alignItems: "center", justifyContent: "center",
+                                transition: "all 0.13s",
+                              }}>
+                                {sel && <span style={{ color: "#0b0c09", fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                              </div>
+                              {/* Text */}
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 13.5, fontWeight: 600, color: sel ? "var(--text3)" : "var(--text)", textDecoration: sel ? "line-through" : "none", transition: "color 0.13s", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {ri.name}
+                                </div>
+                                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {ri.detail}
+                                </div>
+                              </div>
+                              {/* Color dot */}
+                              <div style={{ width: 8, height: 8, borderRadius: "50%", background: ri.accentColor, flexShrink: 0, opacity: sel ? 0.3 : 0.7 }} />
                             </div>
-                            <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${arxTarget > 0 ? Math.min(100, (arxDone / arxTarget) * 100) : 0}%`, background: "#9dcc3a", borderRadius: 2 }} />
-                            </div>
-                          </div>
-                        )}
-                        {carolTarget > 0 && (
-                          <div>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Cardio</span>
-                              <span style={{ fontSize: 11, color: carolDone >= carolTarget ? "#9dcc3a" : "var(--text2)", fontWeight: 600 }}>{carolDone}/{carolTarget}</span>
-                            </div>
-                            <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${carolTarget > 0 ? Math.min(100, (carolDone / carolTarget) * 100) : 0}%`, background: "#2ec8c8", borderRadius: 2 }} />
-                            </div>
-                          </div>
-                        )}
-                        {recovWeekTarget > 0 && (
-                          <div>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Recovery</span>
-                              <span style={{ fontSize: 11, color: recovWeekDone >= recovWeekTarget ? "#9dcc3a" : "var(--text2)", fontWeight: 600 }}>{recovWeekDone}/{recovWeekTarget}</span>
-                            </div>
-                            <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${recovWeekTarget > 0 ? Math.min(100, (recovWeekDone / recovWeekTarget) * 100) : 0}%`, background: "#f472b6", borderRadius: 2 }} />
-                            </div>
-                          </div>
-                        )}
-                        {totalBonusThisWeek > 0 && (
-                          <div>
-                            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                              <span style={{ fontSize: 11, color: "var(--text3)" }}>Add-ons</span>
-                              <span style={{ fontSize: 11, color: "#2ec8c8", fontWeight: 600 }}>+{totalBonusThisWeek}</span>
-                            </div>
-                            <div style={{ height: 3, background: "rgba(46,200,200,0.25)", borderRadius: 2 }} />
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  ) : (
-                    <div style={{ fontSize: 13, color: "var(--text3)", lineHeight: 1.6 }}>
-                      No protocol targets set. Dustin will assign your protocol after your first session.
-                    </div>
-                  )}
-
-                  {/* Latest win (inline, compact) */}
-                  {payload.wins.length > 0 && (
-                    <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
-                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(220,180,100,0.6)", marginBottom: 6 }}>Latest Win</div>
-                      <div style={{ fontSize: 13, color: "var(--text)", fontWeight: 500 }}>{payload.wins[0].label}</div>
-                    </div>
-                  )}
-
-                  {/* Progress link */}
-                  <div style={{ marginTop: 12, textAlign: "right" }}>
-                    <a href="/member/progress" style={{ fontSize: 11, color: "var(--text3)", textDecoration: "none" }}>Full progress →</a>
-                  </div>
-                </div>
-
-                {/* ── Section 5: Optional Add-Ons / Note from Coach ───────── */}
-                {(payload.sessionNote || payload.todaysPlan?.activities.some((a) => a.isOptional)) && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {/* Optional plan activities */}
-                    {payload.todaysPlan?.activities.filter((a) => a.isOptional).map((act) => (
-                      <div key={act.id} style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "14px 18px" }}>
-                        <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 6 }}>Optional</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>{act.name}</div>
-                        {act.alternativeActivity && (
-                          <div style={{ fontSize: 11, color: "var(--text3)", fontStyle: "italic" }}>Alt: {act.alternativeActivity}</div>
-                        )}
+                          );
+                        })}
                       </div>
                     ))}
 
-                    {/* Coach note */}
-                    {payload.sessionNote && (
-                      <div style={{ background: "rgba(220,180,100,0.04)", border: "1px solid rgba(220,180,100,0.14)", borderRadius: "var(--r)", padding: "14px 18px" }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                          <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(220,180,100,0.75)" }}>Note from {payload.sessionNote.coachName}</div>
-                          <div style={{ fontSize: 10, color: "var(--text3)" }}>{payload.sessionNote.date}</div>
-                        </div>
-                        <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0, fontStyle: "italic" }}>&ldquo;{payload.sessionNote.text}&rdquo;</p>
+                    {/* Add-ons — bigger pills, category-color coded */}
+                    <div style={{ padding: "12px 20px 16px", borderTop: "1px solid var(--border)" }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 10 }}>Add-ons</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {BONUS_META.map(({ key, label, color, bg }) => {
+                          const sel = selectedBonus[key] ?? false;
+                          return (
+                            <button key={key} type="button"
+                              onClick={() => setSelectedBonus((prev) => ({ ...prev, [key]: !sel }))}
+                              style={{
+                                padding: "9px 16px", borderRadius: 24,
+                                border: `1.5px solid ${sel ? color : "rgba(255,255,255,0.14)"}`,
+                                background: sel ? bg : "transparent",
+                                color: sel ? color : "var(--text3)",
+                                fontSize: 13, fontWeight: sel ? 600 : 400,
+                                cursor: "pointer", transition: "all 0.14s",
+                              }}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {bonusCelebration && (
+                      <div style={{ padding: "8px 20px", background: "rgba(157,204,58,0.06)", borderTop: "1px solid rgba(157,204,58,0.12)" }}>
+                        <div style={{ fontSize: 12, color: "#9dcc3a", fontWeight: 500 }}>{bonusCelebration}</div>
                       </div>
                     )}
+
+                    {/* Save button */}
+                    <div style={{ padding: "0 20px 16px" }}>
+                      <button
+                        type="button"
+                        className="btn btn-lime"
+                        disabled={savingActivity}
+                        style={{ width: "100%", fontSize: 13.5, fontWeight: 700, opacity: savingActivity ? 0.7 : 1, padding: "12px 0" }}
+                        onClick={() => { void handleSave(); }}
+                      >
+                        {savingActivity ? "Saving…" : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ═══════════════════════════════════════════════════════════ */}
+                {/* SECTION 3 — Week Status                                    */}
+                {/* Count driven by what's checked above — updates live        */}
+                {/* ═══════════════════════════════════════════════════════════ */}
+                {hasProtocol && weekTotal > 0 && (
+                  <div style={{
+                    background: "var(--bg3)",
+                    border: weekComplete ? "1px solid rgba(157,204,58,0.35)" : "1px solid var(--border)",
+                    borderRadius: "var(--r)",
+                    padding: "18px 20px",
+                    marginBottom: 14,
+                  }}>
+                    {/* Big count */}
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 10 }}>
+                      <span style={{ fontSize: 32, fontWeight: 800, color: weekComplete ? "#9dcc3a" : "var(--text)", lineHeight: 1 }}>
+                        {checkedNow}
+                      </span>
+                      <span style={{ fontSize: 16, color: "var(--text3)", fontWeight: 500 }}>
+                        / {weekTotal} sessions complete this week
+                      </span>
+                      {weekComplete && (
+                        <span style={{ fontSize: 13, color: "#9dcc3a", fontWeight: 700, marginLeft: 4 }}>✓</span>
+                      )}
+                    </div>
+
+                    {/* Progress bar */}
+                    <div style={{ height: 6, background: "rgba(255,255,255,0.07)", borderRadius: 4, overflow: "hidden", marginBottom: 10 }}>
+                      <div style={{
+                        height: "100%",
+                        width: `${weekPctLive}%`,
+                        background: weekComplete ? "#9dcc3a" : `linear-gradient(90deg, #9dcc3a99, #9dcc3a55)`,
+                        borderRadius: 4,
+                        transition: "width 0.3s ease",
+                      }} />
+                    </div>
+
+                    {/* Per-category dots */}
+                    <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
+                      {arxTarget > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: arxDone >= arxTarget ? "#9dcc3a" : "rgba(255,255,255,0.18)" }} />
+                          <span style={{ fontSize: 11, color: "var(--text3)" }}>Strength <strong style={{ color: arxDone >= arxTarget ? "#9dcc3a" : "var(--text2)" }}>{arxDone}/{arxTarget}</strong></span>
+                        </div>
+                      )}
+                      {carolTarget > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: carolDone >= carolTarget ? "#9dcc3a" : "rgba(255,255,255,0.18)" }} />
+                          <span style={{ fontSize: 11, color: "var(--text3)" }}>Cardio <strong style={{ color: carolDone >= carolTarget ? "#9dcc3a" : "var(--text2)" }}>{carolDone}/{carolTarget}</strong></span>
+                        </div>
+                      )}
+                      {recovWeekTarget > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: recovWeekDone >= recovWeekTarget ? "#9dcc3a" : "rgba(255,255,255,0.18)" }} />
+                          <span style={{ fontSize: 11, color: "var(--text3)" }}>Recovery <strong style={{ color: recovWeekDone >= recovWeekTarget ? "#9dcc3a" : "var(--text2)" }}>{recovWeekDone}/{recovWeekTarget}</strong></span>
+                        </div>
+                      )}
+                      {totalBonusThisWeek > 0 && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                          <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#2ec8c8" }} />
+                          <span style={{ fontSize: 11, color: "var(--text3)" }}>Add-ons <strong style={{ color: "#2ec8c8" }}>+{totalBonusThisWeek}</strong></span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Latest win + progress link */}
+                    {payload.wins.length > 0 && (
+                      <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
+                        <span style={{ fontSize: 11, color: "rgba(220,180,100,0.7)", marginRight: 6 }}>Latest win —</span>
+                        <span style={{ fontSize: 12, color: "var(--text)", fontWeight: 500 }}>{payload.wins[0].label}</span>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 10, textAlign: "right" }}>
+                      <a href="/member/progress" style={{ fontSize: 11, color: "var(--text3)", textDecoration: "none" }}>Full progress →</a>
+                    </div>
+                  </div>
+                )}
+
+                {/* Coach note */}
+                {payload.sessionNote && (
+                  <div style={{ background: "rgba(220,180,100,0.04)", border: "1px solid rgba(220,180,100,0.14)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(220,180,100,0.75)" }}>Note from {payload.sessionNote.coachName}</div>
+                      <div style={{ fontSize: 10, color: "var(--text3)" }}>{payload.sessionNote.date}</div>
+                    </div>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0, fontStyle: "italic" }}>&ldquo;{payload.sessionNote.text}&rdquo;</p>
                   </div>
                 )}
               </>
