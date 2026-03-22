@@ -3567,6 +3567,12 @@ export function DashboardReactClient({
           })()}
 
           {/* ── Assign form ──────────────────────────────────────────────── */}
+          {(() => {
+            const assignedProto = coachProtocols.find((p) => p.id === assignProtocolId);
+            const assignTier = normalizeProtocolTier(assignedProto?.tier);
+            const assignFreqOptions = assignTier === "healthspan_elite" ? [3,4,5,6] : [1,2,3,4,5,6];
+            const assignFreq = assignProtocolId ? (protocolFreqSelection[assignProtocolId] ?? assignedProto?.days_per_week ?? 3) : null;
+            return (
           <div className="card">
             <div className="card-header"><div className="card-title">Assign to member</div></div>
             <div style={{ padding: "16px 20px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -3591,7 +3597,10 @@ export function DashboardReactClient({
                   onChange={(e) => setAssignProtocolId(e.target.value)}
                 >
                   <option value="">Select protocol…</option>
-                  {coachProtocols.map((p) => (
+                  {(() => {
+                    const seen = new Set<string>();
+                    return coachProtocols.filter((p) => { if (seen.has(p.name)) return false; seen.add(p.name); return true; });
+                  })().map((p) => (
                     <option key={p.id} value={p.id}>{p.name}{p.tier ? ` — ${PROTOCOL_TIER_LABELS[normalizeProtocolTier(p.tier) ?? "longevity"] ?? p.tier}` : ""}</option>
                   ))}
                 </select>
@@ -3615,6 +3624,29 @@ export function DashboardReactClient({
                   onChange={(e) => setAssignCoachNotes(e.target.value)}
                 />
               </div>
+              {assignProtocolId && (
+                <div style={{ gridColumn: "1 / -1" }}>
+                  <label style={{ fontSize: 11, color: "var(--text3)", display: "block", marginBottom: 8 }}>
+                    Days per week{assignTier === "healthspan_elite" ? " (Elite: 3–6 required)" : ""}
+                  </label>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {assignFreqOptions.map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => setProtocolFreqSelection((prev) => ({ ...prev, [assignProtocolId]: n }))}
+                        style={{
+                          width: 36, height: 36, borderRadius: "50%", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                          background: assignFreq === n ? "var(--lime)" : "var(--bg3)",
+                          border: `1px solid ${assignFreq === n ? "var(--lime)" : "var(--border)"}`,
+                          color: assignFreq === n ? "#0b0c09" : "var(--text3)",
+                          transition: "all 0.15s",
+                        }}
+                      >{n}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
             <div style={{ padding: "0 20px 20px", display: "flex", alignItems: "center", gap: 12 }}>
               <button
@@ -3632,8 +3664,9 @@ export function DashboardReactClient({
                       protocol_id: assignProtocolId,
                       start_date: assignStartDate,
                       coach_notes: assignCoachNotes || undefined,
+                      days_per_week: assignFreq ?? undefined,
                     });
-                    setAssignStatus("✓ Protocol assigned successfully.");
+                    setAssignStatus(`✓ Assigned ${assignedProto?.name ?? "protocol"}${assignFreq ? ` at ${assignFreq}x/week` : ""} successfully.`);
                     setAssignMemberId("");
                     setAssignProtocolId("");
                     setAssignCoachNotes("");
@@ -3644,7 +3677,7 @@ export function DashboardReactClient({
                   }
                 }}
               >
-                {isAssigning ? "Assigning…" : "Assign Protocol"}
+                {isAssigning ? "Assigning…" : `Assign${assignedProto && assignFreq ? ` ${assignedProto.name} — ${assignFreq}x/wk` : ""}`}
               </button>
               {assignStatus && (
                 <span style={{ fontSize: 12, color: assignStatus.startsWith("✓") ? "#4A7C59" : "#B84040" }}>
@@ -3653,6 +3686,8 @@ export function DashboardReactClient({
               )}
             </div>
           </div>
+            );
+          })()}
 
           {/* Member goals section — shown when a member is selected */}
           {assignMemberId && (

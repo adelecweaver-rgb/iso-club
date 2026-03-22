@@ -17,6 +17,7 @@ type Body = {
   protocol_id?: string;
   start_date?: string;
   coach_notes?: string;
+  days_per_week?: number;
   // Legacy fields for old-style protocol creation
   name?: string;
   description?: string;
@@ -105,6 +106,7 @@ export async function POST(request: Request) {
       const protocolId = asRequiredString(body.protocol_id, "protocol_id");
       const startDate = typeof body.start_date === "string" && body.start_date ? body.start_date : new Date().toISOString().slice(0, 10);
       const coachNotes = typeof body.coach_notes === "string" ? body.coach_notes.trim() : null;
+      const daysPerWeek = typeof body.days_per_week === "number" && body.days_per_week >= 1 && body.days_per_week <= 6 ? body.days_per_week : null;
       const actorId = String(context.dbUser.id ?? "");
 
       // Deactivate any existing active assignment for this member
@@ -116,7 +118,7 @@ export async function POST(request: Request) {
 
       const assignRes = await context.supabase
         .from("member_protocols")
-        .insert({ member_id: memberId, protocol_id: protocolId, assigned_by: actorId, start_date: startDate, status: "active", coach_notes: coachNotes })
+        .insert({ member_id: memberId, protocol_id: protocolId, assigned_by: actorId, start_date: startDate, status: "active", coach_notes: coachNotes, days_per_week: daysPerWeek })
         .select("id")
         .single();
       if (assignRes.error) throw new Error(assignRes.error.message);
