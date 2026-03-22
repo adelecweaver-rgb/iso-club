@@ -159,6 +159,7 @@ export default async function OnboardingPage() {
       window.selectContrast = selectContrast;
       window.selectDevice = selectDevice;
       window.toggleCheck = toggleCheck;
+      window.nextScreenFromHealth = window.nextScreenFromHealth || nextScreen;
 
       const parseHeightInches = (raw) => {
         const value = String(raw || "").trim();
@@ -267,12 +268,13 @@ export default async function OnboardingPage() {
       };
 
       // ── Protocol tier scoring logic ─────────────────────────────────────
-      const computeProtocolRouting = (goals, days, limitations, medConditions) => {
+      const computeProtocolRouting = (goals, days, limitations) => {
         const SIGNIFICANT_INJURIES = ["lower back", "knees", "hips", "neck", "pelvic floor"];
         const hasSignificantInjury = limitations.some((l) =>
           SIGNIFICANT_INJURIES.some((s) => l.toLowerCase().includes(s))
         );
-        const hasOsteoporosis = /osteopor/i.test(medConditions);
+        // Osteoporosis detected via checkbox, not free-text
+        const hasOsteoporosis = limitations.some((l) => l.toLowerCase().includes("osteoporosis"));
         const effectiveDays = hasSignificantInjury ? Math.min(days || 3, 3) : (days || 3);
 
         if (hasOsteoporosis) {
@@ -281,18 +283,19 @@ export default async function OnboardingPage() {
             effectiveDays,
             note: [
               "Osteoporosis flag: routed to Bone Density protocol regardless of stated goal.",
-              hasSignificantInjury ? "Significant injury also noted: capped at 3 days/week." : null,
+              hasSignificantInjury ? "Significant injury also noted: custom injury pathway pending." : null,
             ].filter(Boolean).join(" "),
           };
         }
 
         if (goals.includes("Healthspan Elite")) {
+          // Significant injury does NOT override Elite tier — custom pathway TBD
           return {
             tier: "healthspan_elite",
-            effectiveDays: Math.max(Math.min(effectiveDays, 6), 3),
+            effectiveDays: Math.max(Math.min(days || 3, 6), 3),
             note: [
               "Goal: Healthspan Elite — full protocol suite. NXPro prescribed.",
-              hasSignificantInjury ? "Significant injury noted: coach review recommended before session 1. Capped at 3 days/week." : null,
+              hasSignificantInjury ? "Significant injury noted: custom injury pathway required before protocol assignment." : null,
             ].filter(Boolean).join(" "),
           };
         }
@@ -362,7 +365,7 @@ export default async function OnboardingPage() {
           const days = selectedDays();
           const contrastPref = selectedContrastPref();
           const medConditions = selectedMedicalConditions();
-          const routing = computeProtocolRouting(goals, days, selectedLimitationItems, medConditions);
+          const routing = computeProtocolRouting(goals, days, selectedLimitationItems);
 
           const limitationsSummary = selectedLimitationItems.length
             ? "Physical limitations: " + selectedLimitationItems.join(", ")

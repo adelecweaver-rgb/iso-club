@@ -288,14 +288,16 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
     </div>
 
     <!-- Healthspan Elite — full-width card, visually distinct -->
-    <div class="option-card option-card-elite" id="goal-elite" onclick="toggleGoal(this)" style="margin-bottom:28px;border-color:var(--amber);position:relative;padding:20px">
+    <div class="option-card option-card-elite" id="goal-elite" onclick="toggleGoal(this)" style="margin-bottom:8px;border-color:var(--amber);position:relative;padding:20px">
       <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:var(--amber);color:#fff;font-size:9px;padding:3px 10px;border-radius:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;white-space:nowrap">Maximum Protocol</div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <span style="font-size:24px">🏆</span>
         <div class="option-card-title" style="font-size:15px">Healthspan Elite</div>
       </div>
       <div class="option-card-sub" style="font-size:13px;line-height:1.6">Maximum evidence-based protocol — I've made my health a top priority and want to use every tool available. Time is not a constraint.</div>
+      <div style="margin-top:10px;font-size:11px;color:var(--amber);font-weight:500">Requires at least 3 days per week</div>
     </div>
+    <div style="margin-bottom:28px"></div>
 
     <div class="btn-row">
       <button class="btn-secondary" onclick="prevScreen()">← Back</button>
@@ -348,6 +350,10 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
       </div>
     </div>
 
+    <div id="elite-days-warning" style="display:none;font-size:12px;color:var(--amber);padding:10px 14px;background:rgba(139,105,20,0.08);border:1px solid rgba(139,105,20,0.25);border-radius:var(--r-sm);margin-top:10px;margin-bottom:4px">
+      Healthspan Elite requires at least 3 days per week. Please select 3, 4, or 5+.
+    </div>
+
     <!-- Contrast therapy — appears when 3+ days selected -->
     <div class="form-group" id="contrast-therapy-wrap" style="display:none;background:var(--bg2);border:1px solid var(--border2);border-radius:var(--r);padding:16px 18px;margin-bottom:16px">
       <label class="form-label" style="margin-bottom:12px">Are you interested in contrast therapy (alternating sauna and cold plunge) on recovery days?</label>
@@ -373,6 +379,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
         <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="hips"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Hips</span></div>
         <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="neck"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Neck</span></div>
         <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="pelvic-floor"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Pelvic floor</span></div>
+        <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="osteoporosis"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Osteoporosis</span></div>
         <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="none"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">None</span></div>
         <div class="checkbox-item" onclick="toggleCheck(this)" data-limitations-option="other"><div class="checkbox-box"><span class="checkbox-check">✓</span></div><span class="checkbox-label">Other</span></div>
       </div>
@@ -388,7 +395,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
     <div class="form-group">
       <label class="form-label">Any relevant medical conditions? (optional)</label>
-      <input type="text" class="form-input" placeholder="e.g. Type 2 diabetes, hypertension, osteoporosis…">
+      <input type="text" class="form-input" placeholder="e.g. Type 2 diabetes, hypertension…">
     </div>
 
     <div class="form-group">
@@ -403,7 +410,7 @@ body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellips
 
     <div class="btn-row">
       <button class="btn-secondary" onclick="prevScreen()">← Back</button>
-      <button class="btn-primary" onclick="nextScreen()">Continue →</button>
+      <button class="btn-primary" onclick="nextScreenFromHealth()">Continue →</button>
     </div>
   </div>
 
@@ -559,6 +566,22 @@ function selectDays(el, days) {
   el.classList.add('selected');
   const wrap = document.getElementById('contrast-therapy-wrap');
   if (wrap) wrap.style.display = parseInt(days) >= 3 ? 'block' : 'none';
+}
+
+function nextScreenFromHealth() {
+  const eliteSelected = document.querySelector('#goal-elite.selected');
+  if (eliteSelected) {
+    const daysCard = document.querySelector('#days-grid .option-card.selected');
+    const days = daysCard ? parseInt(daysCard.getAttribute('data-days') || '0') : 0;
+    const warning = document.getElementById('elite-days-warning');
+    if (days < 3) {
+      if (warning) warning.style.display = 'block';
+      document.getElementById('days-grid').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    if (warning) warning.style.display = 'none';
+  }
+  nextScreen();
 }
 
 function selectContrast(el, value) {
