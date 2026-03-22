@@ -1130,9 +1130,27 @@ export function DashboardReactClient({
     <div className="app">
       <nav className="sidebar">
         <div className="logo">
-          <div className="logo-word">
-            Iso<em>.</em>
-          </div>
+          <svg
+            viewBox="0 0 130 80"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            style={{ width: 78, height: 48, display: "block" }}
+            aria-label="Iso"
+          >
+            {/* dot — top of the i */}
+            <circle cx="24" cy="9" r="5.5" fill="#edeae0" />
+            {/* i body: curves down then sweeps into base, flows right into /o */}
+            <path
+              d="M24 20 C24 28, 18 35, 14 44 C10 53, 14 62, 24 64 C34 66, 42 58, 54 46 C66 34, 76 20, 88 18"
+              stroke="#edeae0"
+              strokeWidth="7.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              fill="none"
+            />
+            {/* o — circle at right */}
+            <circle cx="107" cy="50" r="19" stroke="#edeae0" strokeWidth="7.5" fill="none" />
+          </svg>
           <div className="logo-sub">Healthspan OS</div>
         </div>
 
