@@ -888,10 +888,10 @@ export function DashboardReactClient({
   const [checklistChecked, setChecklistChecked] = useState<Record<string, boolean>>({});
   const [coachProtocols, setCoachProtocols] = useState<CoachProtocol[]>([]);
   const [protocolTierFilter, setProtocolTierFilter] = useState<ProtocolTier | "all">("all");
-  const [protocolDaysFilter, setProtocolDaysFilter] = useState<number | "all">("all");
   const [expandedProtocolId, setExpandedProtocolId] = useState<string | null>(null);
   const [protocolDaysCache, setProtocolDaysCache] = useState<Record<string, ProtocolDay[]>>({});
   const [loadingProtocolDays, setLoadingProtocolDays] = useState<string | null>(null);
+  const [protocolFreqSelection, setProtocolFreqSelection] = useState<Record<string, number>>({});
   const [allMembers, setAllMembers] = useState<Array<{ id: string; name: string; tier: string }>>([]);
   const [assignMemberId, setAssignMemberId] = useState("");
   const [assignProtocolId, setAssignProtocolId] = useState("");
@@ -3371,45 +3371,22 @@ export function DashboardReactClient({
         <div id="coach-protocols" className="content" style={{ display: mode === "coach" && coachView === "protocols" ? "block" : "none" }}>
           <div className="sec-header"><div className="sec-title">Protocol Library</div></div>
 
-          {/* ── Filters ──────────────────────────────────────────────────── */}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 18, alignItems: "center" }}>
-            <div>
-              <label style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: 4 }}>Tier</label>
-              <select
-                className="form-input"
-                style={{ fontSize: 12, padding: "5px 10px" }}
-                value={protocolTierFilter}
-                onChange={(e) => setProtocolTierFilter(e.target.value as ProtocolTier | "all")}
-              >
-                <option value="all">All tiers</option>
-                {(Object.entries(PROTOCOL_TIER_LABELS) as [ProtocolTier, string][]).map(([k, v]) => (
-                  <option key={k} value={k}>{v}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", display: "block", marginBottom: 4 }}>Days / week</label>
-              <select
-                className="form-input"
-                style={{ fontSize: 12, padding: "5px 10px" }}
-                value={protocolDaysFilter}
-                onChange={(e) => setProtocolDaysFilter(e.target.value === "all" ? "all" : Number(e.target.value))}
-              >
-                <option value="all">Any</option>
-                {[1,2,3,4,5,6].map((n) => (
-                  <option key={n} value={n}>{n}x / week</option>
-                ))}
-              </select>
-            </div>
-            {(protocolTierFilter !== "all" || protocolDaysFilter !== "all") && (
+          {/* ── Tier filter ───────────────────────────────────────────────── */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 18 }}>
+            {([["all", "All"] as const, ...(Object.entries(PROTOCOL_TIER_LABELS) as [ProtocolTier, string][])]).map(([k, v]) => (
               <button
+                key={k}
                 type="button"
-                onClick={() => { setProtocolTierFilter("all"); setProtocolDaysFilter("all"); }}
-                style={{ background: "none", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", color: "var(--text3)", fontSize: 11, padding: "5px 10px", cursor: "pointer", alignSelf: "flex-end" }}
-              >
-                Clear filters
-              </button>
-            )}
+                onClick={() => setProtocolTierFilter(k as ProtocolTier | "all")}
+                style={{
+                  fontSize: 11, padding: "5px 12px", borderRadius: "var(--r-sm)", cursor: "pointer",
+                  background: protocolTierFilter === k ? "rgba(157,204,58,0.15)" : "var(--bg3)",
+                  border: `1px solid ${protocolTierFilter === k ? "rgba(157,204,58,0.4)" : "var(--border)"}`,
+                  color: protocolTierFilter === k ? "var(--lime)" : "var(--text3)",
+                  fontWeight: protocolTierFilter === k ? 600 : 400,
+                }}
+              >{v}</button>
+            ))}
           </div>
 
           {/* ── Protocol cards ───────────────────────────────────────────── */}
@@ -3420,23 +3397,19 @@ export function DashboardReactClient({
               </div>
             </div>
           ) : (() => {
-            const filtered = coachProtocols.filter((p) => {
-              if (protocolTierFilter !== "all") {
-                const t = normalizeProtocolTier(p.tier);
-                if (t !== protocolTierFilter) return false;
-              }
-              if (protocolDaysFilter !== "all") {
-                const d = p.days_per_week != null ? Number(p.days_per_week) : null;
-                if (d !== Number(protocolDaysFilter)) return false;
-              }
+            // Deduplicate by name client-side (keep first occurrence)
+            const seen = new Set<string>();
+            const unique = coachProtocols.filter((p) => {
+              if (seen.has(p.name)) return false;
+              seen.add(p.name);
               return true;
             });
+            const filtered = unique.filter((p) => {
+              if (protocolTierFilter === "all") return true;
+              return normalizeProtocolTier(p.tier) === protocolTierFilter;
+            });
             if (filtered.length === 0) {
-              return (
-                <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 20, padding: "12px 0" }}>
-                  No protocols match the selected filters.
-                </div>
-              );
+              return <div style={{ fontSize: 13, color: "var(--text3)", marginBottom: 20, padding: "12px 0" }}>No protocols match the selected tier.</div>;
             }
             return (
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
@@ -3446,6 +3419,8 @@ export function DashboardReactClient({
                   const isSelected = assignProtocolId === proto.id;
                   const days = protocolDaysCache[proto.id];
                   const isLoadingDays = loadingProtocolDays === proto.id;
+                  const freqOptions = tier === "healthspan_elite" ? [3,4,5,6] : [1,2,3,4,5,6];
+                  const selectedFreq = protocolFreqSelection[proto.id] ?? proto.days_per_week ?? freqOptions[Math.floor(freqOptions.length / 2)];
                   return (
                     <div
                       key={proto.id}
@@ -3454,47 +3429,45 @@ export function DashboardReactClient({
                         border: `1px solid ${isSelected ? "rgba(157,204,58,0.35)" : "var(--border2)"}`,
                         borderRadius: "var(--r)",
                         overflow: "hidden",
-                        transition: "border-color 0.15s",
                       }}
                     >
-                      {/* Card header row */}
+                      {/* Card header */}
                       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "14px 16px" }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
                             <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>{proto.name}</span>
                             {tier && (
-                              <span style={{ fontSize: 9, background: tier === "healthspan_elite" ? "rgba(168,85,240,0.15)" : "rgba(157,204,58,0.1)", color: tier === "healthspan_elite" ? "#a855f0" : "var(--lime)", border: `1px solid ${tier === "healthspan_elite" ? "rgba(168,85,240,0.4)" : "rgba(157,204,58,0.3)"}`, borderRadius: 3, padding: "2px 7px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, flexShrink: 0 }}>
+                              <span style={{ fontSize: 9, background: tier === "healthspan_elite" ? "rgba(168,85,240,0.15)" : "rgba(157,204,58,0.1)", color: tier === "healthspan_elite" ? "#a855f0" : "var(--lime)", border: `1px solid ${tier === "healthspan_elite" ? "rgba(168,85,240,0.4)" : "rgba(157,204,58,0.3)"}`, borderRadius: 3, padding: "2px 7px", textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600 }}>
                                 {PROTOCOL_TIER_LABELS[tier]}
-                              </span>
-                            )}
-                            {proto.days_per_week != null && (
-                              <span style={{ fontSize: 9, color: "var(--text3)", border: "1px solid var(--border)", borderRadius: 3, padding: "2px 7px", letterSpacing: "0.06em" }}>
-                                {proto.days_per_week}x / wk
-                                {tier === "healthspan_elite" && " (Elite: 3–6)"}
                               </span>
                             )}
                             <span style={{ fontSize: 9, background: "rgba(255,255,255,0.05)", color: "var(--text3)", borderRadius: 3, padding: "2px 7px", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                               {formatTargetSystem(proto.target_system ?? "")}
                             </span>
                           </div>
-                          <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.5 }}>{proto.description}</p>
-                          {/* Frequency summary */}
-                          {(proto.arx_frequency_per_week != null || proto.carol_frequency_per_week != null || proto.recovery_target_per_month != null) && (
-                            <div style={{ display: "flex", gap: 14, marginTop: 8, flexWrap: "wrap" }}>
-                              {proto.arx_frequency_per_week != null && (
-                                <span style={{ fontSize: 11, color: "var(--text2)" }}>ARX: <strong>{proto.arx_frequency_per_week}x/wk</strong></span>
-                              )}
-                              {proto.carol_frequency_per_week != null && (
-                                <span style={{ fontSize: 11, color: "var(--text2)" }}>CAROL: <strong>{proto.carol_frequency_per_week}x/wk</strong></span>
-                              )}
-                              {proto.recovery_target_per_month != null && (
-                                <span style={{ fontSize: 11, color: "var(--text2)" }}>Recovery: <strong>{proto.recovery_target_per_month}x/mo</strong></span>
-                              )}
-                              {tier && (
-                                <span style={{ fontSize: 11, color: "var(--text3)" }}>Freq range: <strong>{tierDaysRange(tier)}x/wk</strong></span>
-                              )}
+                          <p style={{ fontSize: 12, color: "var(--text3)", margin: "0 0 10px 0", lineHeight: 1.5 }}>{proto.description}</p>
+
+                          {/* Frequency selector */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Days/week:</span>
+                            <div style={{ display: "flex", gap: 4 }}>
+                              {freqOptions.map((n) => (
+                                <button
+                                  key={n}
+                                  type="button"
+                                  onClick={() => setProtocolFreqSelection((prev) => ({ ...prev, [proto.id]: n }))}
+                                  style={{
+                                    width: 28, height: 28, borderRadius: "50%", fontSize: 11, fontWeight: 600, cursor: "pointer",
+                                    background: selectedFreq === n ? "var(--lime)" : "var(--bg3)",
+                                    border: `1px solid ${selectedFreq === n ? "var(--lime)" : "var(--border)"}`,
+                                    color: selectedFreq === n ? "#0b0c09" : "var(--text3)",
+                                    transition: "all 0.15s",
+                                  }}
+                                >{n}</button>
+                              ))}
                             </div>
-                          )}
+                            <span style={{ fontSize: 10, color: "var(--text3)" }}>×/wk{tier === "healthspan_elite" ? " (Elite: 3–6 required)" : ""}</span>
+                          </div>
                         </div>
                         <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                           <button
@@ -3535,36 +3508,36 @@ export function DashboardReactClient({
                         </div>
                       )}
 
-                      {/* Expanded day breakdown */}
+                      {/* Day breakdown */}
                       {isExpanded && (
                         <div style={{ padding: "0 16px 14px" }}>
-                          <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 10 }}>Session Breakdown</div>
-
+                          <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 10 }}>
+                            Session Breakdown — {selectedFreq}x / week
+                          </div>
                           {/* Legend */}
                           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
                             {[
                               { style: { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", color: "var(--text2)" }, label: "Core" },
                               { style: { background: "rgba(85,184,240,0.18)", border: "1px solid rgba(85,184,240,0.6)", color: "#55b8f0" }, label: "Cold plunge — recommended" },
                               { style: { background: "transparent", border: "1px dashed rgba(85,184,240,0.5)", color: "#55b8f0" }, label: "Cold plunge — optional" },
-                              { style: { background: "rgba(240,112,85,0.12)", border: "1px solid rgba(240,112,85,0.4)", color: "#f07055" }, label: "Cold plunge — never" },
+                              { style: { background: "rgba(240,112,85,0.12)", border: "1px solid rgba(240,112,85,0.4)", color: "#f07055" }, label: "Never after ARX/Katalyst" },
                               { style: { background: "transparent", border: "1px dashed rgba(255,255,255,0.2)", color: "var(--text3)" }, label: "Optional add-on" },
                               { style: { background: "rgba(168,85,240,0.15)", border: "1px solid rgba(168,85,240,0.5)", color: "#a855f0" }, label: "NxPro (Elite)" },
                               { style: { background: "rgba(240,185,85,0.15)", border: "1px solid rgba(240,185,85,0.5)", color: "#f0b955" }, label: "Proteus" },
                             ].map((item) => (
                               <div key={item.label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                <span style={{ fontSize: 9, borderRadius: 3, padding: "1px 6px", ...item.style }}>{item.label.split(" — ")[0].substring(0, 4)}</span>
+                                <span style={{ fontSize: 9, borderRadius: 3, padding: "1px 6px", ...item.style }}>eg</span>
                                 <span style={{ fontSize: 9, color: "var(--text3)" }}>{item.label}</span>
                               </div>
                             ))}
                           </div>
-
                           {isLoadingDays ? (
                             <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>Loading days…</div>
                           ) : !days || days.length === 0 ? (
-                            <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No day-level data available for this protocol.</div>
+                            <div style={{ fontSize: 12, color: "var(--text3)", padding: "8px 0" }}>No day-level data for this protocol yet.</div>
                           ) : (
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
-                              {days.map((day) => (
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
+                              {days.slice(0, selectedFreq).map((day) => (
                                 <div key={day.id} style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "10px 12px", border: "1px solid var(--border)" }}>
                                   <div style={{ fontSize: 10, fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>{day.dayName}</div>
                                   <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 8, lineHeight: 1.4 }}>{day.dayTheme}</div>
@@ -3573,14 +3546,9 @@ export function DashboardReactClient({
                                       <span style={{ fontSize: 10, color: "var(--text3)", fontStyle: "italic" }}>Rest</span>
                                     ) : day.activities.map((act) => {
                                       const tagStyle = equipmentTagStyle(act.type, act.coldPlunge, act.isOptional);
-                                      const label = act.coldPlunge ? (COLD_PLUNGE_LABELS[act.coldPlunge as NonNullable<ColdPlungeRule>] ?? act.name) : act.name;
                                       return (
-                                        <span
-                                          key={act.id}
-                                          title={act.coldPlunge ? `${act.name} — ${COLD_PLUNGE_LABELS[act.coldPlunge as NonNullable<ColdPlungeRule>] ?? ""}` : act.name}
-                                          style={{ fontSize: 10, borderRadius: 3, padding: "2px 7px", lineHeight: 1.5, ...tagStyle }}
-                                        >
-                                          {act.durationMinutes > 0 ? `${act.name} (${act.durationMinutes}m)` : label}
+                                        <span key={act.id} title={act.name} style={{ fontSize: 10, borderRadius: 3, padding: "2px 7px", lineHeight: 1.5, ...tagStyle }}>
+                                          {act.durationMinutes > 0 ? `${act.name} (${act.durationMinutes}m)` : act.name}
                                         </span>
                                       );
                                     })}
