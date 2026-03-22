@@ -1315,18 +1315,16 @@ export function DashboardReactClient({
 
         <div id="view-dashboard" className="content" style={{ display: mode === "member" && memberView === "dashboard" ? "block" : "none" }}>
 
-          {/* ── Section 1: Today's Plan ───────────────────────────────────── */}
+          {/* ══════════════════════════════════════════════════════════════
+              SECTION 1 — TODAY'S FOCUS
+              Check-in first. When "strong", reveal the day's protocol
+              focus with a one-tap "Log Complete" button.
+          ══════════════════════════════════════════════════════════════ */}
           {(() => {
             const tp = payload.todaysPlan;
-            const cl1 = generateChecklist(payload.protocol);
-            const c1 = payload.checklistCompletions;
-            const done1 = cl1.filter((i) => isChecklistItemDone(i, c1, checklistChecked)).length;
-            // Adjust target down when member chose recovery/hurt (not penalised for rest)
-            const isAdaptedDay = todayCheckin === "low" || todayCheckin === "hurt";
-            const adjustedTotal = isAdaptedDay ? Math.max(0, cl1.length - (tp?.activities.length ?? 1)) : cl1.length;
-            const weekTotal = tp?.sessionsThisWeek ?? done1;
+            const cl = generateChecklist(payload.protocol);
+            const c = payload.checklistCompletions;
 
-            // Check-in submit helper
             async function submitCheckin(feeling: "strong" | "low" | "hurt") {
               if (submittingCheckin) return;
               setSubmittingCheckin(true);
@@ -1334,6 +1332,36 @@ export function DashboardReactClient({
                 await fetch("/api/member/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feeling }) });
                 setTodayCheckin(feeling);
               } catch { /* silent */ } finally { setSubmittingCheckin(false); }
+            }
+
+            // One-tap "Log Complete" — logs all of today's not-yet-done protocol items
+            async function handleLogComplete() {
+              if (savingActivity) return;
+              setSavingActivity(true);
+              try {
+                const initState: Record<string, boolean> = {};
+                for (const item of cl) initState[item.id] = isChecklistItemDone(item, c, {});
+                const toAdd = cl
+                  .filter((item) => !initState[item.id])
+                  .map((item) => ({ type: item.type as "arx" | "carol" | "recovery", subtype: item.subtype }));
+                if (toAdd.length === 0) { setActivitySavedMsg("✓ Already logged — great work today"); setSavingActivity(false); return; }
+                await fetch("/api/member/activity-log", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: [] }),
+                });
+                for (const item of cl) {
+                  if (!initState[item.id]) {
+                    setChecklistChecked((prev) => ({ ...prev, [item.id]: true }));
+                    setSelectedProtocol((prev) => ({ ...prev, [item.id]: true }));
+                    if (item.type === "arx") { c.arxWeekDates.push(c.todayDate); c.arxTodayLogged = true; }
+                    else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); c.carolTodayTypes.push(item.subtype); }
+                    else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); c.recoveryTodayModalities.push(item.subtype); }
+                  }
+                }
+                setActivitySavedMsg("✓ Logged — great work today");
+              } catch { setActivitySavedMsg("Something went wrong — please try again"); }
+              finally { setSavingActivity(false); }
             }
 
             const RECOVERY_ACTS = [
@@ -1344,210 +1372,204 @@ export function DashboardReactClient({
               { n: "Compression Boots — circulation and recovery", m: 20 },
             ];
 
+            // Derive protocol focus label from today's plan or protocol metadata
+            const hasProtocol = !!payload.protocol.targetSystem;
+            const focusTitle = tp?.dayTheme || tp?.dayName || payload.protocol.name || "Today's Session";
+            const focusDesc = tp?.dayDescription
+              ? (tp.dayDescription.length > 180 ? tp.dayDescription.slice(0, 180) + "…" : tp.dayDescription)
+              : null;
+            const todayActivities = (tp?.activities ?? []).filter((a) => !a.isOptional);
+
             return (
               <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 16 }}>
-                {/* Header */}
-                <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 4 }}>Today&apos;s Plan</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)", lineHeight: 1.2 }}>
-                    {todayCheckin === "low" ? "Recovery Day" : todayCheckin === "hurt" ? "Listen to Your Body" : tp?.dayName ? `${tp.dayName} — ${tp.dayTheme}` : todayDateLabel()}
-                  </div>
-                </div>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 14 }}>Today&apos;s Focus</div>
 
-                {/* Feeling check-in — 3 large buttons or selected state */}
-                {!todayCheckin ? (
-                  <div style={{ marginBottom: 18 }}>
-                    <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 10 }}>How are you feeling today?</div>
+                {/* ── Not yet checked in ── */}
+                {!todayCheckin && (
+                  <>
+                    <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 12 }}>How are you feeling today?</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
                       <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #4A7C59", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        style={{ padding: "14px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #4A7C59", color: "var(--text)", cursor: "pointer", fontSize: 13, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1, transition: "background 0.15s" }}
                         onClick={() => { void submitCheckin("strong"); }}>
                         ⚡<br />Feeling strong
                       </button>
                       <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #C4831A", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        style={{ padding: "14px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #C4831A", color: "var(--text)", cursor: "pointer", fontSize: 13, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1, transition: "background 0.15s" }}
                         onClick={() => { void submitCheckin("low"); }}>
                         😴<br />Low energy
                       </button>
                       <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "12px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #B84040", color: "var(--text2)", cursor: "pointer", fontSize: 12.5, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1 }}
+                        style={{ padding: "14px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #B84040", color: "var(--text)", cursor: "pointer", fontSize: 13, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1, transition: "background 0.15s" }}
                         onClick={() => { void submitCheckin("hurt"); }}>
                         🤕<br />Something hurts
                       </button>
                     </div>
-                  </div>
-                ) : (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-                    <div style={{ fontSize: 12, color: "var(--text3)" }}>
-                      Today you chose:{" "}
-                      <strong style={{ color: todayCheckin === "strong" ? "#4A7C59" : todayCheckin === "low" ? "#C4831A" : "#B84040" }}>
-                        {todayCheckin === "strong" ? "⚡ Full plan" : todayCheckin === "low" ? "😴 Recovery day" : "🤕 Rest today"}
-                      </strong>
-                    </div>
-                    <button type="button" style={{ background: "none", border: "none", fontSize: 10, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                      onClick={() => setTodayCheckin(null)}>change</button>
-                  </div>
+                  </>
                 )}
 
-                {/* Plan content — adapts to feeling */}
-                {todayCheckin === "low" ? (
-                  <div>
+                {/* ── Feeling strong → show protocol focus ── */}
+                {todayCheckin === "strong" && (
+                  <>
+                    {!hasProtocol ? (
+                      <div>
+                        <div style={{ fontSize: 18, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>Your plan is being prepared</div>
+                        <p style={{ fontSize: 13, color: "var(--text3)", margin: "0 0 14px 0", lineHeight: 1.6 }}>Dustin will assign your protocol after your first session.</p>
+                        <a href="https://theiso.club/book" target="_blank" rel="noreferrer" className="btn btn-lime btn-sm" style={{ fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Book your first session →</a>
+                      </div>
+                    ) : tp?.isRestDay ? (
+                      <div>
+                        <div style={{ fontSize: 18, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>Rest Day</div>
+                        <p style={{ fontSize: 13, color: "var(--text2)", margin: 0, lineHeight: 1.65 }}>Rest is where your results are made. Protect your sleep, eat well, and hydrate.</p>
+                      </div>
+                    ) : (
+                      <div>
+                        {/* Focus heading */}
+                        <div style={{ fontSize: 22, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.15, marginBottom: focusDesc ? 6 : 14 }}>
+                          {focusTitle}
+                        </div>
+                        {focusDesc && (
+                          <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 14px 0" }}>{focusDesc}</p>
+                        )}
+
+                        {/* Today's activities list */}
+                        {todayActivities.length > 0 && (
+                          <div style={{ background: "rgba(74,124,89,0.05)", border: "1px solid rgba(74,124,89,0.14)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 16 }}>
+                            {todayActivities.map((act, i) => (
+                              <div key={act.id} style={{ display: "flex", alignItems: "center", padding: "9px 14px", borderBottom: i < todayActivities.length - 1 ? "1px solid rgba(74,124,89,0.08)" : "none" }}>
+                                <span style={{ fontSize: 10, color: "#4A7C59", width: 20, flexShrink: 0, fontWeight: 600 }}>{i + 1}</span>
+                                <span style={{ flex: 1, fontSize: 13.5, color: "var(--text)", fontWeight: 500 }}>{act.name}</span>
+                                <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Log Complete button */}
+                        {activitySavedMsg ? (
+                          <div style={{ padding: "10px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.18)", borderRadius: "var(--r-sm)" }}>
+                            <div style={{ fontSize: 13, color: "#4A7C59", fontWeight: 600 }}>{activitySavedMsg}</div>
+                            <button type="button" style={{ marginTop: 6, fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                              onClick={() => setActivitySavedMsg("")}>dismiss</button>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <button type="button" className="btn btn-lime"
+                              disabled={savingActivity}
+                              style={{ fontSize: 13, fontWeight: 700, opacity: savingActivity ? 0.7 : 1, padding: "11px 24px" }}
+                              onClick={() => { void handleLogComplete(); }}>
+                              {savingActivity ? "Logging…" : "Log Complete"}
+                            </button>
+                            {tp && todayActivities.length > 0 && (
+                              <button type="button" className="btn btn-sm" style={{ fontSize: 12 }}
+                                onClick={() => { setSessionStep(0); setSessionCompleted(new Set()); setSessionGuideOpen(true); }}>
+                                View guided plan →
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ marginTop: 14 }}>
+                      <button type="button" style={{ background: "none", border: "none", fontSize: 11, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                        onClick={() => { setTodayCheckin(null); setActivitySavedMsg(""); }}>
+                        change
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* ── Low energy → recovery plan ── */}
+                {todayCheckin === "low" && (
+                  <>
+                    <div style={{ fontSize: 18, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>Recovery Day</div>
                     <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 14 }}>
-                      Listening to your body is part of the protocol. Rest and recovery today sets you up for a stronger session tomorrow.
+                      Listening to your body is part of the protocol. Rest and light recovery today sets you up for a stronger session tomorrow.
                     </p>
-                    <div style={{ fontSize: 11, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>Today&apos;s recovery plan</div>
-                    <div style={{ background: "rgba(28,43,30,0.04)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 10 }}>
+                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 8 }}>Suggested recovery</div>
+                    <div style={{ borderRadius: "var(--r-sm)", border: "1px solid var(--border)", overflow: "hidden", marginBottom: 14 }}>
                       {RECOVERY_ACTS.map((a, i) => (
-                        <div key={i} style={{ display: "flex", padding: "9px 14px", borderBottom: i < RECOVERY_ACTS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
-                          <span style={{ fontSize: 11, color: "var(--text3)", width: 20 }}>{i + 1}</span>
-                          <span style={{ flex: 1, fontSize: 13, color: "var(--text2)" }}>{a.n}</span>
+                        <div key={i} style={{ display: "flex", padding: "10px 14px", borderBottom: i < RECOVERY_ACTS.length - 1 ? "1px solid var(--border)" : "none", background: "var(--bg2)" }}>
+                          <span style={{ fontSize: 11, color: "var(--text3)", width: 22 }}>{i + 1}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: "var(--text)" }}>{a.n}</span>
                           <span style={{ fontSize: 11, color: "var(--text3)" }}>{a.m} min</span>
                         </div>
                       ))}
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--text3)", fontStyle: "italic" }}>Optional: Easy walk outside — 20–30 minutes</div>
-                  </div>
-                ) : todayCheckin === "hurt" ? (
-                  <div>
-                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 12 }}>
-                      Pain is important information. Do not push through it.
-                    </p>
+                    <div style={{ fontSize: 12, color: "var(--text3)", fontStyle: "italic", marginBottom: 14 }}>Optional: Easy walk outside — 20–30 minutes</div>
+                    <button type="button" style={{ background: "none", border: "none", fontSize: 11, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                      onClick={() => setTodayCheckin(null)}>change</button>
+                  </>
+                )}
+
+                {/* ── Something hurts ── */}
+                {todayCheckin === "hurt" && (
+                  <>
+                    <div style={{ fontSize: 18, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>Listen to Your Body</div>
+                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 10 }}>Pain is important information. Do not push through it.</p>
                     <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 14 }}>
                       We recommend booking a private session with Dustin to assess and adjust your plan.
                     </p>
                     <a href="https://theiso.club/book" target="_blank" rel="noreferrer"
-                      style={{ display: "inline-flex", alignItems: "center", background: "#B84040", color: "white", borderRadius: 8, padding: "10px 16px", fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
-                      Book NxPro session with Dustin →
+                      style={{ display: "inline-flex", alignItems: "center", background: "#B84040", color: "white", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
+                      Book a session with Dustin →
                     </a>
                     <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>In the meantime, gentle recovery only:</div>
-                    <div style={{ background: "rgba(28,43,30,0.04)", borderRadius: "var(--r-sm)", padding: "4px 0" }}>
+                    <div style={{ borderRadius: "var(--r-sm)", border: "1px solid var(--border)", overflow: "hidden", marginBottom: 14 }}>
                       {PAIN_ACTS.map((a, i) => (
-                        <div key={i} style={{ display: "flex", padding: "9px 14px", borderBottom: i < PAIN_ACTS.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
-                          <span style={{ fontSize: 11, color: "var(--text3)", width: 20 }}>{i + 1}</span>
-                          <span style={{ flex: 1, fontSize: 13, color: "var(--text2)" }}>{a.n}</span>
+                        <div key={i} style={{ display: "flex", padding: "10px 14px", borderBottom: i < PAIN_ACTS.length - 1 ? "1px solid var(--border)" : "none", background: "var(--bg2)" }}>
+                          <span style={{ fontSize: 11, color: "var(--text3)", width: 22 }}>{i + 1}</span>
+                          <span style={{ flex: 1, fontSize: 13, color: "var(--text)" }}>{a.n}</span>
                           <span style={{ fontSize: 11, color: "var(--text3)" }}>{a.m} min</span>
                         </div>
                       ))}
                     </div>
-                    <div style={{ fontSize: 11, color: "rgba(184,64,64,0.7)", marginTop: 10 }}>No cold plunge, no training today.</div>
-                  </div>
-                ) : !tp || !tp.hasProtocol ? (
-                  <div style={{ background: "rgba(28,43,30,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
-                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>Your plan is being prepared</div>
-                    <p style={{ fontSize: 12.5, color: "var(--text3)", margin: "0 0 12px 0", lineHeight: 1.6 }}>Dustin will assign your protocol after your first session.</p>
-                    <a href="https://theiso.club/book" target="_blank" rel="noreferrer" className="btn btn-lime btn-sm" style={{ fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Book your first session →</a>
-                  </div>
-                ) : tp.isRestDay ? (
-                  <div style={{ background: "rgba(28,43,30,0.03)", borderRadius: "var(--r-sm)", padding: "16px 18px", marginBottom: 14 }}>
-                    <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 10px 0", lineHeight: 1.65 }}>Rest is where your results are made. Protect your sleep, eat well, and hydrate.</p>
-                    <div style={{ fontSize: 12, color: "var(--text3)" }}>You completed {weekTotal} session{weekTotal !== 1 ? "s" : ""} this week.</div>
-                  </div>
-                ) : tp.activities.length === 0 ? (
-                  <div style={{ background: "rgba(28,43,30,0.03)", borderRadius: "var(--r-sm)", padding: "14px 18px", marginBottom: 14 }}>
-                    <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>{tp.dayDescription || "Your day plan will appear here once seeded."}</p>
-                  </div>
-                ) : (
-                  <>
-                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, marginBottom: 14 }}>
-                      {tp.dayDescription.length > 160 ? tp.dayDescription.slice(0, 160) + "…" : tp.dayDescription}
-                    </p>
-                    <div style={{ background: "rgba(28,43,30,0.04)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 14 }}>
-                      {tp.activities.map((act, i) => (
-                        <div key={act.id} style={{ display: "flex", alignItems: "center", padding: "9px 14px", borderBottom: i < tp.activities.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none" }}>
-                          <span style={{ fontSize: 11, color: "var(--text3)", width: 20, flexShrink: 0 }}>{i + 1}</span>
-                          <span style={{ flex: 1, fontSize: 13.5, color: "var(--text2)", fontWeight: 500 }}>{act.name}</span>
-                          <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 14 }}>Total: ~{tp.totalMinutes} minutes</div>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <button type="button" className="btn btn-lime btn-sm" style={{ fontSize: 12 }}
-                        onClick={() => { setSessionStep(0); setSessionCompleted(new Set()); setSessionGuideOpen(true); }}>
-                        Start today&apos;s plan →
-                      </button>
-                      <button type="button" className="btn btn-sm" style={{ fontSize: 12 }}
-                        onClick={async () => {
-                          if (!weekPlan.length) {
-                            try { const r = await getJson<{ days: typeof weekPlan; customizationNotes: string | null; overrides: WeekOverride[] }>("/api/member/week-plan"); if (r.days) setWeekPlan(r.days); setWeekPlanMeta({ customizationNotes: r.customizationNotes ?? null, overrides: r.overrides ?? [] }); } catch { /* */ }
-                          }
-                          setWeekViewDay(null); setWeekViewOpen(true);
-                        }}>
-                        View this week&apos;s plan →
-                      </button>
-                    </div>
-                    {/* Rest day escape hatch — only when showing full plan */}
-                    {(todayCheckin === "strong" || !todayCheckin) && tp && tp.activities.length > 0 && (
-                      <div style={{ marginTop: 12 }}>
-                        <span style={{ fontSize: 11, color: "var(--text3)" }}>Need a rest day?{" "}</span>
-                        <button type="button" style={{ background: "none", border: "none", fontSize: 11, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                          onClick={() => setTodayCheckin(null)}>
-                          Adjust today&apos;s plan →
-                        </button>
-                      </div>
-                    )}
+                    <div style={{ fontSize: 11, color: "rgba(184,64,64,0.75)", marginBottom: 14 }}>No cold plunge, no training today.</div>
+                    <button type="button" style={{ background: "none", border: "none", fontSize: 11, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
+                      onClick={() => setTodayCheckin(null)}>change</button>
                   </>
                 )}
-
-                {/* Weekly progress — target adjusted for recovery/hurt days */}
-                <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontSize: 12, color: "var(--text3)" }}>This week</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: done1 >= adjustedTotal && adjustedTotal > 0 ? "#4A7C59" : "var(--text2)" }}>
-                      {done1} of {adjustedTotal} sessions complete
-                      {isAdaptedDay && <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: 6 }}>· rest day</span>}
-                    </span>
-                  </div>
-                  <div style={{ height: 5, background: "var(--border)", borderRadius: 3, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${adjustedTotal > 0 ? Math.min(100, (done1 / adjustedTotal) * 100) : 0}%`, background: "#4A7C59", borderRadius: 3, transition: "width 0.3s" }} />
-                  </div>
-                </div>
               </div>
             );
           })()}
 
-          {/* ── Section 2: Latest win ────────────────────────────────────── */}
-          {payload.wins.length > 0 && (
-            <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 16 }}>
-              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(196,131,26,0.8)", marginBottom: 10 }}>Latest win 🏆</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: payload.wins[0].isMilestone ? 4 : 0 }}>{payload.wins[0].label}</div>
-              {payload.wins[0].isMilestone && <div style={{ fontSize: 11, color: "rgba(196,131,26,0.8)" }}>Milestone achieved</div>}
-            </div>
-          )}
-
-          {/* ── Section 3: Log today's activity ──────────────────────────── */}
+          {/* ══════════════════════════════════════════════════════════════
+              SECTION 2 — THIS WEEK'S PROTOCOL
+              Full checklist (Strength / Cardio / Recovery) with bonus
+              pills, Save button, and live session count at the bottom.
+          ══════════════════════════════════════════════════════════════ */}
           {(() => {
             const cl = generateChecklist(payload.protocol);
             const c = payload.checklistCompletions;
-            const protocolDoneCount = cl.filter((item) => isChecklistItemDone(item, c, checklistChecked) || selectedProtocol[item.id]).length;
+
             const groups = [
-              { key: "strength", label: "Strength", items: cl.filter((i) => i.category === "strength") },
-              { key: "cardio", label: "Cardio", items: cl.filter((i) => i.category === "cardio") },
-              { key: "recovery", label: "Recovery", items: cl.filter((i) => i.category === "recovery") },
+              { key: "strength", label: "Strength", color: "#4A7C59", items: cl.filter((i) => i.category === "strength") },
+              { key: "cardio",   label: "Cardio",   color: "#C4831A", items: cl.filter((i) => i.category === "cardio") },
+              { key: "recovery", label: "Recovery", color: "#9B8EA0", items: cl.filter((i) => i.category === "recovery") },
             ].filter((g) => g.items.length > 0);
+
+            // Live checked count — updates as boxes are ticked
+            const checkedNow = cl.filter((item) => selectedProtocol[item.id] ?? isChecklistItemDone(item, c, {})).length;
+            const weekTotal = cl.length;
+            const weekComplete = weekTotal > 0 && checkedNow >= weekTotal;
             const totalBonusThisWeek = (payload.bonusActivitiesThisWeek ?? 0) + localBonusCount;
 
             async function handleSave() {
               if (savingActivity) return;
               setSavingActivity(true);
               try {
-                // Compute diff from initial server state
                 const initState: Record<string, boolean> = {};
                 for (const item of cl) initState[item.id] = isChecklistItemDone(item, c, {});
-
                 const toAdd = cl.filter((item) => selectedProtocol[item.id] && !initState[item.id])
                   .map((item) => ({ type: item.type as "arx" | "carol" | "recovery", subtype: item.subtype }));
                 const toRemove = cl.filter((item) => !selectedProtocol[item.id] && initState[item.id])
                   .map((item) => ({ type: item.type as "arx" | "carol" | "recovery", subtype: item.subtype }));
                 const bonusKeys = Object.entries(selectedBonus).filter(([, v]) => v).map(([k]) => k);
-
                 await fetch("/api/member/activity-log", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ to_add: toAdd, to_remove: toRemove, bonus: bonusKeys }),
                 });
-
-                // Update local checklist state
                 for (const item of cl) {
                   if (selectedProtocol[item.id] && !initState[item.id]) {
                     setChecklistChecked((prev) => ({ ...prev, [item.id]: true }));
@@ -1559,95 +1581,78 @@ export function DashboardReactClient({
                     setChecklistChecked((prev) => { const n = { ...prev }; delete n[item.id]; return n; });
                   }
                 }
-
                 if (bonusKeys.length > 0) {
                   setLocalBonusCount((n) => n + bonusKeys.length);
-                  const bonusName = BONUS_ACTIVITIES.find((b) => b.key === bonusKeys[0])?.label ?? bonusKeys[0];
-                  setBonusCelebration(`✓ ${bonusName} logged — every recovery session counts toward your results.`);
+                  setBonusCelebration(`✓ ${BONUS_ACTIVITIES.find((b) => b.key === bonusKeys[0])?.label ?? bonusKeys[0]} logged — every session counts.`);
                   setTimeout(() => setBonusCelebration(""), 5000);
                 }
-
-                // Build save message
-                const protocolLabels = toAdd.map((i) => i.type === "arx" ? "ARX" : i.subtype.replace(/_/g, " ")).slice(0, 2).join(", ");
-                const bonusLabels = bonusKeys.map((k) => BONUS_ACTIVITIES.find((b) => b.key === k)?.label ?? k).slice(0, 3).join(" + ");
-                if (toAdd.length > 0 && bonusKeys.length > 0) {
-                  setActivitySavedMsg(`✓ Protocol: ${protocolLabels} logged\n✓ Bonus: ${bonusLabels} — every session counts`);
-                } else if (toAdd.length > 0) {
-                  setActivitySavedMsg("✓ Logged — great work today");
-                } else if (bonusKeys.length > 0) {
-                  setActivitySavedMsg(`✓ Bonus: ${bonusLabels} — every session counts`);
-                } else if (toRemove.length > 0) {
-                  setActivitySavedMsg("✓ Updated");
-                } else {
-                  setActivitySavedMsg("✓ Nothing new to log");
-                }
+                const logged = toAdd.length + bonusKeys.length;
+                if (logged > 0) setActivitySavedMsg("✓ Saved — keep it up");
+                else if (toRemove.length > 0) setActivitySavedMsg("✓ Updated");
+                else setActivitySavedMsg("✓ Nothing new to log");
                 setSelectedBonus({});
               } catch { setActivitySavedMsg("Something went wrong — please try again"); }
               finally { setSavingActivity(false); }
             }
 
+            if (cl.length === 0) return null;
+
             return (
               <div className="card" style={{ marginBottom: 16 }}>
                 {/* Header */}
-                <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>Log today&apos;s activity</div>
-                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.checklistCompletions.todayDate}</div>
-                  </div>
-                  {cl.length > 0 && (
-                    <div style={{ marginTop: 10 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 5 }}>
-                        <span style={{ fontSize: 11, color: "var(--text3)" }}>This week</span>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: protocolDoneCount === cl.length ? "#4A7C59" : "var(--text2)" }}>{protocolDoneCount} of {cl.length} completed</span>
-                      </div>
-                      <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${cl.length > 0 ? (protocolDoneCount / cl.length) * 100 : 0}%`, background: "#4A7C59", borderRadius: 2, transition: "width 0.3s" }} />
-                      </div>
-                      {totalBonusThisWeek > 0 && (
-                        <div style={{ fontSize: 10, color: "#6B9FD4", marginTop: 5 }}>+ {totalBonusThisWeek} bonus activit{totalBonusThisWeek === 1 ? "y" : "ies"} this week</div>
-                      )}
-                    </div>
-                  )}
+                <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>This Week&apos;s Protocol</div>
+                  <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.checklistCompletions.weekStartDate}</div>
                 </div>
 
-                {/* Part 1 — Protocol activities */}
-                {groups.length > 0 && (
-                  <div style={{ padding: "14px 20px 0" }}>
-                    {groups.map((group) => (
-                      <div key={group.key} style={{ marginBottom: 16 }}>
-                        <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 10 }}>{group.label}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
-                          {group.items.map((item) => {
-                            const serverDone = isChecklistItemDone(item, c, {});
-                            const sel = selectedProtocol[item.id] ?? serverDone;
-                            return (
-                              <div key={item.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, cursor: "pointer" }}
-                                onClick={() => setSelectedProtocol((prev) => ({ ...prev, [item.id]: !sel }))}>
-                                <div style={{ width: 32, height: 32, borderRadius: "50%", background: sel ? "#4A7C59" : "transparent", border: `2.5px solid ${sel ? "#4A7C59" : "rgba(74,124,89,0.38)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.18s", flexShrink: 0 }}>
-                                  {sel && <span style={{ color: "#1C2B1E", fontSize: 13, fontWeight: 900, lineHeight: 1 }}>✓</span>}
-                                </div>
-                                <span style={{ fontSize: 10.5, color: sel ? "#4A7C59" : "var(--text2)", textAlign: "center", maxWidth: 64, lineHeight: 1.3, textDecoration: sel ? "line-through" : "none", transition: "all 0.18s" }}>
-                                  {item.label}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
+                {/* Grouped checklist rows */}
+                <div style={{ padding: "8px 20px 0" }}>
+                  {groups.map((group) => (
+                    <div key={group.key} style={{ marginBottom: 18 }}>
+                      {/* Category label */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: group.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", fontWeight: 600 }}>{group.label}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      {/* Session rows */}
+                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        {group.items.map((item) => {
+                          const serverDone = isChecklistItemDone(item, c, {});
+                          const sel = selectedProtocol[item.id] ?? serverDone;
+                          return (
+                            <div
+                              key={item.id}
+                              role="button"
+                              tabIndex={0}
+                              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: "var(--r-sm)", cursor: "pointer", background: sel ? "rgba(74,124,89,0.06)" : "transparent", transition: "background 0.14s" }}
+                              onClick={() => setSelectedProtocol((prev) => ({ ...prev, [item.id]: !sel }))}
+                              onKeyDown={(e) => e.key === " " && setSelectedProtocol((prev) => ({ ...prev, [item.id]: !sel }))}
+                            >
+                              {/* Checkbox */}
+                              <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: sel ? group.color : "transparent", border: `2px solid ${sel ? group.color : "rgba(28,43,30,0.20)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.13s" }}>
+                                {sel && <span style={{ color: "#ffffff", fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                              </div>
+                              <span style={{ flex: 1, fontSize: 13.5, color: sel ? "var(--text3)" : "var(--text)", fontWeight: 500, textDecoration: sel ? "line-through" : "none", transition: "color 0.13s" }}>
+                                {item.label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
 
-                {/* Part 2 — Bonus activities */}
-                <div style={{ padding: "0 20px 14px" }}>
-                  <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 10 }}>Additional activities</div>
+                {/* Additional activities — open pills */}
+                <div style={{ padding: "0 20px 16px" }}>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 10 }}>Additional activities</div>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                     {BONUS_ACTIVITIES.map(({ key, label }) => {
                       const sel = selectedBonus[key] ?? false;
                       return (
                         <button key={key} type="button"
                           onClick={() => setSelectedBonus((prev) => ({ ...prev, [key]: !sel }))}
-                          style={{ padding: "7px 14px", borderRadius: 20, border: `1.5px solid ${sel ? "#6B9FD4" : "var(--border)"}`, background: sel ? "rgba(107,159,212,0.10)" : "transparent", color: sel ? "#6B9FD4" : "var(--text3)", fontSize: 12.5, cursor: "pointer", transition: "all 0.15s", fontWeight: sel ? 600 : 400 }}>
+                          style={{ padding: "8px 16px", borderRadius: 24, border: `1.5px solid ${sel ? "#4A7C59" : "var(--border2)"}`, background: sel ? "rgba(74,124,89,0.08)" : "transparent", color: sel ? "#4A7C59" : "var(--text3)", fontSize: 13, cursor: "pointer", transition: "all 0.14s", fontWeight: sel ? 600 : 400 }}>
                           {label}
                         </button>
                       );
@@ -1655,72 +1660,45 @@ export function DashboardReactClient({
                   </div>
                 </div>
 
-                {/* Bonus celebration banner */}
                 {bonusCelebration && (
-                  <div style={{ padding: "8px 20px", background: "rgba(107,159,212,0.08)", borderTop: "1px solid rgba(107,159,212,0.14)" }}>
-                    <div style={{ fontSize: 12.5, color: "#6B9FD4", fontWeight: 500 }}>{bonusCelebration}</div>
+                  <div style={{ margin: "0 20px 12px", padding: "8px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.16)", borderRadius: "var(--r-sm)" }}>
+                    <div style={{ fontSize: 12.5, color: "#4A7C59", fontWeight: 500 }}>{bonusCelebration}</div>
                   </div>
                 )}
-                {/* Part 3 — Save button */}
-                <div style={{ padding: "0 20px 16px" }}>
-                  {activitySavedMsg ? (
-                    <div style={{ padding: "10px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.18)", borderRadius: "var(--r-sm)" }}>
-                      {activitySavedMsg.split("\n").map((line, i) => (
-                        <div key={i} style={{ fontSize: 13, color: "#4A7C59", fontWeight: 500, lineHeight: 1.6 }}>{line}</div>
-                      ))}
-                      <button type="button" style={{ marginTop: 8, fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                        onClick={() => { setActivitySavedMsg(""); setBonusCelebration(""); }}>Log more →</button>
-                    </div>
-                  ) : (
-                    <button type="button" className="btn btn-lime" disabled={savingActivity}
-                      style={{ width: "100%", fontSize: 13, fontWeight: 600, opacity: savingActivity ? 0.7 : 1 }}
-                      onClick={() => { void handleSave(); }}>
-                      {savingActivity ? "Saving…" : "Save today's activity"}
-                    </button>
+
+                {/* Save today's activities */}
+                <div style={{ padding: "0 20px 20px" }}>
+                  <button type="button" className="btn btn-lime" disabled={savingActivity}
+                    style={{ width: "100%", fontSize: 13.5, fontWeight: 700, opacity: savingActivity ? 0.7 : 1, padding: "12px 0" }}
+                    onClick={() => { void handleSave(); }}>
+                    {savingActivity ? "Saving…" : "Save today's activities"}
+                  </button>
+                </div>
+
+                {/* ── Week status counter ── */}
+                <div style={{ padding: "16px 20px 20px", borderTop: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                    <span style={{ fontSize: 32, fontFamily: "var(--serif)", fontWeight: 700, color: weekComplete ? "#4A7C59" : "var(--text)", lineHeight: 1 }}>
+                      {checkedNow}
+                    </span>
+                    <span style={{ fontSize: 15, color: "var(--text3)" }}>
+                      of {weekTotal} sessions complete this week
+                      {weekComplete && <span style={{ marginLeft: 8, color: "#4A7C59", fontWeight: 600 }}>✓</span>}
+                    </span>
+                  </div>
+                  {totalBonusThisWeek > 0 && (
+                    <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>+ {totalBonusThisWeek} additional activit{totalBonusThisWeek === 1 ? "y" : "ies"} this week</div>
                   )}
                 </div>
               </div>
             );
           })()}
 
-          {/* ── Section 4: Quick stats strip ─────────────────────────────── */}
-          {(() => {
-            const peakPow = payload.carolSessions.length ? Math.max(...payload.carolSessions.map((s) => Number(s.peakPowerWatts || 0))) : 0;
-            type SI = { label: string; value: string; sub: string | null; subLabel: string; subColor: string; href: string | null; tab: string | null };
-            const strip: SI[] = [
-              { label: "Vitality Age", value: payload.vitalityAge.estimated !== null ? String(payload.vitalityAge.estimated) : "—", sub: payload.vitalityAge.difference !== null ? (payload.vitalityAge.difference > 0 ? `-${payload.vitalityAge.difference} yrs` : `+${Math.abs(payload.vitalityAge.difference)} yrs`) : null, subLabel: "vs real age", subColor: (payload.vitalityAge.difference ?? 0) > 0 ? "#4A7C59" : "#B84040", href: "/member/progress", tab: null },
-              { label: "Lean Mass", value: payload.scan.leanMassLbs !== "--" ? `${payload.scan.leanMassLbs} lbs` : "—", sub: payload.goalDetails.gain_muscle.sinceJoining !== "--" ? payload.goalDetails.gain_muscle.sinceJoining.replace(" lean mass", "").replace(" lbs lean mass", "") : null, subLabel: "since joining", subColor: payload.goalDetails.gain_muscle.sinceJoiningDir === "up" ? "#4A7C59" : "#B84040", href: null, tab: "progress" },
-              { label: "Body Fat", value: payload.scan.bodyFatPct !== "--" ? `${payload.scan.bodyFatPct}%` : "—", sub: payload.goalDetails.lose_fat.sinceJoining !== "--" ? payload.goalDetails.lose_fat.sinceJoining.replace(" body fat", "") : null, subLabel: "since joining", subColor: payload.goalDetails.lose_fat.sinceJoiningDir === "up" ? "#4A7C59" : "#B84040", href: null, tab: "progress" },
-              { label: "Peak Power", value: peakPow > 0 ? `${Math.round(peakPow)}W` : "—", sub: payload.goalDetails.improve_cardio.sinceJoining !== "--" ? payload.goalDetails.improve_cardio.sinceJoining.replace(" cardio power", "") : null, subLabel: "since joining", subColor: payload.goalDetails.improve_cardio.sinceJoiningDir === "up" ? "#4A7C59" : "#B84040", href: null, tab: "progress" },
-            ];
-            return (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginBottom: 16 }}>
-                {strip.map((item) => {
-                  const inner = (
-                    <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r-sm)", padding: "10px 8px 8px", textAlign: "center", height: "100%" }}>
-                      <div style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 4, lineHeight: 1.2 }}>{item.label}</div>
-                      <div style={{ fontSize: item.value.length > 5 ? 13 : 18, fontWeight: 700, color: "var(--text)", lineHeight: 1.1, marginBottom: 2 }}>{item.value}</div>
-                      {item.sub && <div style={{ fontSize: 10, color: item.subColor, fontWeight: 500 }}>{item.sub}</div>}
-                      <div style={{ fontSize: 8, color: "var(--text3)" }}>{item.subLabel}</div>
-                    </div>
-                  );
-                  if (item.href) return <a key={item.label} href={item.href} style={{ textDecoration: "none", display: "block" }}>{inner}</a>;
-                  return <button key={item.label} type="button" style={{ background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }} onClick={() => item.tab && setMemberSection(item.tab as MemberSection)}>{inner}</button>;
-                })}
-              </div>
-            );
-          })()}
-
-          {/* View full progress link */}
-          <div style={{ textAlign: "right", marginBottom: 16, marginTop: -8 }}>
-            <a href="/member/progress" style={{ fontSize: 11, color: "var(--text3)", textDecoration: "none" }}>View full progress →</a>
-          </div>
-
-          {/* ── Section 5: Note from Dustin ─────────────────────────────── */}
+          {/* Coach note — shown if present */}
           {payload.sessionNote && (
             <div style={{ background: "rgba(196,131,26,0.04)", border: "1px solid rgba(196,131,26,0.14)", borderRadius: "var(--r)", padding: "16px 20px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(196,131,26,0.90)" }}>Note from Dustin</div>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(196,131,26,0.90)" }}>Note from {payload.sessionNote.coachName}</div>
                 <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.sessionNote.date}</div>
               </div>
               <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0, fontStyle: "italic" }}>&ldquo;{payload.sessionNote.text}&rdquo;</p>
