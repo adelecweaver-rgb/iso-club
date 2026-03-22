@@ -491,6 +491,112 @@ const PROTOCOL_REASONS: Record<string, string> = {
   "Strength Foundation": "Builds foundational muscle strength with targeted ARX sessions and progressive overload.",
 };
 
+// ─── Protocol page content ────────────────────────────────────────────────────
+
+type ProtocolMeta = {
+  tagline: string;
+  description: string;
+  targets: Array<{ label: string; value: string }>;
+  whatToExpect: string[];
+};
+
+const PROTOCOL_META: Record<string, ProtocolMeta> = {
+  Longevity: {
+    tagline: "Feel good. Stay capable.",
+    description: "Balanced training for strength, cardio, mobility, and recovery.",
+    targets: [
+      { label: "Strength", value: "1–2x" },
+      { label: "Cardio (CAROL)", value: "2x" },
+      { label: "Zone 2", value: "1–2x" },
+      { label: "Mobility", value: "1x" },
+      { label: "Recovery", value: "2x" },
+    ],
+    whatToExpect: [
+      "3–5 sessions per week",
+      "Moderate intensity",
+      "Focus on consistency and feeling good",
+    ],
+  },
+  "Body Composition": {
+    tagline: "Look leaner. Build muscle.",
+    description: "Higher-volume training designed to help change your body.",
+    targets: [
+      { label: "Strength", value: "2–3x" },
+      { label: "Cardio (CAROL)", value: "2–3x" },
+      { label: "Zone 2", value: "1x" },
+      { label: "Mobility", value: "1x" },
+      { label: "Recovery", value: "1–2x" },
+    ],
+    whatToExpect: [
+      "More frequent training",
+      "Higher overall output",
+      "Designed for visible results",
+    ],
+  },
+  Performance: {
+    tagline: "Train harder. Get stronger.",
+    description: "Higher-intensity training built to improve strength and performance.",
+    targets: [
+      { label: "Strength", value: "2–3x" },
+      { label: "Cardio (CAROL)", value: "2x" },
+      { label: "Zone 2", value: "1x" },
+      { label: "Mobility", value: "1x" },
+      { label: "Recovery", value: "1x" },
+    ],
+    whatToExpect: [
+      "Higher intensity sessions",
+      "Strength-focused training",
+      "Performance-driven approach",
+    ],
+  },
+};
+
+const PROTOCOL_ALIASES: Record<string, keyof typeof PROTOCOL_META> = {
+  "Longevity Protocol": "Longevity",
+  "Longevity": "Longevity",
+  "Body Composition": "Body Composition",
+  "Metabolic Reset": "Body Composition",
+  "Exercise Performance": "Performance",
+  "Performance": "Performance",
+  "Strength Foundation": "Performance",
+  "Cardio Focus": "Longevity",
+  "Recovery Phase": "Longevity",
+};
+
+function resolveProtocolMeta(name: string): ProtocolMeta {
+  const key = PROTOCOL_ALIASES[name] ?? "Longevity";
+  return PROTOCOL_META[key] ?? PROTOCOL_META["Longevity"];
+}
+
+const CHOOSE_PROTOCOL_OPTIONS: Array<{
+  key: keyof typeof PROTOCOL_META;
+  headline: string;
+  description: string;
+}> = [
+  {
+    key: "Longevity",
+    headline: "Feel good. Stay capable.",
+    description: "Balanced training for long-term health and energy.",
+  },
+  {
+    key: "Body Composition",
+    headline: "Look leaner. Build muscle.",
+    description: "More training to help change your body.",
+  },
+  {
+    key: "Performance",
+    headline: "Train harder. Get stronger.",
+    description: "Higher intensity training to improve performance.",
+  },
+];
+
+const OPTIONAL_ADDONS = [
+  "Katalyst (EMS training)",
+  "Vasper",
+  "Proteus",
+  "Additional recovery",
+];
+
 
 
 function recommendProtocol(activeGoals: string[]): string | null {
@@ -502,11 +608,6 @@ function recommendProtocol(activeGoals: string[]): string | null {
   if (g.has("lose_fat")) return "Metabolic Reset";
   if (g.has("improve_cardio")) return "Cardio Focus";
   return "Strength Foundation";
-}
-
-// ─── Core activity guardrail ─────────────────────────────────────────────────
-function isCoreActivity(item: { type: string; subtype: string }): boolean {
-  return item.type === "arx" || (item.type === "carol" && item.subtype === "REHIT");
 }
 
 const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -605,26 +706,9 @@ function isChecklistItemDone(
   return false;
 }
 
-function isChecklistBlockedToday(
-  item: ChecklistItem,
-  c: DashboardPayload["checklistCompletions"],
-  local: Record<string, boolean>,
-): boolean {
-  if (isChecklistItemDone(item, c, local)) return true;
-  if (item.type === "arx") return c.arxTodayLogged;
-  if (item.type === "carol") return c.carolTodayTypes.includes(item.subtype);
-  if (item.type === "recovery") return c.recoveryTodayModalities.includes(item.subtype);
-  return false;
-}
-
-
 function formatTargetSystem(s: string): string {
   const map: Record<string, string> = { muscle: "Muscle", cardio: "Cardio", metabolic: "Metabolic", recovery: "Recovery", performance: "Performance" };
   return map[s] ?? s;
-}
-
-function formatExerciseName(s: string): string {
-  return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function formatMessageTime(isoValue: string): string {
@@ -697,64 +781,6 @@ export function DashboardReactClient({
   );
   const [activeScanDot, setActiveScanDot] = useState<number | null>(null);
   const [checklistChecked, setChecklistChecked] = useState<Record<string, boolean>>({});
-  const [checklistLogging, setChecklistLogging] = useState<string | null>(null);
-
-  const handleChecklistItem = useCallback(async (item: ChecklistItem, c: DashboardPayload["checklistCompletions"]) => {
-    if (checklistLogging) return;
-    const done = isChecklistItemDone(item, c, checklistChecked);
-
-    if (done) {
-      // Guardrail: block silent removal of ARX / CAROL REHIT
-      if (isCoreActivity(item)) {
-        setGuardrailItem(item);
-        setGuardrailSent(false);
-        return;
-      }
-      // Toggle off — undo the check
-      setChecklistLogging(item.id);
-      try {
-        setChecklistChecked((prev) => { const next = { ...prev }; delete next[item.id]; return next; });
-        // Roll back local completions data
-        if (item.type === "arx") {
-          const idx = c.arxWeekDates.lastIndexOf(c.todayDate);
-          if (idx !== -1) c.arxWeekDates.splice(idx, 1);
-          c.arxTodayLogged = c.arxWeekDates.includes(c.todayDate);
-        } else if (item.type === "carol") {
-          const idx = c.carolWeekTypes.lastIndexOf(item.subtype); if (idx !== -1) c.carolWeekTypes.splice(idx, 1);
-          const ti = c.carolTodayTypes.lastIndexOf(item.subtype); if (ti !== -1) c.carolTodayTypes.splice(ti, 1);
-        } else if (item.type === "recovery") {
-          const idx = c.recoveryWeekModalities.lastIndexOf(item.subtype); if (idx !== -1) c.recoveryWeekModalities.splice(idx, 1);
-          const ti = c.recoveryTodayModalities.lastIndexOf(item.subtype); if (ti !== -1) c.recoveryTodayModalities.splice(ti, 1);
-        }
-        await fetch("/api/member/checklist", {
-          method: "DELETE", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ type: item.type, subtype: item.subtype }),
-        });
-      } finally { setChecklistLogging(null); }
-      return;
-    }
-
-    // Blocked today but not done — do nothing
-    if (isChecklistBlockedToday(item, c, checklistChecked)) return;
-
-    setChecklistLogging(item.id);
-    try {
-      const res = await fetch("/api/member/checklist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: item.type, subtype: item.subtype }),
-      });
-      const json = (await res.json().catch(() => ({}))) as { success?: boolean; already_logged?: boolean };
-      if (res.ok || json.already_logged) {
-        setChecklistChecked((prev) => ({ ...prev, [item.id]: true }));
-        if (item.type === "arx") { c.arxWeekDates.push(c.todayDate); c.arxTodayLogged = true; }
-        else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); c.carolTodayTypes.push(item.subtype); }
-        else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); c.recoveryTodayModalities.push(item.subtype); }
-      }
-    } finally {
-      setChecklistLogging(null);
-    }
-  }, [checklistChecked, checklistLogging]);
   const [coachProtocols, setCoachProtocols] = useState<Array<{ id: string; name: string; target_system: string; description: string }>>([]);
   const [allMembers, setAllMembers] = useState<Array<{ id: string; name: string; tier: string }>>([]);
   const [assignMemberId, setAssignMemberId] = useState("");
@@ -808,6 +834,10 @@ export function DashboardReactClient({
   const [protocolRequestText, setProtocolRequestText] = useState("");
   const [sendingProtocolRequest, setSendingProtocolRequest] = useState(false);
   const [protocolRequestSent, setProtocolRequestSent] = useState(false);
+  const [showChangeProtocol, setShowChangeProtocol] = useState(false);
+  const [confirmProtocol, setConfirmProtocol] = useState<keyof typeof PROTOCOL_META | null>(null);
+  const [switchingProtocol, setSwitchingProtocol] = useState(false);
+  const [switchProtocolSent, setSwitchProtocolSent] = useState(false);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
   const [coachNotifs, setCoachNotifs] = useState<Array<{ id: string; member_id: string; member_name: string; type: string; message: string; is_read: boolean; created_at: string }>>([]);
   const [notifUnreadCount, setNotifUnreadCount] = useState(0);
@@ -1827,278 +1857,231 @@ export function DashboardReactClient({
         <div id="view-protocol" className="content" style={{ display: mode === "member" && memberView === "protocol" ? "block" : "none" }}>
           {(() => {
             const p = payload.protocol;
-            const hasNewProtocol = !!p.targetSystem;
+            const meta = resolveProtocolMeta(p.name);
+            const protocolDisplayName = PROTOCOL_ALIASES[p.name] ?? p.name;
+
+            // ── Change Protocol screen ────────────────────────────────────
+            if (showChangeProtocol) {
+              if (confirmProtocol) {
+                const opt = CHOOSE_PROTOCOL_OPTIONS.find((o) => o.key === confirmProtocol)!;
+                return (
+                  <div style={{ maxWidth: 480 }}>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmProtocol(null)}
+                      style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 12, padding: 0, marginBottom: 20, display: "flex", alignItems: "center", gap: 6 }}
+                    >
+                      ← Back
+                    </button>
+                    <div className="card" style={{ padding: "28px 24px" }}>
+                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 10 }}>Confirm switch</div>
+                      <div style={{ fontSize: 22, fontFamily: "var(--serif)", color: "var(--text)", marginBottom: 6 }}>{confirmProtocol}</div>
+                      <div style={{ fontSize: 13, color: "var(--lime)", marginBottom: 12, fontStyle: "italic" }}>{opt.headline}</div>
+                      <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: "0 0 20px 0" }}>{opt.description}</p>
+                      <div style={{ background: "var(--bg3)", borderRadius: "var(--r-sm)", padding: "12px 14px", marginBottom: 24, border: "1px solid var(--border)" }}>
+                        <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
+                          We recommend staying on a protocol for a few weeks to see results.
+                        </p>
+                      </div>
+                      <div style={{ display: "flex", gap: 10 }}>
+                        {switchProtocolSent ? (
+                          <span style={{ fontSize: 13, color: "var(--lime)", fontWeight: 500 }}>✓ Request sent to your coach</span>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              className="btn btn-lime"
+                              disabled={switchingProtocol}
+                              onClick={() => {
+                                if (switchingProtocol) return;
+                                setSwitchingProtocol(true);
+                                void (async () => {
+                                  try {
+                                    let resolvedPeerId = peerId;
+                                    if (!resolvedPeerId) {
+                                      const inbox = await getJson<{ peer?: { id?: string }; coach?: { id?: string } }>("/api/messages/inbox");
+                                      resolvedPeerId = String(inbox.peer?.id || inbox.coach?.id || "");
+                                    }
+                                    if (resolvedPeerId) {
+                                      await postJson("/api/messages/send", {
+                                        recipient_id: resolvedPeerId,
+                                        body: `Hi — I'd like to switch to the ${confirmProtocol} protocol. Could you update this when you have a chance? Thanks!`,
+                                      });
+                                    }
+                                    setSwitchProtocolSent(true);
+                                  } catch { /* silent */ } finally { setSwitchingProtocol(false); }
+                                })();
+                              }}
+                              style={{ fontSize: 13 }}
+                            >
+                              {switchingProtocol ? "Sending…" : `Confirm Switch to ${confirmProtocol}`}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn"
+                              onClick={() => { setConfirmProtocol(null); setSwitchProtocolSent(false); }}
+                              style={{ fontSize: 13 }}
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div style={{ maxWidth: 520 }}>
+                  <button
+                    type="button"
+                    onClick={() => { setShowChangeProtocol(false); setSwitchProtocolSent(false); setConfirmProtocol(null); }}
+                    style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 12, padding: 0, marginBottom: 20, display: "flex", alignItems: "center", gap: 6 }}
+                  >
+                    ← Back to Protocol
+                  </button>
+                  <div style={{ fontSize: 20, fontFamily: "var(--serif)", color: "var(--text)", marginBottom: 6 }}>Choose Your Focus</div>
+                  <p style={{ fontSize: 13, color: "var(--text3)", margin: "0 0 24px 0", lineHeight: 1.6 }}>Select the protocol that fits where you are right now.</p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {CHOOSE_PROTOCOL_OPTIONS.map((opt) => {
+                      const isCurrent = opt.key === protocolDisplayName;
+                      return (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => { if (!isCurrent) setConfirmProtocol(opt.key); }}
+                          style={{
+                            background: isCurrent ? "rgba(201,240,85,0.06)" : "var(--bg3)",
+                            border: `1px solid ${isCurrent ? "rgba(201,240,85,0.3)" : "var(--border2)"}`,
+                            borderRadius: "var(--r)",
+                            padding: "18px 20px",
+                            textAlign: "left",
+                            cursor: isCurrent ? "default" : "pointer",
+                            transition: "border-color 0.15s, background 0.15s",
+                            width: "100%",
+                          }}
+                          onMouseEnter={(e) => { if (!isCurrent) (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(201,240,85,0.4)"; }}
+                          onMouseLeave={(e) => { if (!isCurrent) (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--border2)"; }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)" }}>{opt.key}</div>
+                            {isCurrent && <span style={{ fontSize: 10, background: "rgba(201,240,85,0.12)", color: "var(--lime)", border: "1px solid rgba(201,240,85,0.3)", borderRadius: 4, padding: "2px 8px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>Current</span>}
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--lime)", marginBottom: 6, fontStyle: "italic" }}>{opt.headline}</div>
+                          <div style={{ fontSize: 12.5, color: "var(--text3)", lineHeight: 1.6 }}>{opt.description}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            }
+
+            // ── Main Protocol page ────────────────────────────────────────
+            const hasProtocol = !!p.name;
 
             return (
               <>
-                <div className="sec-header"><div className="sec-title">My Protocol</div></div>
-
-                {hasNewProtocol && (
-                  <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 16 }}>
-                    <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Note from Dustin</div>
-                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>
-                      Based on your goals and time commitment, you&apos;re on the <strong style={{ color: "var(--text)" }}>{p.name}</strong> track. Follow the weekly targets below and reach out if you want to adjust the intensity or focus.
-                    </p>
+                {/* 1. Header */}
+                <div style={{ marginBottom: 28 }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
+                    <div style={{ fontSize: 26, fontFamily: "var(--serif)", color: "var(--text)", lineHeight: 1.2 }}>
+                      {hasProtocol ? protocolDisplayName : "No Protocol"}
+                    </div>
+                    <span style={{ fontSize: 10, background: "rgba(201,240,85,0.1)", color: "var(--lime)", border: "1px solid rgba(201,240,85,0.25)", borderRadius: 4, padding: "3px 10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 4, flexShrink: 0 }}>Active</span>
                   </div>
-                )}
+                  {hasProtocol && (
+                    <>
+                      <div style={{ fontSize: 14, color: "var(--lime)", fontStyle: "italic", marginBottom: 8 }}>&ldquo;{meta.tagline}&rdquo;</div>
+                      <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{meta.description}</p>
+                    </>
+                  )}
+                  {!hasProtocol && (
+                    <p style={{ fontSize: 13, color: "var(--text3)", margin: "8px 0 0 0" }}>No protocol assigned yet. Ask your coach to assign one.</p>
+                  )}
+                </div>
 
-                {hasNewProtocol ? (
+                {hasProtocol && (
                   <>
-                    {/* Protocol header card */}
-                    <div className="card" style={{ marginBottom: 14 }}>
-                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "16px 20px 12px" }}>
-                        <div>
-                          <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>{p.name}</div>
-                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                            <span style={{ fontSize: 10, background: "rgba(157,204,58,0.12)", color: "#9dcc3a", border: "1px solid rgba(157,204,58,0.3)", borderRadius: 4, padding: "2px 8px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                              {formatTargetSystem(p.targetSystem)}
-                            </span>
-                            {p.startDate && <span style={{ fontSize: 11, color: "var(--text3)" }}>Started {p.startDate}</span>}
+                    {/* 2. Weekly Targets */}
+                    <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>This Week&apos;s Targets</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                        {meta.targets.map((t, i) => (
+                          <div
+                            key={t.label}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "space-between",
+                              padding: "11px 0",
+                              borderBottom: i < meta.targets.length - 1 ? "1px solid var(--border)" : "none",
+                            }}
+                          >
+                            <span style={{ fontSize: 13.5, color: "var(--text)" }}>{t.label}</span>
+                            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--lime)" }}>{t.value}</span>
                           </div>
-                        </div>
-                        <span className="tag tag-lime">Active</span>
-                      </div>
-
-                      {/* Weekly checklist */}
-                      {(() => {
-                        const checklist = generateChecklist(p);
-                        const c = payload.checklistCompletions;
-                        const doneCount = checklist.filter((item) => isChecklistItemDone(item, c, checklistChecked)).length;
-                        const groups: Array<{ key: string; label: string; items: ChecklistItem[] }> = [
-                          { key: "strength", label: "Strength", items: checklist.filter((i) => i.category === "strength") },
-                          { key: "cardio", label: "Cardio", items: checklist.filter((i) => i.category === "cardio") },
-                          { key: "recovery", label: "Recovery", items: checklist.filter((i) => i.category === "recovery") },
-                        ].filter((g) => g.items.length > 0);
-
-                        return (
-                          <div style={{ padding: "0 20px 16px" }}>
-                            {/* Progress summary */}
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                              <div style={{ fontSize: 12, color: "var(--text3)" }}>
-                                Week of {c.weekStartDate}
-                              </div>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: doneCount === checklist.length && checklist.length > 0 ? "#9dcc3a" : "var(--text2)" }}>
-                                {doneCount} of {checklist.length} completed this week
-                              </div>
-                            </div>
-                            {/* Progress bar */}
-                            <div style={{ height: 3, background: "var(--border)", borderRadius: 2, marginBottom: 20, overflow: "hidden" }}>
-                              <div style={{ height: "100%", width: `${checklist.length > 0 ? (doneCount / checklist.length) * 100 : 0}%`, background: "#9dcc3a", borderRadius: 2, transition: "width 0.3s ease" }} />
-                            </div>
-
-                            {groups.map((group) => (
-                              <div key={group.key} style={{ marginBottom: 18 }}>
-                                <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 8 }}>{group.label}</div>
-                                {group.items.map((item) => {
-                                  const done = isChecklistItemDone(item, c, checklistChecked);
-                                  const blockedToday = isChecklistBlockedToday(item, c, checklistChecked);
-                                  const isLogging = checklistLogging === item.id;
-                                  return (
-                                    <div key={item.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--border)" }}>
-                                      <button
-                                        type="button"
-                                        onClick={() => { void handleChecklistItem(item, c); }}
-                                        disabled={isLogging || (blockedToday && !done)}
-                                        style={{
-                                          width: 24,
-                                          height: 24,
-                                          borderRadius: "50%",
-                                          background: done ? "#9dcc3a" : "transparent",
-                                          border: `2px solid ${done ? "#9dcc3a" : blockedToday ? "var(--border)" : "rgba(157,204,58,0.5)"}`,
-                                          cursor: (blockedToday && !done) ? "not-allowed" : "pointer",
-                                          display: "flex",
-                                          alignItems: "center",
-                                          justifyContent: "center",
-                                          flexShrink: 0,
-                                          transition: "all 0.2s",
-                                          opacity: isLogging ? 0.5 : 1,
-                                          padding: 0,
-                                        }}
-                                      >
-                                        {done && <span style={{ color: "#0b0c09", fontSize: 11, fontWeight: 800, lineHeight: 1 }}>✓</span>}
-                                        {isLogging && <span style={{ color: "var(--text3)", fontSize: 9 }}>…</span>}
-                                      </button>
-                                      <span style={{ fontSize: 13, color: done ? "var(--text3)" : "var(--text2)", textDecoration: done ? "line-through" : "none", transition: "all 0.2s" }}>
-                                        {item.label}
-                                      </span>
-                                      {blockedToday && !done && (
-                                        <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: "auto" }}>already logged today</span>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ))}
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Focus grid */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                      {/* CAROL ride types */}
-                      <div className="card" style={{ padding: "14px 16px" }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>CAROL — Ride types to focus on</div>
-                        {p.carolRideTypes.length > 0 ? p.carolRideTypes.map((rt) => (
-                          <div key={rt} style={{ fontSize: 12, color: "var(--text2)", padding: "4px 0", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: "#9dcc3a" }}>→</span> {rt.replace(/_/g, " ")}
-                          </div>
-                        )) : <div style={{ fontSize: 12, color: "var(--text3)" }}>No specific ride types</div>}
-                      </div>
-
-                      {/* ARX exercises */}
-                      <div className="card" style={{ padding: "14px 16px" }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>ARX — Priority exercises</div>
-                        {p.arxExercises.length > 0 ? p.arxExercises.map((ex) => (
-                          <div key={ex} style={{ fontSize: 12, color: "var(--text2)", padding: "4px 0", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 6 }}>
-                            <span style={{ color: "#9dcc3a" }}>→</span> {formatExerciseName(ex)}
-                          </div>
-                        )) : <div style={{ fontSize: 12, color: "var(--text3)" }}>No specific exercises</div>}
+                        ))}
                       </div>
                     </div>
 
-                    {/* Coach notes */}
+                    {/* 3. What to Expect */}
+                    <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>What to Expect</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {meta.whatToExpect.map((bullet) => (
+                          <div key={bullet} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                            <span style={{ color: "var(--lime)", fontSize: 14, lineHeight: "20px", flexShrink: 0 }}>—</span>
+                            <span style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.5 }}>{bullet}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* 4. Optional Add-Ons */}
+                    <div className="card" style={{ padding: "20px 22px", marginBottom: 14 }}>
+                      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 16 }}>Optional Add-Ons</div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                        {OPTIONAL_ADDONS.map((addon, i) => (
+                          <div
+                            key={addon}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 10,
+                              padding: "10px 0",
+                              borderBottom: i < OPTIONAL_ADDONS.length - 1 ? "1px solid var(--border)" : "none",
+                            }}
+                          >
+                            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--text3)", flexShrink: 0, display: "inline-block" }} />
+                            <span style={{ fontSize: 13, color: "var(--text2)" }}>{addon}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Coach notes — shown if present */}
                     {p.coachNotes && (
-                      <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px" }}>
-                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Notes from Dustin</div>
+                      <div style={{ background: "rgba(220,180,100,0.07)", border: "1px solid rgba(220,180,100,0.2)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(220,180,100,0.7)", marginBottom: 6 }}>Notes from your coach</div>
                         <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: 0 }}>{p.coachNotes}</p>
                       </div>
                     )}
 
-                    {/* Change Protocol section */}
-                    <div className="card" style={{ marginTop: 14, padding: "16px 20px" }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", marginBottom: 14 }}>Change Protocol</div>
-                      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
-                        <button
-                          type="button"
-                          className="btn btn-sm"
-                          onClick={() => { setShowProtocolModal(true); setProtocolRequestSent(false); setProtocolRequestText(""); }}
-                        >
-                          Request Protocol Adjustment
-                        </button>
-                        <a
-                          href="https://theiso.club/book"
-                          target="_blank"
-                          rel="noreferrer"
-                          className="btn btn-lime btn-sm"
-                          style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}
-                        >
-                          ✦ Book a 1:1 with Dustin
-                        </a>
-                      </div>
-                      <p style={{ fontSize: 11, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
-                        Want a quick adjustment? Request a free protocol review. Need a deeper look at your data and goals? Book a personalized 1:1 consultation with Dustin.
-                      </p>
+                    {/* 5. Change Protocol */}
+                    <div style={{ paddingTop: 8 }}>
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => { setShowChangeProtocol(true); setSwitchProtocolSent(false); setConfirmProtocol(null); }}
+                        style={{ fontSize: 13, width: "100%" }}
+                      >
+                        Change Protocol
+                      </button>
                     </div>
                   </>
-                ) : (
-                  /* Legacy protocol display */
-                  <div className="card">
-                    <div className="track-hero">
-                      <div style={{ flex: 1 }}>
-                        <div className="track-name">{p.name || "Protocol"}</div>
-                        <div className="track-meta">Week {p.weekCurrent} of {p.weekTotal}</div>
-                      </div>
-                      <span className="tag tag-lime">Active</span>
-                    </div>
-                    {p.sessions.length ? (
-                      p.sessions.map((session, index) => (
-                        <div key={`${session.name}-${index}`} className="session-item">
-                          <div className="s-num">{index + 1}</div>
-                          <div className="s-info">
-                            <div className="s-name">{session.name}</div>
-                            <div className="s-detail">{session.detail}</div>
-                          </div>
-                          <div className="s-dur">{session.duration} min</div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="card-body"><p style={{ color: "var(--text3)" }}>No protocol assigned yet. Ask your coach to assign one.</p></div>
-                    )}
-                  </div>
                 )}
-
-                {/* ── Goals (moved from My Goals tab) ─────────────────────── */}
-                <div style={{ marginTop: 24 }}>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", marginBottom: 14 }}>My Goals</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12, marginBottom: 16 }}>
-                    {(["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).map((goalType) => {
-                      const def = GOAL_DEFS[goalType];
-                      const prog = payload.goals.progress[goalType];
-                      const isActive = localGoals[goalType] ?? false;
-                      const isSaving = savingGoal === goalType;
-                      const color = goalStatusColor(prog.direction);
-                      const progTarget = (prog as { target?: number }).target ?? 0;
-                      const progCurrent = (prog as { current?: number }).current ?? 0;
-                      const barPct = goalType === "attendance" && progTarget > 0
-                        ? Math.min(100, (progCurrent / progTarget) * 100)
-                        : prog.direction === "positive" ? 80 : prog.direction === "neutral" ? 50 : prog.direction === "negative" ? 20 : 0;
-                      return (
-                        <div key={goalType} className="card" style={{ padding: "14px 16px", opacity: isActive ? 1 : 0.55 }}>
-                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-                            <div>
-                              <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>{def.name}</div>
-                              <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{def.category}</div>
-                            </div>
-                            <button type="button" onClick={() => { void handleGoalToggle(goalType); }} disabled={isSaving}
-                              style={{ width: 40, height: 22, borderRadius: 11, background: isActive ? "#9dcc3a" : "var(--bg3)", border: `2px solid ${isActive ? "#9dcc3a" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0, opacity: isSaving ? 0.5 : 1 }}>
-                              <div style={{ width: 14, height: 14, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: isActive ? 20 : 2, transition: "left 0.2s" }} />
-                            </button>
-                          </div>
-                          <p style={{ fontSize: 11.5, color: "var(--text3)", lineHeight: 1.5, marginBottom: isActive ? 10 : 0 }}>{def.description}</p>
-                          {isActive && (
-                            <>
-                              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-                                <div style={{ width: 7, height: 7, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                                <span style={{ fontSize: 11.5, fontWeight: 600, color }}>{goalStatusLabel(prog.status)}</span>
-                              </div>
-                              <div style={{ fontSize: 11.5, color: "var(--text2)", marginBottom: 8 }}>{prog.display}</div>
-                              <div style={{ height: 3, background: "var(--bg3)", borderRadius: 2, overflow: "hidden" }}>
-                                <div style={{ height: "100%", width: `${barPct}%`, background: color, borderRadius: 2, transition: "width 0.4s ease" }} />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* Protocol recommendation */}
-                  {(() => {
-                    const active = Object.entries(localGoals).filter(([, v]) => v).map(([k]) => k);
-                    const rec = recommendProtocol(active);
-                    if (!rec || active.length === 0) return null;
-                    const reason = PROTOCOL_REASONS[rec] ?? "Matched to your current goal combination.";
-                    async function handleAskCoachHere() {
-                      if (isRequestingProtocol || protocolRequested) return;
-                      setIsRequestingProtocol(true);
-                      try {
-                        let resolvedPeerId = peerId;
-                        if (!resolvedPeerId) {
-                          const inbox = await getJson<{ peer?: { id?: string }; coach?: { id?: string } }>("/api/messages/inbox");
-                          resolvedPeerId = String(inbox.peer?.id || inbox.coach?.id || "");
-                        }
-                        if (!resolvedPeerId) throw new Error("no peer");
-                        const goalNames = active.map((g) => GOAL_DEFS[g]?.name ?? g).join(", ");
-                        await postJson("/api/messages/send", { recipient_id: resolvedPeerId, body: `Hi Dustin — the dashboard is recommending the ${rec} protocol based on my current goals (${goalNames}). Could you assign this when you have a chance? Thanks!` });
-                        setProtocolRequested(true);
-                      } catch { /* silent */ } finally { setIsRequestingProtocol(false); }
-                    }
-                    return (
-                      <div style={{ background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.25)", borderRadius: "var(--r)", padding: "16px 20px" }}>
-                        <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(157,204,58,0.7)", marginBottom: 8 }}>Protocol Recommendation</div>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Based on your goals: <span style={{ color: "#9dcc3a" }}>{rec}</span></div>
-                        <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.6, margin: "0 0 12px 0" }}>{reason}</p>
-                        {protocolRequested ? (
-                          <span style={{ fontSize: 12, color: "#9dcc3a", fontWeight: 500 }}>✓ Request sent to Dustin</span>
-                        ) : (
-                          <button type="button" className="btn btn-lime btn-sm" style={{ fontSize: 12 }} disabled={isRequestingProtocol} onClick={() => { void handleAskCoachHere(); }}>
-                            {isRequestingProtocol ? "Sending…" : "Ask coach to assign this protocol"}
-                          </button>
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
               </>
             );
           })()}
