@@ -2427,7 +2427,7 @@ export function DashboardReactClient({
                   {!currentScan ? (
                     <div className="card" style={{ padding: "20px 22px" }}>
                       <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
-                        No body scan data yet. Complete a Fit3D scan to track muscle mass and body fat over time.
+                        No body scan data yet. When you&apos;re ready, let Iso know and we&apos;ll get your scan scheduled and uploaded.
                       </p>
                     </div>
                   ) : (
@@ -2587,8 +2587,8 @@ export function DashboardReactClient({
                   {arxGroups.length === 0 ? (
                     <div className="card" style={{ padding: "20px 22px" }}>
                       <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
-                        No strength data yet.{" "}
-                        <Link href="/member/connect/arx" style={{ color: "#4A7C59", textDecoration: "none" }}>Import ARX data \u2192</Link>
+                        No strength data yet. Connect your ARX account in{" "}
+                        <Link href="/dashboard/settings" style={{ color: "#9dcc3a", textDecoration: "none" }}>Settings →</Link>
                       </p>
                     </div>
                   ) : (
@@ -2737,8 +2737,8 @@ export function DashboardReactClient({
                   {allCarol.length === 0 ? (
                     <div className="card" style={{ padding: "20px 22px" }}>
                       <p style={{ fontSize: 13, color: "var(--text3)", margin: 0, lineHeight: 1.6 }}>
-                        No cardio data yet.{" "}
-                        <Link href="/member/connect/carol" style={{ color: "#4A7C59", textDecoration: "none" }}>Connect CAROL account \u2192</Link>
+                        No cardio data yet. Connect your CAROL account in{" "}
+                        <Link href="/dashboard/settings" style={{ color: "#9dcc3a", textDecoration: "none" }}>Settings →</Link>
                       </p>
                     </div>
                   ) : (
