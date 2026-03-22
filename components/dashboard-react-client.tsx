@@ -1451,9 +1451,10 @@ export function DashboardReactClient({
                     <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 14 }}>
                       We recommend booking a private session with Dustin to assess and adjust your plan.
                     </p>
-                    <a href="https://theiso.club/book" target="_blank" rel="noreferrer"
+                    <a
+                      href={`mailto:dustin@theiso.club?subject=${encodeURIComponent("Request 1:1")}&body=${encodeURIComponent("Hi Dustin,\n\nI'd like to schedule a one-on-one assessment. I've been dealing with some pain and want to make sure I'm moving correctly before my next session.\n\nCould you find a time that works?\n\nThank you.")}`}
                       style={{ display: "inline-flex", alignItems: "center", background: "#B84040", color: "white", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
-                      Book a session with Dustin →
+                      Email Dustin to schedule →
                     </a>
                     <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>In the meantime, gentle recovery only:</div>
                     <div style={{ borderRadius: "var(--r-sm)", border: "1px solid var(--border)", overflow: "hidden", marginBottom: 14 }}>
