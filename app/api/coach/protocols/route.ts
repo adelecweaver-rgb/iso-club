@@ -40,8 +40,8 @@ export async function GET() {
     }
     const res = await context.supabase
       .from("protocols")
-      .select("id,name,description,target_system,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes")
-      .order("name");
+      .select("id,name,description,target_system,tier,science_rationale,days_per_week,arx_frequency_per_week,carol_frequency_per_week,recovery_target_per_month,carol_ride_types,arx_exercises,notes")
+      .order("tier,name");
     if (res.error) throw new Error(res.error.message);
     return NextResponse.json({ success: true, protocols: res.data ?? [] });
   } catch (err) {
