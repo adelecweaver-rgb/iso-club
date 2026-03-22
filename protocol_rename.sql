@@ -44,13 +44,8 @@ SET name        = 'Healthspan Elite',
     days_per_week = 5
 WHERE name = 'Strength Foundation';
 
--- 6. Recovery Phase — keep but rename cleanly
-UPDATE protocols
-SET name        = 'Recovery',
-    tier        = 'longevity',
-    description = 'Active recovery for injury, overtraining, or deload phases.',
-    days_per_week = 3
-WHERE name = 'Recovery Phase';
+-- 6. Recovery Phase — remove entirely (not an assignable protocol)
+DELETE FROM protocols WHERE name IN ('Recovery Phase', 'Recovery');
 
 -- Verify
 SELECT name, tier, days_per_week, description FROM protocols ORDER BY tier, name;

@@ -555,7 +555,6 @@ const PROTOCOL_ALIASES: Record<string, keyof typeof PROTOCOL_META> = {
   "Bone Density":         "Longevity",
   "Athletic Performance": "Performance",
   "Healthspan Elite":     "Performance",
-  "Recovery":             "Longevity",
   // Legacy names (backwards compat for already-assigned members)
   "Longevity Protocol":   "Longevity",
   "Metabolic Reset":      "Body Composition",
@@ -564,6 +563,7 @@ const PROTOCOL_ALIASES: Record<string, keyof typeof PROTOCOL_META> = {
   "Strength Foundation":  "Performance",
   "Cardio Focus":         "Longevity",
   "Recovery Phase":       "Longevity",
+  "Recovery":             "Longevity",
 };
 
 function resolveProtocolMeta(name: string): ProtocolMeta {
