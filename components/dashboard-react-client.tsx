@@ -1733,84 +1733,228 @@ export function DashboardReactClient({
                 )}
 
                 {/* ── Section 3: Log Activity ───────────────────────────────── */}
-                {hasAnyProtocolItems && (
-                  <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", marginBottom: 16, overflow: "hidden" }}>
-                    {/* Header */}
-                    <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Log Activity</div>
-                      <div style={{ fontSize: 11, color: "var(--text3)" }}>{comp.todayDate}</div>
-                    </div>
+                {hasAnyProtocolItems && (() => {
+                  // Rich display metadata for each checklist item using real protocol data
+                  type RichItem = {
+                    item: ChecklistItem;
+                    name: string;
+                    detail: string;
+                    badge: string;
+                    accentColor: string;
+                  };
 
-                    {/* Protocol checkboxes grouped by category */}
-                    {logGroups.map((group) => (
-                      <div key={group.key} style={{ padding: "12px 20px 0" }}>
-                        <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 10 }}>{group.label}</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
-                          {group.items.map((item) => {
-                            const serverDone = isChecklistItemDone(item, c, {});
-                            const sel = selectedProtocol[item.id] ?? serverDone;
+                  const CAROL_RIDE_DETAIL: Record<string, { name: string; detail: string }> = {
+                    REHIT:       { name: "CAROL REHIT",       detail: "8 min · 2 × 20 sec max sprint" },
+                    FAT_BURN_30: { name: "CAROL Fat Burn 30", detail: "30 min · Zone 2 steady state" },
+                    FAT_BURN_45: { name: "CAROL Fat Burn 45", detail: "45 min · Zone 2 aerobic base" },
+                    FAT_BURN_60: { name: "CAROL Fat Burn 60", detail: "60 min · Norwegian 4×4 / Zone 2" },
+                    ENERGISER:   { name: "CAROL Energiser",   detail: "10 min · low intensity warm-up" },
+                  };
+                  const RECOVERY_DETAIL: Record<string, { name: string; detail: string }> = {
+                    cold_plunge:     { name: "Cold Plunge",      detail: "3 min · cold exposure" },
+                    sauna:           { name: "Sauna",            detail: "20 min · heat therapy" },
+                    infrared_sauna:  { name: "Infrared Sauna",   detail: "20 min · deep tissue heat" },
+                    compression:     { name: "Compression",      detail: "20 min · circulation recovery" },
+                    nxpro:           { name: "NxPro / Red Light",detail: "20 min · photobiomodulation" },
+                  };
+
+                  const exerciseNames = proto.arxExercises.map(formatExerciseName);
+
+                  function toRich(item: ChecklistItem): RichItem {
+                    if (item.type === "arx") {
+                      const sessionNum = parseInt(item.id.split("-")[1] ?? "0", 10) + 1;
+                      const sessionLabel = proto.arxPerWeek > 1 ? `Session ${sessionNum}` : "";
+                      return {
+                        item,
+                        name: `ARX Full Body${sessionLabel ? ` — ${sessionLabel}` : ""}`,
+                        detail: exerciseNames.length > 0
+                          ? exerciseNames.join(" · ")
+                          : "Adaptive resistance training",
+                        badge: "ARX",
+                        accentColor: "#9dcc3a",
+                      };
+                    }
+                    if (item.type === "carol") {
+                      const rd = CAROL_RIDE_DETAIL[item.subtype] ?? { name: `CAROL ${item.subtype.replace(/_/g, " ")}`, detail: "CAROL ride" };
+                      const isZone2 = item.subtype !== "REHIT" && item.subtype !== "ENERGISER";
+                      return {
+                        item,
+                        name: rd.name,
+                        detail: rd.detail,
+                        badge: "CAROL",
+                        accentColor: isZone2 ? "#2ec8c8" : "#e8a838",
+                      };
+                    }
+                    // recovery
+                    const rd = RECOVERY_DETAIL[item.subtype] ?? { name: RECOVERY_LABELS[item.subtype] ?? item.subtype, detail: "Recovery session" };
+                    return {
+                      item,
+                      name: rd.name,
+                      detail: rd.detail,
+                      badge: "Recovery",
+                      accentColor: "#f472b6",
+                    };
+                  }
+
+                  const richGroups = logGroups.map((g) => ({
+                    ...g,
+                    richItems: g.items.map(toRich),
+                  }));
+
+                  return (
+                    <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", marginBottom: 16, overflow: "hidden" }}>
+
+                      {/* ── Protocol snapshot header ── */}
+                      <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Log Activity</div>
+                          <div style={{ fontSize: 10, color: "var(--text3)" }}>{comp.todayDate}</div>
+                        </div>
+                        {/* Protocol summary row */}
+                        <div style={{ background: "rgba(0,0,0,0.18)", borderRadius: 8, padding: "10px 14px" }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
+                            {proto.name}
+                            <span style={{ marginLeft: 8, fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "#9dcc3a", background: "rgba(157,204,58,0.12)", border: "1px solid rgba(157,204,58,0.25)", borderRadius: 4, padding: "1px 6px" }}>
+                              {formatTargetSystem(proto.targetSystem)}
+                            </span>
+                          </div>
+                          <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+                            {proto.arxPerWeek > 0 && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#9dcc3a", flexShrink: 0 }} />
+                                <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                                  ARX <strong style={{ color: "var(--text2)" }}>{proto.arxPerWeek}×/wk</strong>
+                                  {exerciseNames.length > 0 && (
+                                    <span style={{ color: "var(--text3)", marginLeft: 4 }}>· {exerciseNames.slice(0, 3).join(", ")}{exerciseNames.length > 3 ? ` +${exerciseNames.length - 3}` : ""}</span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {proto.carolPerWeek > 0 && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#2ec8c8", flexShrink: 0 }} />
+                                <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                                  CAROL <strong style={{ color: "var(--text2)" }}>{proto.carolPerWeek}×/wk</strong>
+                                  {proto.carolRideTypes.length > 0 && (
+                                    <span style={{ color: "var(--text3)", marginLeft: 4 }}>· {proto.carolRideTypes.map((r) => CAROL_RIDE_LABELS[r] ?? r).join(", ")}</span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {proto.recoveryPerMonth > 0 && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#f472b6", flexShrink: 0 }} />
+                                <span style={{ fontSize: 11, color: "var(--text3)" }}>
+                                  Recovery <strong style={{ color: "var(--text2)" }}>{proto.recoveryPerMonth}×/mo</strong>
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* ── Checklist rows — one per session ── */}
+                      {richGroups.map((group, gi) => (
+                        <div key={group.key}>
+                          <div style={{ padding: "10px 20px 4px", display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)" }}>{group.label}</div>
+                            <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                          </div>
+                          {group.richItems.map((ri, idx) => {
+                            const serverDone = isChecklistItemDone(ri.item, c, {});
+                            const sel = selectedProtocol[ri.item.id] ?? serverDone;
+                            const isLast = idx === group.richItems.length - 1;
                             return (
                               <div
-                                key={item.id}
-                                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, cursor: "pointer", userSelect: "none" }}
-                                onClick={() => setSelectedProtocol((prev) => ({ ...prev, [item.id]: !sel }))}
+                                key={ri.item.id}
+                                style={{
+                                  display: "flex", alignItems: "center", gap: 14,
+                                  padding: "11px 20px",
+                                  borderBottom: !isLast || gi < richGroups.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                                  cursor: "pointer",
+                                  background: sel ? "rgba(157,204,58,0.03)" : "transparent",
+                                  transition: "background 0.15s",
+                                }}
+                                onClick={() => setSelectedProtocol((prev) => ({ ...prev, [ri.item.id]: !sel }))}
                               >
+                                {/* Checkbox */}
                                 <div style={{
-                                  width: 36, height: 36, borderRadius: "50%",
-                                  background: sel ? "#9dcc3a" : "rgba(157,204,58,0.06)",
-                                  border: `2px solid ${sel ? "#9dcc3a" : "rgba(157,204,58,0.35)"}`,
+                                  width: 22, height: 22, borderRadius: 6, flexShrink: 0,
+                                  background: sel ? ri.accentColor : "transparent",
+                                  border: `2px solid ${sel ? ri.accentColor : "rgba(255,255,255,0.18)"}`,
                                   display: "flex", alignItems: "center", justifyContent: "center",
-                                  transition: "all 0.15s", flexShrink: 0,
+                                  transition: "all 0.14s",
                                 }}>
-                                  {sel && <span style={{ color: "#0b0c09", fontSize: 14, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                                  {sel && <span style={{ color: "#0b0c09", fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
                                 </div>
-                                <span style={{ fontSize: 10, color: sel ? "#9dcc3a" : "var(--text2)", textAlign: "center", maxWidth: 68, lineHeight: 1.3, textDecoration: sel ? "line-through" : "none", transition: "color 0.15s" }}>
-                                  {item.label}
-                                </span>
+
+                                {/* Content */}
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: sel ? "var(--text3)" : "var(--text)", textDecoration: sel ? "line-through" : "none", transition: "color 0.14s", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {ri.name}
+                                  </div>
+                                  <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                    {ri.detail}
+                                  </div>
+                                </div>
+
+                                {/* Badge */}
+                                <div style={{
+                                  fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em",
+                                  color: ri.accentColor, background: `${ri.accentColor}15`,
+                                  border: `1px solid ${ri.accentColor}35`,
+                                  borderRadius: 5, padding: "2px 7px", flexShrink: 0,
+                                  opacity: sel ? 0.5 : 1,
+                                }}>
+                                  {ri.badge}
+                                </div>
                               </div>
                             );
                           })}
                         </div>
-                      </div>
-                    ))}
+                      ))}
 
-                    {/* Bonus / add-ons row */}
-                    <div style={{ padding: "0 20px 14px" }}>
-                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 10 }}>Add-ons</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
-                        {BONUS_ACTIVITIES.map(({ key, label }) => {
-                          const sel = selectedBonus[key] ?? false;
-                          return (
-                            <button key={key} type="button"
-                              onClick={() => setSelectedBonus((prev) => ({ ...prev, [key]: !sel }))}
-                              style={{ padding: "6px 12px", borderRadius: 20, border: `1.5px solid ${sel ? "#2ec8c8" : "var(--border)"}`, background: sel ? "rgba(46,200,200,0.10)" : "transparent", color: sel ? "#2ec8c8" : "var(--text3)", fontSize: 12, cursor: "pointer", transition: "all 0.14s", fontWeight: sel ? 600 : 400 }}>
-                              {label}
-                            </button>
-                          );
-                        })}
+                      {/* ── Add-ons section ── */}
+                      <div style={{ padding: "10px 20px 14px", borderTop: "1px solid var(--border)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                          <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)" }}>Add-ons</div>
+                          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                          {BONUS_ACTIVITIES.map(({ key, label }) => {
+                            const sel = selectedBonus[key] ?? false;
+                            return (
+                              <button key={key} type="button"
+                                onClick={() => setSelectedBonus((prev) => ({ ...prev, [key]: !sel }))}
+                                style={{ padding: "6px 12px", borderRadius: 20, border: `1.5px solid ${sel ? "#2ec8c8" : "var(--border)"}`, background: sel ? "rgba(46,200,200,0.10)" : "transparent", color: sel ? "#2ec8c8" : "var(--text3)", fontSize: 12, cursor: "pointer", transition: "all 0.14s", fontWeight: sel ? 600 : 400 }}>
+                                {label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {bonusCelebration && (
+                        <div style={{ padding: "7px 20px", background: "rgba(46,200,200,0.07)", borderTop: "1px solid rgba(46,200,200,0.14)" }}>
+                          <div style={{ fontSize: 12, color: "#2ec8c8", fontWeight: 500 }}>{bonusCelebration}</div>
+                        </div>
+                      )}
+
+                      {/* Save button */}
+                      <div style={{ padding: "0 20px 16px" }}>
+                        <button
+                          type="button"
+                          className="btn btn-lime"
+                          disabled={savingActivity}
+                          style={{ width: "100%", fontSize: 13, fontWeight: 600, opacity: savingActivity ? 0.7 : 1 }}
+                          onClick={() => { void handleSave(); }}
+                        >
+                          {savingActivity ? "Saving…" : "Save activity"}
+                        </button>
                       </div>
                     </div>
-
-                    {bonusCelebration && (
-                      <div style={{ padding: "7px 20px", background: "rgba(46,200,200,0.07)", borderTop: "1px solid rgba(46,200,200,0.14)" }}>
-                        <div style={{ fontSize: 12, color: "#2ec8c8", fontWeight: 500 }}>{bonusCelebration}</div>
-                      </div>
-                    )}
-
-                    {/* Save button */}
-                    <div style={{ padding: "0 20px 16px" }}>
-                      <button
-                        type="button"
-                        className="btn btn-lime"
-                        disabled={savingActivity}
-                        style={{ width: "100%", fontSize: 13, fontWeight: 600, opacity: savingActivity ? 0.7 : 1 }}
-                        onClick={() => { void handleSave(); }}
-                      >
-                        {savingActivity ? "Saving…" : "Save activity"}
-                      </button>
-                    </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* ── Section 4: Weekly Progress ───────────────────────────── */}
                 <div style={{ background: "var(--bg3)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "18px 20px", marginBottom: 16 }}>
