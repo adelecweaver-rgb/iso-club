@@ -16,6 +16,15 @@ type Body = {
   oura_connected?: boolean;
   whoop_user_id?: string;
   oura_user_id?: string;
+  // Member profile fields captured during onboarding survey
+  primary_goal?: string;
+  secondary_goals?: string[];
+  health_conditions?: string[];
+  injury_notes?: string;
+  days_available?: number | string;
+  contrast_therapy_preference?: string;
+  motivation_style?: string;
+  age_range?: string;
   notification_preferences?: {
     welcome_sms?: boolean;
     protocol_ready_sms?: boolean;
@@ -90,6 +99,8 @@ export async function POST(request: Request) {
       );
     }
 
+    const daysAvailable = asOptionalNumber(body.days_available);
+
     const payload = {
       clerk_id: context.clerkUserId,
       email: context.email,
@@ -114,6 +125,27 @@ export async function POST(request: Request) {
         typeof body.oura_user_id === "string" ? body.oura_user_id.trim() || null : null,
       is_active: true,
       avatar_url: String(context.dbUser.avatar_url ?? "") || null,
+      // Member profile fields from the onboarding survey
+      ...(role === "member" && {
+        status: "awaiting_protocol",
+        primary_goal:
+          typeof body.primary_goal === "string" ? body.primary_goal.trim() || null : null,
+        secondary_goals: Array.isArray(body.secondary_goals) ? body.secondary_goals : [],
+        health_conditions: Array.isArray(body.health_conditions) ? body.health_conditions : [],
+        injury_notes:
+          typeof body.injury_notes === "string" ? body.injury_notes.trim() : "",
+        days_available: daysAvailable,
+        contrast_therapy_preference:
+          typeof body.contrast_therapy_preference === "string"
+            ? body.contrast_therapy_preference.trim() || null
+            : null,
+        motivation_style:
+          typeof body.motivation_style === "string"
+            ? body.motivation_style.trim() || null
+            : null,
+        age_range:
+          typeof body.age_range === "string" ? body.age_range.trim() || null : null,
+      }),
     };
 
     const upserted = await supabaseAdmin
