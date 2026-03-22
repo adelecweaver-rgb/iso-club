@@ -1170,17 +1170,17 @@ export function DashboardReactClient({
     if (!isCoachAccount || mode !== "coach" || coachView !== "protocols") return;
     void (async () => {
       try {
-        if (coachProtocols.length === 0) {
-          const res = await getJson<{ protocols: CoachProtocol[] }>("/api/coach/protocols");
-          if (Array.isArray(res.protocols)) setCoachProtocols(res.protocols);
-        }
+        // Always reload protocols so tier/days_per_week are fresh
+        const res = await getJson<{ protocols: CoachProtocol[] }>("/api/coach/protocols");
+        if (Array.isArray(res.protocols)) setCoachProtocols(res.protocols);
         if (allMembers.length === 0) {
-          const res = await getJson<{ members: typeof allMembers }>("/api/coach/members");
-          if (Array.isArray(res.members)) setAllMembers(res.members);
+          const mRes = await getJson<{ members: typeof allMembers }>("/api/coach/members");
+          if (Array.isArray(mRes.members)) setAllMembers(mRes.members);
         }
       } catch { /* tables may not exist yet */ }
     })();
-  }, [coachView, isCoachAccount, mode, coachProtocols.length, allMembers.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coachView, isCoachAccount, mode]);
 
   const sendMessage = useCallback(async () => {
     if (sendingMessage) return;
@@ -3421,8 +3421,14 @@ export function DashboardReactClient({
             </div>
           ) : (() => {
             const filtered = coachProtocols.filter((p) => {
-              if (protocolTierFilter !== "all" && normalizeProtocolTier(p.tier) !== protocolTierFilter) return false;
-              if (protocolDaysFilter !== "all" && p.days_per_week !== protocolDaysFilter) return false;
+              if (protocolTierFilter !== "all") {
+                const t = normalizeProtocolTier(p.tier);
+                if (t !== protocolTierFilter) return false;
+              }
+              if (protocolDaysFilter !== "all") {
+                const d = p.days_per_week != null ? Number(p.days_per_week) : null;
+                if (d !== Number(protocolDaysFilter)) return false;
+              }
               return true;
             });
             if (filtered.length === 0) {
