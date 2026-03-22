@@ -1529,162 +1529,261 @@ export function DashboardReactClient({
           })()}
 
           {/* ══════════════════════════════════════════════════════════════
-              SECTION 2 — THIS WEEK'S PROTOCOL
-              Full checklist (Strength / Cardio / Recovery) with bonus
-              pills, Save button, and live session count at the bottom.
+              SECTION 2 — THIS WEEK'S TARGETS
+              Each category shows its weekly target + specific activity
+              options the member taps to log toward that target.
           ══════════════════════════════════════════════════════════════ */}
           {(() => {
-            const cl = generateChecklist(payload.protocol);
+            const proto = payload.protocol;
             const c = payload.checklistCompletions;
 
-            const groups = [
-              { key: "strength", label: "Strength", color: "#4A7C59", items: cl.filter((i) => i.category === "strength") },
-              { key: "cardio",   label: "Cardio",   color: "#C4831A", items: cl.filter((i) => i.category === "cardio") },
-              { key: "recovery", label: "Recovery", color: "#9B8EA0", items: cl.filter((i) => i.category === "recovery") },
-            ].filter((g) => g.items.length > 0);
+            // ── Category definitions with fixed activity options ──────────
+            // Each option has a stable key, display label, and how it maps
+            // to the log API (type + subtype) or a bonus key.
+            type TargetOption = {
+              key: string;
+              label: string;
+              logType: "arx" | "carol" | "recovery" | "bonus";
+              logSubtype: string;
+            };
+            type TargetCategory = {
+              key: string;
+              label: string;
+              color: string;
+              weeklyTarget: number;
+              targetLabel: string; // e.g. "2× per week"
+              options: TargetOption[];
+            };
 
-            // Live checked count — updates as boxes are ticked
-            const checkedNow = cl.filter((item) => selectedProtocol[item.id] ?? isChecklistItemDone(item, c, {})).length;
-            const weekTotal = cl.length;
-            const weekComplete = weekTotal > 0 && checkedNow >= weekTotal;
-            const totalBonusThisWeek = (payload.bonusActivitiesThisWeek ?? 0) + localBonusCount;
+            const arxTarget = proto.arxPerWeek ?? 0;
+            const carolTarget = proto.carolPerWeek ?? 0;
+            const recovWeekTarget = proto.recoveryPerMonth > 0 ? Math.max(1, Math.ceil(proto.recoveryPerMonth / 4)) : 2;
 
+            const CATEGORIES: TargetCategory[] = [
+              {
+                key: "strength",
+                label: "Strength",
+                color: "#4A7C59",
+                weeklyTarget: arxTarget > 0 ? arxTarget : 2,
+                targetLabel: `${arxTarget > 0 ? arxTarget : 2}× per week`,
+                options: [
+                  { key: "strength-arx",      label: "ARX",              logType: "arx",     logSubtype: "manual_checkin" },
+                  { key: "strength-katalyst",  label: "Katalyst",         logType: "bonus",   logSubtype: "katalyst" },
+                ],
+              },
+              {
+                key: "cardio",
+                label: "Cardio",
+                color: "#C4831A",
+                weeklyTarget: carolTarget > 0 ? carolTarget : 2,
+                targetLabel: `${carolTarget > 0 ? carolTarget : 2}× per week`,
+                options: [
+                  { key: "cardio-rehit",    label: "2×20s REHIT",         logType: "carol",   logSubtype: "REHIT" },
+                  { key: "cardio-norw",     label: "Norwegian 4×4",       logType: "carol",   logSubtype: "FAT_BURN_60" },
+                  { key: "cardio-fatburn",  label: "Fat Burn",            logType: "carol",   logSubtype: "FAT_BURN_45" },
+                ],
+              },
+              {
+                key: "zone2",
+                label: "Zone 2",
+                color: "#6B9FD4",
+                weeklyTarget: 1,
+                targetLabel: "1× per week",
+                options: [
+                  { key: "zone2-carol",  label: "CAROL Zone 2",  logType: "carol",  logSubtype: "FAT_BURN_30" },
+                  { key: "zone2-walk",   label: "Walk",          logType: "bonus",  logSubtype: "walk" },
+                ],
+              },
+              {
+                key: "mobility",
+                label: "Mobility",
+                color: "#9B8EA0",
+                weeklyTarget: 1,
+                targetLabel: "1× per week",
+                options: [
+                  { key: "mob-stretch",  label: "Stretch independently",         logType: "bonus",  logSubtype: "stretching" },
+                  { key: "mob-session",  label: "Private session with Dustin",   logType: "bonus",  logSubtype: "nxpro" },
+                ],
+              },
+              {
+                key: "recovery",
+                label: "Recovery",
+                color: "#A0729A",
+                weeklyTarget: recovWeekTarget,
+                targetLabel: `${recovWeekTarget}× per week`,
+                options: [
+                  { key: "rec-compression", label: "Compression",    logType: "recovery", logSubtype: "compression" },
+                  { key: "rec-sauna",       label: "Sauna",          logType: "recovery", logSubtype: "infrared_sauna" },
+                  { key: "rec-cold",        label: "Cold Plunge",    logType: "recovery", logSubtype: "cold_plunge" },
+                ],
+              },
+            ];
+
+            // ── Completion counts from real logged data ───────────────────
+            // Used to drive the "X of Y" counter per category
+            function getLoggedCount(cat: TargetCategory): number {
+              if (cat.key === "strength")  return new Set(c.arxWeekDates).size;
+              if (cat.key === "cardio")    return c.carolWeekTypes.filter((t) => ["REHIT","FAT_BURN_60"].includes(t)).length;
+              if (cat.key === "zone2")     return c.carolWeekTypes.filter((t) => ["FAT_BURN_30","FAT_BURN_45"].includes(t)).length + (localBonusCount > 0 ? 0 : 0);
+              if (cat.key === "recovery")  return c.recoveryWeekModalities.length;
+              return 0;
+            }
+
+            // ── selectedTargets: tracks which option pills are toggled ────
+            // We reuse selectedProtocol (Record<string,boolean>) for option keys
+            // and selectedBonus for bonus keys — same save pathway as before.
+
+            // ── Total "sessions" for the week counter ────────────────────
+            // Count each selected pill once, capped at that category's target
+            function countSelected(cat: TargetCategory): number {
+              return cat.options.filter((opt) => selectedProtocol[opt.key] ?? false).length;
+            }
+            const totalSelected = CATEGORIES.reduce((sum, cat) => sum + Math.min(countSelected(cat), cat.weeklyTarget), 0);
+            const totalTarget   = CATEGORIES.reduce((sum, cat) => sum + cat.weeklyTarget, 0);
+            const weekComplete  = totalSelected >= totalTarget;
+
+            // ── Save handler ──────────────────────────────────────────────
             async function handleSave() {
               if (savingActivity) return;
               setSavingActivity(true);
               try {
-                const initState: Record<string, boolean> = {};
-                for (const item of cl) initState[item.id] = isChecklistItemDone(item, c, {});
-                const toAdd = cl.filter((item) => selectedProtocol[item.id] && !initState[item.id])
-                  .map((item) => ({ type: item.type as "arx" | "carol" | "recovery", subtype: item.subtype }));
-                const toRemove = cl.filter((item) => !selectedProtocol[item.id] && initState[item.id])
-                  .map((item) => ({ type: item.type as "arx" | "carol" | "recovery", subtype: item.subtype }));
-                const bonusKeys = Object.entries(selectedBonus).filter(([, v]) => v).map(([k]) => k);
+                const toAdd: Array<{ type: "arx" | "carol" | "recovery"; subtype: string }> = [];
+                const bonusKeys: string[] = [];
+
+                for (const cat of CATEGORIES) {
+                  for (const opt of cat.options) {
+                    if (!selectedProtocol[opt.key]) continue;
+                    if (opt.logType === "bonus") {
+                      bonusKeys.push(opt.logSubtype);
+                    } else {
+                      toAdd.push({ type: opt.logType as "arx" | "carol" | "recovery", subtype: opt.logSubtype });
+                      // Mirror into local completion state so counter updates
+                      if (opt.logType === "arx") { c.arxWeekDates.push(c.todayDate); c.arxTodayLogged = true; }
+                      else if (opt.logType === "carol") { c.carolWeekTypes.push(opt.logSubtype); c.carolTodayTypes.push(opt.logSubtype); }
+                      else if (opt.logType === "recovery") { c.recoveryWeekModalities.push(opt.logSubtype); c.recoveryTodayModalities.push(opt.logSubtype); }
+                    }
+                  }
+                }
+
                 await fetch("/api/member/activity-log", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ to_add: toAdd, to_remove: toRemove, bonus: bonusKeys }),
+                  body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: bonusKeys }),
                 });
-                for (const item of cl) {
-                  if (selectedProtocol[item.id] && !initState[item.id]) {
-                    setChecklistChecked((prev) => ({ ...prev, [item.id]: true }));
-                    if (item.type === "arx") { c.arxWeekDates.push(c.todayDate); c.arxTodayLogged = true; }
-                    else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); c.carolTodayTypes.push(item.subtype); }
-                    else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); c.recoveryTodayModalities.push(item.subtype); }
-                  }
-                  if (!selectedProtocol[item.id] && initState[item.id]) {
-                    setChecklistChecked((prev) => { const n = { ...prev }; delete n[item.id]; return n; });
-                  }
-                }
+
                 if (bonusKeys.length > 0) {
                   setLocalBonusCount((n) => n + bonusKeys.length);
-                  setBonusCelebration(`✓ ${BONUS_ACTIVITIES.find((b) => b.key === bonusKeys[0])?.label ?? bonusKeys[0]} logged — every session counts.`);
-                  setTimeout(() => setBonusCelebration(""), 5000);
                 }
+
                 const logged = toAdd.length + bonusKeys.length;
-                if (logged > 0) setActivitySavedMsg("✓ Saved — keep it up");
-                else if (toRemove.length > 0) setActivitySavedMsg("✓ Updated");
-                else setActivitySavedMsg("✓ Nothing new to log");
+                setActivitySavedMsg(logged > 0 ? "✓ Saved — great work" : "✓ Nothing new to log");
+                // Clear all selections after save
+                setSelectedProtocol({});
                 setSelectedBonus({});
               } catch { setActivitySavedMsg("Something went wrong — please try again"); }
               finally { setSavingActivity(false); }
             }
 
-            if (cl.length === 0) return null;
+            if (!proto.targetSystem && proto.arxPerWeek === 0 && proto.carolPerWeek === 0) return null;
 
             return (
               <div className="card" style={{ marginBottom: 16 }}>
-                {/* Header */}
+
+                {/* ── Header ── */}
                 <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>This Week&apos;s Protocol</div>
-                  <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.checklistCompletions.weekStartDate}</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>This Week&apos;s Targets</div>
+                  <div style={{ fontSize: 11, color: "var(--text3)" }}>{c.weekStartDate}</div>
                 </div>
 
-                {/* Grouped checklist rows */}
-                <div style={{ padding: "8px 20px 0" }}>
-                  {groups.map((group) => (
-                    <div key={group.key} style={{ marginBottom: 18 }}>
-                      {/* Category label */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
-                        <div style={{ width: 7, height: 7, borderRadius: "50%", background: group.color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", fontWeight: 600 }}>{group.label}</span>
+                {/* ── Category rows ── */}
+                <div style={{ padding: "4px 0 0" }}>
+                  {CATEGORIES.map((cat, ci) => {
+                    const loggedCount = getLoggedCount(cat);
+                    const selectedCount = countSelected(cat);
+                    const displayCount = Math.max(loggedCount, selectedCount);
+                    const catComplete = displayCount >= cat.weeklyTarget;
+                    const isLast = ci === CATEGORIES.length - 1;
+
+                    return (
+                      <div key={cat.key} style={{ padding: "14px 20px", borderBottom: isLast ? "none" : "1px solid var(--border)" }}>
+                        {/* Target row: label left, "X of Y" right */}
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: cat.color, flexShrink: 0 }} />
+                            <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{cat.label}</span>
+                            <span style={{ fontSize: 11, color: "var(--text3)" }}>{cat.targetLabel}</span>
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: catComplete ? cat.color : "var(--text3)" }}>
+                            {displayCount}/{cat.weeklyTarget}
+                            {catComplete && <span style={{ marginLeft: 5 }}>✓</span>}
+                          </span>
+                        </div>
+
+                        {/* Activity pills */}
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                          {cat.options.map((opt) => {
+                            const sel = selectedProtocol[opt.key] ?? false;
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => setSelectedProtocol((prev) => ({ ...prev, [opt.key]: !sel }))}
+                                style={{
+                                  padding: "7px 15px",
+                                  borderRadius: 24,
+                                  border: `1.5px solid ${sel ? cat.color : "var(--border2)"}`,
+                                  background: sel ? `${cat.color}14` : "transparent",
+                                  color: sel ? cat.color : "var(--text2)",
+                                  fontSize: 13,
+                                  fontWeight: sel ? 600 : 400,
+                                  cursor: "pointer",
+                                  transition: "all 0.13s",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 6,
+                                }}
+                              >
+                                {sel && <span style={{ fontSize: 11, fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                      {/* Session rows */}
-                      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                        {group.items.map((item) => {
-                          const serverDone = isChecklistItemDone(item, c, {});
-                          const sel = selectedProtocol[item.id] ?? serverDone;
-                          return (
-                            <div
-                              key={item.id}
-                              role="button"
-                              tabIndex={0}
-                              style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", borderRadius: "var(--r-sm)", cursor: "pointer", background: sel ? "rgba(74,124,89,0.06)" : "transparent", transition: "background 0.14s" }}
-                              onClick={() => setSelectedProtocol((prev) => ({ ...prev, [item.id]: !sel }))}
-                              onKeyDown={(e) => e.key === " " && setSelectedProtocol((prev) => ({ ...prev, [item.id]: !sel }))}
-                            >
-                              {/* Checkbox */}
-                              <div style={{ width: 22, height: 22, borderRadius: 6, flexShrink: 0, background: sel ? group.color : "transparent", border: `2px solid ${sel ? group.color : "rgba(28,43,30,0.20)"}`, display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.13s" }}>
-                                {sel && <span style={{ color: "#ffffff", fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
-                              </div>
-                              <span style={{ flex: 1, fontSize: 13.5, color: sel ? "var(--text3)" : "var(--text)", fontWeight: 500, textDecoration: sel ? "line-through" : "none", transition: "color 0.13s" }}>
-                                {item.label}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* ── Save button ── */}
+                <div style={{ padding: "16px 20px" }}>
+                  {activitySavedMsg ? (
+                    <div style={{ padding: "10px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.16)", borderRadius: "var(--r-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, color: "#4A7C59", fontWeight: 600 }}>{activitySavedMsg}</span>
+                      <button type="button" style={{ fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                        onClick={() => setActivitySavedMsg("")}>dismiss</button>
                     </div>
-                  ))}
-                </div>
-
-                {/* Additional activities — open pills */}
-                <div style={{ padding: "0 20px 16px" }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 10 }}>Additional activities</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {BONUS_ACTIVITIES.map(({ key, label }) => {
-                      const sel = selectedBonus[key] ?? false;
-                      return (
-                        <button key={key} type="button"
-                          onClick={() => setSelectedBonus((prev) => ({ ...prev, [key]: !sel }))}
-                          style={{ padding: "8px 16px", borderRadius: 24, border: `1.5px solid ${sel ? "#4A7C59" : "var(--border2)"}`, background: sel ? "rgba(74,124,89,0.08)" : "transparent", color: sel ? "#4A7C59" : "var(--text3)", fontSize: 13, cursor: "pointer", transition: "all 0.14s", fontWeight: sel ? 600 : 400 }}>
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {bonusCelebration && (
-                  <div style={{ margin: "0 20px 12px", padding: "8px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.16)", borderRadius: "var(--r-sm)" }}>
-                    <div style={{ fontSize: 12.5, color: "#4A7C59", fontWeight: 500 }}>{bonusCelebration}</div>
-                  </div>
-                )}
-
-                {/* Save today's activities */}
-                <div style={{ padding: "0 20px 20px" }}>
-                  <button type="button" className="btn btn-lime" disabled={savingActivity}
-                    style={{ width: "100%", fontSize: 13.5, fontWeight: 700, opacity: savingActivity ? 0.7 : 1, padding: "12px 0" }}
-                    onClick={() => { void handleSave(); }}>
-                    {savingActivity ? "Saving…" : "Save today's activities"}
-                  </button>
+                  ) : (
+                    <button type="button" className="btn btn-lime" disabled={savingActivity}
+                      style={{ width: "100%", fontSize: 13.5, fontWeight: 700, opacity: savingActivity ? 0.7 : 1, padding: "12px 0" }}
+                      onClick={() => { void handleSave(); }}>
+                      {savingActivity ? "Saving…" : "Save today's activities"}
+                    </button>
+                  )}
                 </div>
 
                 {/* ── Week status counter ── */}
-                <div style={{ padding: "16px 20px 20px", borderTop: "1px solid var(--border)" }}>
+                <div style={{ padding: "0 20px 20px", borderTop: "1px solid var(--border)", paddingTop: 16 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                     <span style={{ fontSize: 32, fontFamily: "var(--serif)", fontWeight: 700, color: weekComplete ? "#4A7C59" : "var(--text)", lineHeight: 1 }}>
-                      {checkedNow}
+                      {totalSelected}
                     </span>
                     <span style={{ fontSize: 15, color: "var(--text3)" }}>
-                      of {weekTotal} sessions complete this week
+                      of {totalTarget} sessions complete this week
                       {weekComplete && <span style={{ marginLeft: 8, color: "#4A7C59", fontWeight: 600 }}>✓</span>}
                     </span>
                   </div>
-                  {totalBonusThisWeek > 0 && (
-                    <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4 }}>+ {totalBonusThisWeek} additional activit{totalBonusThisWeek === 1 ? "y" : "ies"} this week</div>
-                  )}
                 </div>
+
               </div>
             );
           })()}
