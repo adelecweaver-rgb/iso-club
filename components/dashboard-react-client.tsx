@@ -2569,11 +2569,9 @@ export function DashboardReactClient({
                     {firstName}&apos;s protocol
                   </div>
 
-                  {/* Goal line */}
-                  {goalLine ? (
+                  {/* Goal line — only shown when goals are set */}
+                  {goalLine && (
                     <p style={{ fontSize: 13, color: "var(--text2)", margin: "0 0 14px 0", lineHeight: 1.6 }}>{goalLine}</p>
-                  ) : (
-                    <p style={{ fontSize: 13, color: "var(--text3)", margin: "0 0 14px 0", fontStyle: "italic" }}>Goals loading…</p>
                   )}
 
                   {/* Coach note */}
