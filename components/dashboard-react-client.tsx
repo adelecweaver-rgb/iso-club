@@ -1982,9 +1982,9 @@ export function DashboardReactClient({
                 <div style={{ marginBottom: 28 }}>
                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }}>
                     <div style={{ fontSize: 26, fontFamily: "var(--serif)", color: "var(--text)", lineHeight: 1.2 }}>
-                      {hasProtocol ? protocolDisplayName : "No Protocol"}
+                      {hasProtocol ? protocolDisplayName : "Your plan is being prepared"}
                     </div>
-                    <span style={{ fontSize: 10, background: "rgba(201,240,85,0.1)", color: "var(--lime)", border: "1px solid rgba(201,240,85,0.25)", borderRadius: 4, padding: "3px 10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 4, flexShrink: 0 }}>Active</span>
+                    {hasProtocol && <span style={{ fontSize: 10, background: "rgba(201,240,85,0.1)", color: "var(--lime)", border: "1px solid rgba(201,240,85,0.25)", borderRadius: 4, padding: "3px 10px", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 4, flexShrink: 0 }}>Active</span>}
                   </div>
                   {hasProtocol && (
                     <>
@@ -1993,7 +1993,7 @@ export function DashboardReactClient({
                     </>
                   )}
                   {!hasProtocol && (
-                    <p style={{ fontSize: 13, color: "var(--text3)", margin: "8px 0 0 0" }}>No protocol assigned yet. Ask your coach to assign one.</p>
+                    <p style={{ fontSize: 13, color: "var(--text3)", margin: "8px 0 0 0", lineHeight: 1.65 }}>Dustin will assign your protocol after your first session.</p>
                   )}
                 </div>
 
