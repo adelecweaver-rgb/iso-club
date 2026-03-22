@@ -39,14 +39,24 @@ export async function GET(request: Request) {
     }
 
     const dayIds = days.map((d) => (d as Record<string, unknown>).id as string);
-    const actRes = await context.supabase
+    // Try with cold_plunge column first; fall back if column doesn't exist yet
+    const actResExtended = await context.supabase
       .from("protocol_day_activities")
       .select("id,protocol_day_id,activity_order,activity_type,activity_name,duration_minutes,is_optional,cold_plunge")
       .in("protocol_day_id", dayIds)
       .order("activity_order");
-    if (actRes.error) throw new Error(actRes.error.message);
-
-    const activities = (actRes.data ?? []) as Array<Record<string, unknown>>;
+    let activities: Array<Record<string, unknown>>;
+    if (!actResExtended.error) {
+      activities = (actResExtended.data ?? []) as Array<Record<string, unknown>>;
+    } else {
+      const actResLegacy = await context.supabase
+        .from("protocol_day_activities")
+        .select("id,protocol_day_id,activity_order,activity_type,activity_name,duration_minutes,is_optional")
+        .in("protocol_day_id", dayIds)
+        .order("activity_order");
+      if (actResLegacy.error) throw new Error(actResLegacy.error.message);
+      activities = (actResLegacy.data ?? []) as Array<Record<string, unknown>>;
+    }
 
     const result = days.map((d) => {
       const dr = d as Record<string, unknown>;
