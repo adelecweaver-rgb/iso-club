@@ -1372,12 +1372,7 @@ export function DashboardReactClient({
               { n: "Compression Boots — circulation and recovery", m: 20 },
             ];
 
-            // Derive protocol focus label from today's plan or protocol metadata
             const hasProtocol = !!payload.protocol.targetSystem;
-            const focusTitle = tp?.dayTheme || tp?.dayName || payload.protocol.name || "Today's Session";
-            const focusDesc = tp?.dayDescription
-              ? (tp.dayDescription.length > 180 ? tp.dayDescription.slice(0, 180) + "…" : tp.dayDescription)
-              : null;
             const todayActivities = (tp?.activities ?? []).filter((a) => !a.isOptional);
 
             return (
@@ -1424,13 +1419,13 @@ export function DashboardReactClient({
                       </div>
                     ) : (
                       <div>
-                        {/* Focus heading */}
-                        <div style={{ fontSize: 22, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.15, marginBottom: focusDesc ? 6 : 14 }}>
-                          {focusTitle}
+                        {/* Protocol prompt */}
+                        <div style={{ fontSize: 22, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.15, marginBottom: 6 }}>
+                          Ready to go.
                         </div>
-                        {focusDesc && (
-                          <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 14px 0" }}>{focusDesc}</p>
-                        )}
+                        <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 14px 0" }}>
+                          Move forward with a session from your protocol. Check off what you complete below.
+                        </p>
 
                         {/* Today's activities list */}
                         {todayActivities.length > 0 && (
