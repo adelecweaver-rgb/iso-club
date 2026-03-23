@@ -1598,17 +1598,46 @@ export function DashboardReactClient({
 
           {/* CARD 2a — SESSION CARD (strong) */}
           {todayCheckin === "strong" && (() => {
-            // Show a loading state while the week plan fetch is in flight
-            if (!weekPlanLoaded && weekPlan.length === 0) {
-              return (
-                <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", padding: "20px 16px", textAlign: "center" }}>
-                  <div style={{ fontSize: 13, color: "#888780" }}>Loading your session plan…</div>
-                </div>
-              );
-            }
+            const todayIsoSC  = payload.checklistCompletions.todayDate;
+            const weekStartSC = payload.checklistCompletions.weekStartDate;
+            const rawDiff     = Math.round((new Date(todayIsoSC + "T00:00:00").getTime() - new Date(weekStartSC + "T00:00:00").getTime()) / 86400000);
+            const currentDow  = Math.max(1, Math.min(7, rawDiff + 1));
 
-            // Fallback: week plan not seeded — use today's plan from server payload
-            if (weekPlan.length === 0) {
+            // Use weekPlan (from API) if available, fall back to payload.protocol.days
+            // Both have the same shape for navigation purposes.
+            // protocol.days activities lack steps/whyItMatters but that's acceptable.
+            type NavDay = {
+              id: string;
+              dayOfWeek: number;
+              dayName: string;
+              dayTheme: string;
+              activities: Array<{
+                id: string; type: string; name: string;
+                durationMinutes: number; isOptional: boolean;
+                coldPlunge?: string | null;
+                steps?: string[]; whyItMatters?: string;
+                isBookable?: boolean; bookingUrl?: string | null;
+                alternativeActivity?: string | null;
+              }>;
+            };
+
+            const planDays: NavDay[] = weekPlan.length > 0
+              ? weekPlan
+              : (payload.protocol.days ?? []).map((d) => ({
+                  id: d.id,
+                  dayOfWeek: d.dayOfWeek,
+                  dayName: d.dayName,
+                  dayTheme: d.dayTheme,
+                  activities: d.activities.map((a) => ({
+                    id: a.id, type: a.type, name: a.name,
+                    durationMinutes: a.durationMinutes,
+                    isOptional: a.isOptional,
+                    coldPlunge: a.coldPlunge ?? null,
+                  })),
+                }));
+
+            // No protocol assigned at all
+            if (planDays.length === 0 && weekPlanLoaded) {
               const tp = payload.todaysPlan;
               if (!tp || !tp.hasProtocol) {
                 return (
@@ -1624,67 +1653,20 @@ export function DashboardReactClient({
                   </div>
                 );
               }
-              // Use todaysPlan activities as a plain list fallback
-              const acts = tp.activities.filter((a) => !a.isOptional);
-              const actTypes = [...new Set(acts.map((a) => {
-                if (a.type === "strength") return "Strength";
-                if (a.type === "cardio")   return "Cardio";
-                if (a.type === "recovery") return "Recovery";
-                return a.type.charAt(0).toUpperCase() + a.type.slice(1);
-              }))];
-              const totalDur = acts.reduce((s, a) => s + a.durationMinutes, 0);
+            }
+
+            // Loading (neither source ready yet)
+            if (planDays.length === 0) {
               return (
-                <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", overflow: "hidden" }}>
-                  <div style={{ padding: "12px 14px", borderBottom: "0.5px solid #E5E5E0" }}>
-                    <div style={{ fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.05em" }}>Today&apos;s session</div>
-                  </div>
-                  <div style={{ padding: "14px 16px" }}>
-                    <div style={{ fontSize: 17, fontWeight: 500, color: "#1a1a1a", marginBottom: 2 }}>{tp.dayTheme || tp.dayName || tp.protocolName}</div>
-                    <div style={{ fontSize: 12, color: "#888780", marginBottom: 14 }}>{actTypes.join(" · ")} · ~{totalDur} min</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
-                      {acts.map((act) => {
-                        const n = act.name.toLowerCase();
-                        const icon = n.includes("cold") || n.includes("plunge") ? "🧊"
-                          : n.includes("arx") || n.includes("strength") ? "🏋"
-                          : n.includes("carol") || n.includes("zone 2") || n.includes("bike") ? "🚴"
-                          : n.includes("compression") || n.includes("boots") ? "🦵"
-                          : n.includes("sauna") || n.includes("infrared") ? "🌡"
-                          : n.includes("vasper") ? "💧"
-                          : n.includes("katalyst") || n.includes("ems") ? "⚡"
-                          : "●";
-                        const bg = act.type === "recovery" ? { background: "#E6F1FB" } : { background: "#F1EFE8" };
-                        return (
-                          <div key={act.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, ...bg }}>{icon}</div>
-                            <div>
-                              <div style={{ fontSize: 13, color: "#1a1a1a" }}>{act.name}</div>
-                              {act.durationMinutes > 0 && <div style={{ fontSize: 11, color: "#888780" }}>{act.durationMinutes} min</div>}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <button type="button" onClick={() => setMemberSection("protocol")}
-                      style={{ padding: "11px 14px", borderRadius: 10, background: "transparent", border: "0.5px solid #E5E5E0", color: "#5F5E5A", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
-                      Full plan
-                    </button>
-                  </div>
+                <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", padding: "20px 16px", textAlign: "center" }}>
+                  <div style={{ fontSize: 13, color: "#888780" }}>Loading your session plan…</div>
                 </div>
               );
             }
 
-            return null; // handled below
-          })()}
-
-          {/* CARD 2a — SESSION CARD (strong + week plan loaded) */}
-          {todayCheckin === "strong" && weekPlan.length > 0 && (() => {
-            const todayIsoSC  = payload.checklistCompletions.todayDate;
-            const weekStartSC = payload.checklistCompletions.weekStartDate;
-            const rawDiff     = Math.round((new Date(todayIsoSC + "T00:00:00").getTime() - new Date(weekStartSC + "T00:00:00").getTime()) / 86400000);
-            const currentDow  = Math.max(1, Math.min(7, rawDiff + 1));
-            const navDays     = weekPlan.filter((d) => d.dayOfWeek >= currentDow);
+            const navDays  = planDays.filter((d) => d.dayOfWeek >= currentDow);
             const activeDow   = sessionCardDow ?? (navDays[0]?.dayOfWeek ?? currentDow);
-            const viewingDay  = weekPlan.find((d) => d.dayOfWeek === activeDow) ?? navDays[0] ?? weekPlan[0];
+            const viewingDay  = planDays.find((d) => d.dayOfWeek === activeDow) ?? navDays[0] ?? planDays[0];
             if (!viewingDay) return null;
             const navIdx  = navDays.findIndex((d) => d.dayOfWeek === activeDow);
             const canBack = navIdx > 0;
@@ -1798,7 +1780,7 @@ export function DashboardReactClient({
                             onKeyDown={(e) => hasDetail && e.key === " " && setExpandedActivityId(isExpanded ? null : act.id)}
                             style={{ display: "flex", alignItems: "center", gap: 10, cursor: hasDetail ? "pointer" : "default" }}
                           >
-                            <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, ...icoStyle(act.coldPlunge, act.type) }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, ...icoStyle(act.coldPlunge ?? null, act.type) }}>
                               {actIcon(act)}
                             </div>
                             <div style={{ flex: 1 }}>
