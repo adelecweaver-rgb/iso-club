@@ -969,6 +969,8 @@ export function DashboardReactClient({
   const [weekPlanLoaded, setWeekPlanLoaded] = useState(false);
   const [sessionCardDow, setSessionCardDow] = useState<number | null>(null);
   const [sessionCardCompleted, setSessionCardCompleted] = useState<Record<string, boolean>>({});
+  // Which activity ID is expanded in the inline session card
+  const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinLoaded, setCheckinLoaded] = useState(false);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
@@ -1577,12 +1579,7 @@ export function DashboardReactClient({
                           </div>
                         )}
 
-                        {tp && todayActivities.length > 0 && (
-                          <button type="button" className="btn btn-sm" style={{ fontSize: 12 }}
-                            onClick={() => { setSessionStep(0); setSessionCompleted(new Set()); setSessionGuideOpen(true); }}>
-                            View guided plan →
-                          </button>
-                        )}
+                        {/* "View guided plan" removed — session detail is inline in the session card below */}
                       </div>
                     )}
                     <div style={{ marginTop: 14 }}>
@@ -2094,11 +2091,11 @@ export function DashboardReactClient({
                   <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)" }}>{cardLabel}</div>
                   <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                     <button type="button" disabled={!canBack}
-                      onClick={() => { if (canBack) setSessionCardDow(navDays[navIdx - 1]!.dayOfWeek); }}
+                      onClick={() => { if (canBack) { setSessionCardDow(navDays[navIdx - 1]!.dayOfWeek); setExpandedActivityId(null); } }}
                       style={{ background: "none", border: "none", color: canBack ? "var(--text2)" : "var(--border2)", cursor: canBack ? "pointer" : "default", padding: "4px 7px", fontSize: 16, lineHeight: 1 }}>‹</button>
                     <span style={{ fontSize: 12, color: "var(--text2)", fontWeight: 500, minWidth: 76, textAlign: "center" }}>{DOW_NAMES[viewingDay.dayOfWeek]}</span>
                     <button type="button" disabled={!canFwd}
-                      onClick={() => { if (canFwd) setSessionCardDow(navDays[navIdx + 1]!.dayOfWeek); }}
+                      onClick={() => { if (canFwd) { setSessionCardDow(navDays[navIdx + 1]!.dayOfWeek); setExpandedActivityId(null); } }}
                       style={{ background: "none", border: "none", color: canFwd ? "var(--text2)" : "var(--border2)", cursor: canFwd ? "pointer" : "default", padding: "4px 7px", fontSize: 16, lineHeight: 1 }}>›</button>
                   </div>
                 </div>
@@ -2111,31 +2108,84 @@ export function DashboardReactClient({
                   <div style={{ fontSize: 12, color: "var(--text3)" }}>{subtitle}</div>
                 </div>
 
-                {/* Activity list */}
-                <div style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)" }}>
-                  {required.map((act, i) => (
-                    <div key={act.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 20px", borderBottom: i < required.length - 1 ? "1px solid var(--border)" : "none" }}>
-                      <div style={{ width: 34, height: 34, borderRadius: 8, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", ...actIconBg(act.type) }}>
-                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: actDot(act.type) }} />
+                {/* Activity list — tap a row to expand steps inline */}
+                <div style={{ borderTop: "1px solid var(--border)" }}>
+                  {required.map((act, i) => {
+                    const isExpanded = expandedActivityId === act.id;
+                    const hasDetail  = (act.steps && act.steps.length > 0) || !!act.whyItMatters;
+                    return (
+                      <div key={act.id} style={{ borderBottom: i < required.length - 1 || isExpanded ? "1px solid var(--border)" : "none" }}>
+                        {/* Row — tappable if there are steps */}
+                        <div
+                          role={hasDetail ? "button" : undefined}
+                          tabIndex={hasDetail ? 0 : undefined}
+                          onClick={() => hasDetail && setExpandedActivityId(isExpanded ? null : act.id)}
+                          onKeyDown={(e) => hasDetail && e.key === " " && setExpandedActivityId(isExpanded ? null : act.id)}
+                          style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", cursor: hasDetail ? "pointer" : "default" }}
+                        >
+                          <div style={{ width: 36, height: 36, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", ...actIconBg(act.type) }}>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: actDot(act.type) }} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{act.name}</div>
+                            {!isExpanded && act.description && (
+                              <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {act.description.length > 72 ? act.description.slice(0, 72) + "…" : act.description}
+                              </div>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                            {act.durationMinutes > 0 && <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>}
+                            {hasDetail && (
+                              <span style={{ fontSize: 13, color: "var(--text3)", lineHeight: 1, transform: isExpanded ? "rotate(90deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>›</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Expanded detail */}
+                        {isExpanded && (
+                          <div style={{ padding: "0 20px 16px 68px" }}>
+                            {act.description && (
+                              <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: "0 0 12px 0" }}>
+                                {act.description}
+                              </p>
+                            )}
+                            {act.whyItMatters && (
+                              <div style={{ marginBottom: 12 }}>
+                                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", fontWeight: 600, marginBottom: 5 }}>Why it matters</div>
+                                <p style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{act.whyItMatters}</p>
+                              </div>
+                            )}
+                            {act.steps && act.steps.length > 0 && (
+                              <div>
+                                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", fontWeight: 600, marginBottom: 8 }}>Steps</div>
+                                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                                  {act.steps.map((step, si) => (
+                                    <div key={si} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: actDot(act.type), minWidth: 18, marginTop: 2, lineHeight: 1 }}>{si + 1}</span>
+                                      <span style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.55 }}>{step}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {act.alternativeActivity && (
+                              <div style={{ marginTop: 10, fontSize: 11, color: "var(--text3)", fontStyle: "italic" }}>
+                                Alternative: {act.alternativeActivity}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>{act.name}</div>
-                        {act.description && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{act.description.length > 80 ? act.description.slice(0, 80) + "…" : act.description}</div>}
-                      </div>
-                      {act.durationMinutes > 0 && <div style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0 }}>{act.durationMinutes} min</div>}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
-                {/* Footer */}
-                <div style={{ padding: "12px 20px", display: "flex", gap: 8 }}>
+                {/* Mark as complete — full width, no navigation away */}
+                <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)" }}>
                   <button type="button" onClick={() => { void handleMarkComplete(); }} disabled={isDone}
-                    style={{ flex: 1, padding: "11px 0", borderRadius: 8, background: isDone ? "rgba(74,124,89,0.10)" : "#4A7C59", color: isDone ? "#4A7C59" : "#fff", border: isDone ? "1.5px solid rgba(74,124,89,0.28)" : "none", fontSize: 13.5, fontWeight: 700, cursor: isDone ? "default" : "pointer", transition: "all 0.15s" }}>
+                    style={{ width: "100%", padding: "13px 0", borderRadius: 8, background: isDone ? "rgba(74,124,89,0.10)" : "#4A7C59", color: isDone ? "#4A7C59" : "#fff", border: isDone ? "1.5px solid rgba(74,124,89,0.28)" : "none", fontSize: 14, fontWeight: 700, cursor: isDone ? "default" : "pointer", transition: "all 0.15s" }}>
                     {isDone ? "✓ Completed" : "Mark as complete"}
-                  </button>
-                  <button type="button" onClick={() => setMemberSection("protocol")}
-                    style={{ padding: "11px 16px", borderRadius: 8, background: "transparent", border: "1.5px solid var(--border2)", color: "var(--text2)", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
-                    Full plan
                   </button>
                 </div>
               </div>
