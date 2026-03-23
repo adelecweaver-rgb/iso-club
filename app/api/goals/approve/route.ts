@@ -26,6 +26,8 @@ type ApproveBody = {
   // If provided, override the AI targets with Dustin's edits
   edited_goals?: GoalEdit[];
   coach_notes?: string;
+  // If true, just mark the suggestion as skipped without setting goals
+  skip?: boolean;
 };
 
 const VALID_GOALS = ["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const;
@@ -53,6 +55,19 @@ export async function POST(request: Request) {
 
     if (!suggestionId || !memberId) {
       return NextResponse.json({ success: false, error: "suggestion_id and member_id required." }, { status: 400 });
+    }
+
+    // Handle skip — just mark as skipped, no goal upserts
+    if (body.skip) {
+      await supabase
+        .from("goal_suggestions")
+        .update({
+          status: "skipped",
+          reviewed_by: coachId,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq("id", suggestionId);
+      return NextResponse.json({ success: true });
     }
 
     // Fetch the suggestion

@@ -1088,6 +1088,36 @@ export function DashboardReactClient({
   const [confirmingReview, setConfirmingReview] = useState(false);
   const [reviewConfirmMsg, setReviewConfirmMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [reviewDiffCollapsed, setReviewDiffCollapsed] = useState(false);
+
+  // Review screen — goal suggestion state
+  type ReviewGoalSuggestion = {
+    id: string;
+    suggestions: Array<{
+      type: string;
+      current_value: number;
+      target_value: number;
+      unit: string;
+      label: string;
+      reasoning: string;
+    }>;
+    protocol_suggestion: string;
+    protocol_reasoning: string;
+    created_at: string;
+    status: string;
+  };
+  type ReviewGoalRow = { goal_type: string; is_active: boolean; target_value: number | null };
+  const [reviewGoalData, setReviewGoalData] = useState<{
+    pendingSuggestion: ReviewGoalSuggestion | null;
+    approvedGoals: ReviewGoalRow[];
+    hasScan: boolean;
+    currentValues: Record<string, number | null>;
+  } | null>(null);
+  const [reviewGoalLoading, setReviewGoalLoading] = useState(false);
+  const [reviewGoalEditTargets, setReviewGoalEditTargets] = useState<Record<string, string>>({});
+  const [reviewGoalSaving, setReviewGoalSaving] = useState(false);
+  const [reviewGoalMsg, setReviewGoalMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [reviewGoalGenerating, setReviewGoalGenerating] = useState(false);
+
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [assignCoachNotes, setAssignCoachNotes] = useState("");
   const [assignStatus, setAssignStatus] = useState("");
@@ -1239,6 +1269,45 @@ export function DashboardReactClient({
       } finally { setLoadingMemberGoals(false); }
     })();
   }, [assignMemberId, coachView, isCoachAccount, mode]);
+
+  // Load goal data for the review screen whenever a member is opened for review
+  useEffect(() => {
+    if (!reviewMemberId) { setReviewGoalData(null); setReviewGoalEditTargets({}); setReviewGoalMsg(null); return; }
+    setReviewGoalLoading(true);
+    void (async () => {
+      try {
+        const json = await getJson<{
+          goals: ReviewGoalRow[];
+          has_scan: boolean;
+          current_values: Record<string, number | null>;
+          pending_suggestion: ReviewGoalSuggestion | null;
+        }>(`/api/coach/goals?member_id=${reviewMemberId}`);
+        const approvedGoals = (json.goals ?? []).filter((g) => g.is_active);
+        const pending = json.pending_suggestion ?? null;
+        setReviewGoalData({
+          pendingSuggestion: pending,
+          approvedGoals,
+          hasScan: json.has_scan ?? false,
+          currentValues: json.current_values ?? {},
+        });
+        // Pre-fill edit targets from approved goals if no pending suggestion
+        if (!pending && approvedGoals.length > 0) {
+          const init: Record<string, string> = {};
+          for (const g of approvedGoals) {
+            if (g.target_value !== null) init[g.goal_type] = String(g.target_value);
+          }
+          setReviewGoalEditTargets(init);
+        } else if (pending) {
+          const init: Record<string, string> = {};
+          for (const s of pending.suggestions ?? []) init[s.type] = String(s.target_value);
+          setReviewGoalEditTargets(init);
+        }
+      } catch { /* non-critical */ } finally {
+        setReviewGoalLoading(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewMemberId]);
   const payloadCoachRecipients = useMemo(
     () =>
       Array.isArray(payload.coach.members)
@@ -4195,7 +4264,36 @@ export function DashboardReactClient({
 
           <div style={{ marginBottom: 20 }}>
             <div className="sec-header"><div className="sec-title">Flags to review</div></div>
-            {(payload.coach.alerts.length ? payload.coach.alerts : ["No current alerts."]).map((alert, index) => (
+            {/* Pending goal suggestions */}
+            {pendingSuggestions.map((sugg) => (
+              <div key={sugg.id} className="alert alert-warn" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ fontSize: 12 }}>{sugg.member_name} — goal suggestions ready to review</span>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  style={{ fontSize: 10, flexShrink: 0, whiteSpace: "nowrap" }}
+                  onClick={() => {
+                    // Open the member in the review screen
+                    const member = payload.coach.members.find((m) => m.id === sugg.member_id);
+                    if (member) {
+                      const matchingNotif = coachNotifs.find((n) => n.member_id === sugg.member_id && n.type === "protocol_review_requested");
+                      setReviewMemberId(sugg.member_id);
+                      setReviewMemberName(member.name);
+                      setReviewNotifId(matchingNotif?.id ?? null);
+                      setReviewDiff(matchingNotif?.payload?.diff ?? []);
+                      setReviewRecommendation(matchingNotif?.payload?.recommendation ?? null);
+                      setReviewRecommendationReason(matchingNotif?.payload?.recommendation_reason ?? null);
+                      setReviewCoachNote("");
+                      setReviewProtocolChanged(false);
+                      setReviewConfirmMsg(null);
+                      setReviewDiffCollapsed(true);
+                      setCoachView("members");
+                    }
+                  }}
+                >Review goals →</button>
+              </div>
+            ))}
+            {(payload.coach.alerts.length ? payload.coach.alerts : (pendingSuggestions.length === 0 ? ["No current alerts."] : [])).map((alert, index) => (
               <div className="alert alert-warn" key={`${alert}-${index}`}>{alert}</div>
             ))}
           </div>
@@ -4220,12 +4318,241 @@ export function DashboardReactClient({
                       setReviewCoachNote("");
                       setReviewProtocolChanged(false);
                       setReviewConfirmMsg(null);
+                      setReviewGoalData(null);
+                      setReviewGoalEditTargets({});
+                      setReviewGoalMsg(null);
                     }}
                   >← Back to members</button>
                 </div>
                 <div className="sec-header">
                   <div className="sec-title">Protocol review requested</div>
                   <div style={{ fontSize: 12, color: "var(--text3)" }}>{reviewMemberName}</div>
+                </div>
+
+                {/* ── GOALS SECTION ─────────────────────────────────────── */}
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, color: "var(--text3)", marginBottom: 12 }}>Goals</div>
+                  {reviewGoalLoading ? (
+                    <div style={{ fontSize: 12, color: "var(--text3)" }}>Loading…</div>
+                  ) : reviewGoalData ? (() => {
+                    const { pendingSuggestion, approvedGoals, hasScan, currentValues } = reviewGoalData;
+                    const GOAL_UNITS: Record<string, string> = { lose_fat: "%", gain_muscle: " lbs", improve_cardio: "W", attendance: "/mo" };
+                    const GOAL_LABELS: Record<string, string> = { lose_fat: "Body fat", gain_muscle: "Lean mass", improve_cardio: "Aerobic power", attendance: "Monthly sessions" };
+
+                    // ── Pending suggestion ─────────────────────────────────
+                    if (pendingSuggestion) {
+                      const scanDate = pendingSuggestion.created_at
+                        ? new Date(pendingSuggestion.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+                        : "";
+                      return (
+                        <div className="card" style={{ padding: "16px 18px" }}>
+                          <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 12 }}>
+                            <span style={{ fontWeight: 600, color: "#4A7C59" }}>AI suggested</span> — Generated from Fit3D scan {scanDate}
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 14 }}>
+                            {pendingSuggestion.suggestions.map((g) => {
+                              const unit = GOAL_UNITS[g.type] ?? "";
+                              const label = GOAL_LABELS[g.type] ?? g.label;
+                              const editVal = reviewGoalEditTargets[g.type] ?? String(g.target_value);
+                              return (
+                                <div key={g.type} style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 12, alignItems: "start" }}>
+                                  <div>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)", marginBottom: 3 }}>{label}</div>
+                                    <div style={{ fontSize: 11, color: "var(--text3)", display: "flex", alignItems: "center", gap: 4 }}>
+                                      <span>{g.current_value}{unit}</span>
+                                      <span>→</span>
+                                      <input
+                                        type="number"
+                                        step="0.1"
+                                        style={{ width: 62, fontSize: 11, padding: "2px 5px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)", fontWeight: 600 }}
+                                        value={editVal}
+                                        onChange={(e) => setReviewGoalEditTargets((prev) => ({ ...prev, [g.type]: e.target.value }))}
+                                      />
+                                      <span style={{ fontSize: 10, color: "var(--text3)" }}>{unit.trim()}</span>
+                                    </div>
+                                  </div>
+                                  <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.5, fontStyle: "italic" }}>&ldquo;{g.reasoning}&rdquo;</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {reviewGoalMsg && (
+                            <div style={{ fontSize: 12, padding: "6px 10px", borderRadius: 5, marginBottom: 10, background: reviewGoalMsg.ok ? "rgba(74,124,89,0.08)" : "rgba(184,64,64,0.08)", color: reviewGoalMsg.ok ? "#4A7C59" : "#B84040" }}>
+                              {reviewGoalMsg.text}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", gap: 8 }}>
+                            <button
+                              type="button"
+                              className="btn btn-lime btn-sm"
+                              disabled={reviewGoalSaving}
+                              onClick={async () => {
+                                setReviewGoalSaving(true);
+                                setReviewGoalMsg(null);
+                                try {
+                                  const editedGoals = pendingSuggestion.suggestions.map((g) => ({
+                                    type: g.type,
+                                    target_value: parseFloat(reviewGoalEditTargets[g.type] ?? String(g.target_value)),
+                                  })).filter((eg) => !isNaN(eg.target_value));
+                                  const res = await fetch("/api/goals/approve", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ suggestion_id: pendingSuggestion.id, member_id: reviewMemberId, edited_goals: editedGoals }),
+                                  }).then((r) => r.json() as Promise<{ success: boolean; error?: string }>);
+                                  if (!res.success) throw new Error(res.error ?? "Failed");
+                                  setReviewGoalMsg({ text: "✓ Goals approved and saved.", ok: true });
+                                  setReviewGoalData((prev) => prev ? { ...prev, pendingSuggestion: null, approvedGoals: editedGoals.map((eg) => ({ goal_type: eg.type, is_active: true, target_value: eg.target_value })) } : prev);
+                                  // Also remove from the global pending suggestions list
+                                  setPendingSuggestions((prev) => prev.filter((s) => s.id !== pendingSuggestion.id));
+                                } catch (err) {
+                                  setReviewGoalMsg({ text: err instanceof Error ? err.message : "Failed.", ok: false });
+                                } finally { setReviewGoalSaving(false); }
+                              }}
+                            >{reviewGoalSaving ? "Saving…" : "Approve goals"}</button>
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              style={{ fontSize: 11 }}
+                              disabled={reviewGoalSaving}
+                              onClick={async () => {
+                                setReviewGoalSaving(true);
+                                try {
+                                  await fetch("/api/goals/approve", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ suggestion_id: pendingSuggestion.id, member_id: reviewMemberId, skip: true }),
+                                  });
+                                  setReviewGoalData((prev) => prev ? { ...prev, pendingSuggestion: null } : prev);
+                                  setPendingSuggestions((prev) => prev.filter((s) => s.id !== pendingSuggestion.id));
+                                } catch { /* silent */ } finally { setReviewGoalSaving(false); }
+                              }}
+                            >Skip goals</button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // ── Approved goals — editable targets ─────────────────
+                    if (approvedGoals.length > 0) {
+                      return (
+                        <div className="card" style={{ padding: "16px 18px" }}>
+                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.1em" }}>Current goals</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+                            {approvedGoals.map((g) => {
+                              const unit = GOAL_UNITS[g.goal_type] ?? "";
+                              const label = GOAL_LABELS[g.goal_type] ?? g.goal_type;
+                              const currentVal = currentValues[g.goal_type];
+                              const editVal = reviewGoalEditTargets[g.goal_type] ?? (g.target_value !== null ? String(g.target_value) : "");
+                              return (
+                                <div key={g.goal_type} style={{ display: "grid", gridTemplateColumns: "140px 140px 1fr", gap: 8, alignItems: "center" }}>
+                                  <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)" }}>{label}</div>
+                                  <div style={{ fontSize: 11, color: "var(--text3)" }}>
+                                    current: {currentVal !== null && currentVal !== undefined ? `${currentVal}${unit}` : "—"}
+                                  </div>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                    <span style={{ fontSize: 10, color: "var(--text3)" }}>target:</span>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      style={{ width: 68, fontSize: 11, padding: "2px 5px", borderRadius: 4, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}
+                                      value={editVal}
+                                      onChange={(e) => setReviewGoalEditTargets((prev) => ({ ...prev, [g.goal_type]: e.target.value }))}
+                                    />
+                                    <span style={{ fontSize: 10, color: "var(--text3)" }}>{unit.trim()}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {reviewGoalMsg && (
+                            <div style={{ fontSize: 12, padding: "6px 10px", borderRadius: 5, marginBottom: 10, background: reviewGoalMsg.ok ? "rgba(74,124,89,0.08)" : "rgba(184,64,64,0.08)", color: reviewGoalMsg.ok ? "#4A7C59" : "#B84040" }}>
+                              {reviewGoalMsg.text}
+                            </div>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-lime btn-sm"
+                            disabled={reviewGoalSaving}
+                            onClick={async () => {
+                              setReviewGoalSaving(true);
+                              setReviewGoalMsg(null);
+                              try {
+                                for (const g of approvedGoals) {
+                                  const raw = reviewGoalEditTargets[g.goal_type];
+                                  const targetValue = raw !== undefined && raw !== "" ? parseFloat(raw) : null;
+                                  await fetch("/api/coach/goals", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ member_id: reviewMemberId, goal_type: g.goal_type, is_active: true, target_value: isNaN(targetValue ?? NaN) ? undefined : targetValue }),
+                                  });
+                                }
+                                setReviewGoalMsg({ text: "✓ Goals saved.", ok: true });
+                              } catch (err) {
+                                setReviewGoalMsg({ text: err instanceof Error ? err.message : "Failed.", ok: false });
+                              } finally { setReviewGoalSaving(false); }
+                            }}
+                          >{reviewGoalSaving ? "Saving…" : "Save changes"}</button>
+                        </div>
+                      );
+                    }
+
+                    // ── No goals, has scan — offer to generate ─────────────
+                    if (hasScan) {
+                      return (
+                        <div className="card" style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+                          <div>
+                            <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text2)", marginBottom: 3 }}>Generate goal suggestions from latest scan</div>
+                            <div style={{ fontSize: 11, color: "var(--text3)" }}>AI will analyse the Fit3D data and suggest targets.</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-lime btn-sm"
+                            style={{ flexShrink: 0 }}
+                            disabled={reviewGoalGenerating}
+                            onClick={async () => {
+                              setReviewGoalGenerating(true);
+                              setReviewGoalMsg(null);
+                              try {
+                                const res = await fetch("/api/goals/suggest", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ member_id: reviewMemberId }),
+                                }).then((r) => r.json() as Promise<{ success: boolean; error?: string; suggestion_id?: string; suggestions?: ReviewGoalSuggestion["suggestions"]; protocol_suggestion?: string; protocol_reasoning?: string }>);
+                                if (!res.success) throw new Error(res.error ?? "Failed");
+                                // Reload goal data
+                                const refreshed = await getJson<{ goals: ReviewGoalRow[]; has_scan: boolean; current_values: Record<string, number | null>; pending_suggestion: ReviewGoalSuggestion | null }>(`/api/coach/goals?member_id=${reviewMemberId}`);
+                                const pending = refreshed.pending_suggestion ?? null;
+                                setReviewGoalData({ pendingSuggestion: pending, approvedGoals: (refreshed.goals ?? []).filter((g) => g.is_active), hasScan: refreshed.has_scan ?? true, currentValues: refreshed.current_values ?? {} });
+                                if (pending) {
+                                  const init: Record<string, string> = {};
+                                  for (const s of pending.suggestions ?? []) init[s.type] = String(s.target_value);
+                                  setReviewGoalEditTargets(init);
+                                }
+                                // Add to global pending suggestions list
+                                if (res.suggestion_id && res.suggestions) {
+                                  const memberName = reviewMemberName;
+                                  setPendingSuggestions((prev) => [
+                                    { id: res.suggestion_id!, member_id: reviewMemberId!, member_name: memberName, suggestions: res.suggestions!, protocol_suggestion: res.protocol_suggestion ?? "", protocol_reasoning: res.protocol_reasoning ?? "", created_at: new Date().toISOString(), status: "pending" },
+                                    ...prev,
+                                  ]);
+                                }
+                              } catch (err) {
+                                setReviewGoalMsg({ text: err instanceof Error ? err.message : "Failed to generate.", ok: false });
+                              } finally { setReviewGoalGenerating(false); }
+                            }}
+                          >{reviewGoalGenerating ? "Generating…" : "Generate →"}</button>
+                          {reviewGoalMsg && <div style={{ fontSize: 11, color: "#B84040" }}>{reviewGoalMsg.text}</div>}
+                        </div>
+                      );
+                    }
+
+                    // ── No scan ────────────────────────────────────────────
+                    return (
+                      <div style={{ fontSize: 12, color: "var(--text3)", padding: "10px 0" }}>No Fit3D scan on file — goal suggestions can be generated once a scan is imported.</div>
+                    );
+                  })() : (
+                    <div style={{ fontSize: 12, color: "var(--text3)", padding: "10px 0" }}>Goal data unavailable.</div>
+                  )}
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
@@ -4371,6 +4698,9 @@ export function DashboardReactClient({
                               setReviewCoachNote("");
                               setReviewProtocolChanged(false);
                               setReviewConfirmMsg(null);
+                              setReviewGoalData(null);
+                              setReviewGoalEditTargets({});
+                              setReviewGoalMsg(null);
                             }, 2000);
                           } catch (err) {
                             setReviewConfirmMsg({ text: err instanceof Error ? err.message : "Failed to confirm.", ok: false });
