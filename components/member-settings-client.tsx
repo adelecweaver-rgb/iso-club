@@ -7,6 +7,7 @@ type Props = {
   displayName: string;
   arxConnected: boolean;
   carolConnected: boolean;
+  onboardingUpdatedAt?: string | null;
 };
 
 type Preferences = {
@@ -62,13 +63,27 @@ function StatusBadge({ connected }: { connected: boolean }) {
   );
 }
 
-export function MemberSettingsClient({ displayName, arxConnected, carolConnected }: Props) {
+function formatUpdatedDate(iso: string | null | undefined): string {
+  if (!iso) return "Not yet updated";
+  try {
+    return new Date(iso).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+  } catch {
+    return "Unknown date";
+  }
+}
+
+export function MemberSettingsClient({ displayName, arxConnected, carolConnected, onboardingUpdatedAt: initialUpdatedAt }: Props) {
   const [fullName, setFullName] = useState(displayName);
   const [phone, setPhone] = useState("");
   const [prefs, setPrefs] = useState<Preferences>(defaultPreferences);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg] = useState<{ text: string; ok: boolean } | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [onboardingUpdatedAt, setOnboardingUpdatedAt] = useState<string | null | undefined>(initialUpdatedAt);
 
   useEffect(() => {
     let active = true;
@@ -81,12 +96,13 @@ export function MemberSettingsClient({ displayName, arxConnected, carolConnected
           setFullName(String(payload.profile?.full_name ?? displayName));
           setPhone(String(payload.profile?.phone ?? ""));
           setPrefs({ ...defaultPreferences, ...(payload.notification_preferences ?? {}) });
+          setOnboardingUpdatedAt(payload.profile?.onboarding_updated_at ?? initialUpdatedAt ?? null);
           setLoaded(true);
         }
       } catch { /* silent */ }
     })();
     return () => { active = false; };
-  }, [displayName]);
+  }, [displayName, initialUpdatedAt]);
 
   const notificationRows = useMemo(() => [
     { key: "welcome_sms" as const,          label: "Welcome" },
@@ -232,7 +248,31 @@ export function MemberSettingsClient({ displayName, arxConnected, carolConnected
         </div>
       </div>
 
-      {/* ── 2. Connected Devices ─────────────────────────────────────────── */}
+      {/* ── 2. Health profile ────────────────────────────────────────────── */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={sectionLabel}>Health profile</div>
+        <p style={{ fontSize: 12, color: C.text3, lineHeight: 1.6, marginBottom: 10, marginTop: 0 }}>
+          Your answers from onboarding. Update anything that&apos;s changed — your coach will only be notified if you request a review.
+        </p>
+        <div style={cardStyle}>
+          <div style={{ ...rowStyle, borderBottom: "none" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: C.text }}>My health profile</div>
+              <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>
+                Last updated {formatUpdatedDate(onboardingUpdatedAt)}
+              </div>
+            </div>
+            <Link
+              href="/dashboard/settings/health-profile"
+              style={{ fontSize: 12, fontWeight: 600, color: C.green, textDecoration: "none", whiteSpace: "nowrap", flexShrink: 0 }}
+            >
+              Edit →
+            </Link>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. Connected Devices ─────────────────────────────────────────── */}
       <div>
         <div style={sectionLabel}>Connected devices</div>
         <div style={cardStyle}>

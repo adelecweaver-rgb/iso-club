@@ -87,7 +87,7 @@ export async function GET() {
     const [userRes, prefsRes] = await Promise.all([
       supabaseAdmin
         .from("users")
-        .select("id,full_name,phone")
+        .select("id,full_name,phone,onboarding_submitted_at,onboarding_updated_at")
         .eq("id", memberId)
         .limit(1),
       supabaseAdmin
@@ -113,6 +113,8 @@ export async function GET() {
       profile: {
         full_name: asString(userRow?.full_name, context.fullName),
         phone: asString(userRow?.phone, ""),
+        onboarding_submitted_at: asString(userRow?.onboarding_submitted_at) || null,
+        onboarding_updated_at: asString(userRow?.onboarding_updated_at) || null,
       },
       notification_preferences: normalizePrefs(prefsRow as NotificationPreferences | undefined),
     });

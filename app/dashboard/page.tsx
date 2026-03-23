@@ -1272,7 +1272,7 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
       : [];
     const memberIds = Array.from(new Set(todaysBookings.map((row) => stringOr(row.member_id, "")).filter(Boolean)));
     const [usersRes, wearableRes, healthRes] = await Promise.all([
-      memberIds.length ? supabase.from("users").select("id,full_name,membership_tier,phone").in("id", memberIds) : Promise.resolve({ data: [], error: null }),
+      memberIds.length ? supabase.from("users").select("id,full_name,membership_tier,phone,member_status,onboarding_updated_at").in("id", memberIds) : Promise.resolve({ data: [], error: null }),
       memberIds.length
         ? supabase.from("wearable_data").select("member_id,recovery_score,readiness_score,recorded_date").in("member_id", memberIds).order("recorded_date", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
@@ -1310,6 +1310,8 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
         recovery,
         muscle: Math.round(numberOr(health?.muscle_score, 70)).toString(),
         session: stringOr(booking?.title, stringOr(booking?.session_type, "Session")),
+        member_status: stringOr(member.member_status, "active"),
+        review_requested_at: stringOr(member.onboarding_updated_at, "") || null,
       };
     });
     payload.coach.todayCount = payload.coach.members.length.toString();
