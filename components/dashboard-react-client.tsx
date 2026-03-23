@@ -472,6 +472,14 @@ function eccRatioLabel(ratio: number): { label: string; color: string } {
   return { label: "Review form", color: "#B84040" };
 }
 
+function eccRatioExplanation(ratio: number): string {
+  const n = ratio.toFixed(2);
+  if (ratio >= 3.0) return `Eccentric strength is ${n}× your concentric — well above average — excellent muscle control`;
+  if (ratio >= 2.0) return `Eccentric strength is ${n}× your concentric — above average`;
+  if (ratio >= 1.3) return `Eccentric strength is ${n}× your concentric — within the healthy range`;
+  return `Eccentric strength is ${n}× your concentric — below the healthy range of 1.3×`;
+}
+
 function buildArxInsight(groups: ArxExerciseGroup[]): string {
   if (groups.length === 0) return "Log your first ARX session to start tracking strength progress.";
   if (groups.every((g) => g.sessions.length < 2)) return "Keep building your session history — you need a few more sessions per exercise to start seeing meaningful trend data.";
@@ -3097,6 +3105,12 @@ export function DashboardReactClient({
             }
             const latestConcByEx = arxGroups.map(({ exercise, sessions }) => ({ exercise, value: sessions[0]?.concentricMax ?? 0 }));
             const maxConcAll = latestConcByEx.reduce((m, e) => Math.max(m, e.value), 0);
+            // Also track eccentric for dual-bar chart
+            const latestEccByEx = arxGroups.map(({ exercise, sessions }) => ({ exercise, value: sessions[0]?.eccentricMax ?? 0 }));
+            const maxEccAll = latestEccByEx.reduce((m, e) => Math.max(m, e.value), 0);
+            const maxBarAll = Math.max(maxConcAll, maxEccAll, 1);
+            // Top performer badge: highest concentric output, first in sorted order if tied
+            const topPerformerExercise = [...latestConcByEx].sort((a, b) => b.value - a.value)[0]?.exercise ?? null;
             // Top 3 exercises by latest concentric max for the summary card
             const top3Exercises = [...latestConcByEx]
               .filter((e) => e.value > 0)
@@ -3480,7 +3494,7 @@ export function DashboardReactClient({
                                     <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--text3)" }}>
                                       {vals.conc != null && <span>Conc <b style={{ color: "var(--text)" }}>{Math.round(vals.conc)} lbs</b></span>}
                                       {vals.ecc != null && <span>Ecc <b style={{ color: "var(--text)" }}>{Math.round(vals.ecc)} lbs</b></span>}
-                                      {ratio != null && <span style={{ color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}\u00d7</span>}
+                                      {ratio != null && <span style={{ color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}×</span>}
                                     </div>
                                   </div>
                                 );
@@ -3488,20 +3502,41 @@ export function DashboardReactClient({
                             </div>
                           )}
 
-                          {latestConcByEx.length > 1 && maxConcAll > 0 && (
+                          {latestConcByEx.length > 1 && maxBarAll > 0 && (
                             <div style={{ marginBottom: 16 }}>
                               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>Output by exercise</div>
-                              {[...latestConcByEx].sort((a, b) => b.value - a.value).map(({ exercise, value }) => (
-                                <div key={exercise} style={{ marginBottom: 8 }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                                    <span style={{ fontSize: 11, color: "var(--text2)" }}>{exercise}</span>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>{value > 0 ? `${Math.round(value)} lbs` : "\u2014"}</span>
+                              {/* Legend */}
+                              <div style={{ display: "flex", gap: 12, marginBottom: 10 }}>
+                                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "var(--text3)" }}>
+                                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--teal, #4A7C59)" }} /> Concentric
+                                </span>
+                                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "var(--text3)" }}>
+                                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--text3)", opacity: 0.45 }} /> Eccentric
+                                </span>
+                              </div>
+                              {[...latestConcByEx].sort((a, b) => b.value - a.value).map(({ exercise, value }) => {
+                                const eccEntry = latestEccByEx.find((e) => e.exercise === exercise);
+                                const eccVal = eccEntry?.value ?? 0;
+                                return (
+                                  <div key={exercise} style={{ marginBottom: 10 }}>
+                                    <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 4 }}>{exercise}</div>
+                                    {/* Concentric bar */}
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                                      <div style={{ flex: 1, height: 5, background: "var(--bg2)", borderRadius: 3, overflow: "hidden" }}>
+                                        <div style={{ height: "100%", width: `${(value / maxBarAll) * 100}%`, background: "var(--teal, #4A7C59)", borderRadius: 3 }} />
+                                      </div>
+                                      <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", minWidth: 52, textAlign: "right" }}>{value > 0 ? `${Math.round(value)} lbs` : "\u2014"}</span>
+                                    </div>
+                                    {/* Eccentric bar */}
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                      <div style={{ flex: 1, height: 5, background: "var(--bg2)", borderRadius: 3, overflow: "hidden" }}>
+                                        <div style={{ height: "100%", width: `${(eccVal / maxBarAll) * 100}%`, background: "var(--text3)", opacity: 0.45, borderRadius: 3 }} />
+                                      </div>
+                                      <span style={{ fontSize: 10, color: "var(--text3)", minWidth: 52, textAlign: "right" }}>{eccVal > 0 ? `${Math.round(eccVal)} lbs` : "\u2014"}</span>
+                                    </div>
                                   </div>
-                                  <div style={{ height: 5, background: "var(--bg2)", borderRadius: 3, overflow: "hidden" }}>
-                                    <div style={{ height: "100%", width: `${(value / maxConcAll) * 100}%`, background: "#4A7C59", borderRadius: 3 }} />
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
 
@@ -3515,24 +3550,53 @@ export function DashboardReactClient({
                               const ratioInfo = ratio !== null ? eccRatioLabel(ratio) : null;
                               const pr = conc !== null ? Math.max(...sessions.map((s) => s.concentricMax ?? 0)) : 0;
                               const isPR = conc !== null && conc >= pr && sessions.length > 1;
-                              const sparkVals = sessions.slice(0, 12).reverse().map((s) => s.concentricMax);
-                              const sparkFirst = sparkVals.find((v) => v !== null) ?? null;
-                              const sparkLast = [...sparkVals].reverse().find((v) => v !== null) ?? null;
-                              const trending = sparkFirst !== null && sparkLast !== null && sparkLast > sparkFirst;
-                              const path = sparklinePath(sparkVals, 100, 28);
+                              const isTopPerformer = exercise === topPerformerExercise;
+
+                              // Sparkline: use up to last 12 sessions, oldest first
+                              const sparkSessions = sessions.slice(0, 12).reverse();
+                              const sparkVals = sparkSessions.map((s) => s.concentricMax);
+                              const validSparkCount = sparkVals.filter((v) => v !== null).length;
+                              const path = validSparkCount >= 2 ? sparklinePath(sparkVals, 100, 28) : "";
+
+                              // Sentiment-based sparkline color (default neutral = gray)
+                              const sparkDir: "up" | "down" | "none" = (() => {
+                                const first = sparkVals.find((v) => v !== null) ?? null;
+                                const last = [...sparkVals].reverse().find((v) => v !== null) ?? null;
+                                if (first === null || last === null) return "none";
+                                return last > first ? "up" : last < first ? "down" : "none";
+                              })();
+                              const exTrend = makeTrend(sparkDir);
+
+                              // Time range label for sparkline
+                              const sparkTimeLabel = (() => {
+                                if (sparkSessions.length < 2) return null;
+                                const oldest = sparkSessions[0]?.sessionDate?.slice(0, 10);
+                                const newest = sparkSessions[sparkSessions.length - 1]?.sessionDate?.slice(0, 10);
+                                if (!oldest || !newest || oldest === newest) return null;
+                                const msPerMonth = 1000 * 60 * 60 * 24 * 30.44;
+                                const months = Math.round((new Date(newest).getTime() - new Date(oldest).getTime()) / msPerMonth);
+                                return months >= 1 ? `last ${months} month${months !== 1 ? "s" : ""}` : null;
+                              })();
+
                               const isSelected = selectedArxExercise === exercise;
                               return (
                                 <div key={exercise} className="card"
                                   style={{ padding: "14px 16px", cursor: "pointer", border: isSelected ? "1px solid rgba(74,124,89,0.38)" : undefined, background: isSelected ? "rgba(157,204,58,0.04)" : undefined }}
                                   onClick={() => setSelectedArxExercise(isSelected ? null : exercise)}>
+                                  {/* Header row: name + badges */}
                                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
                                     <div>
                                       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{exercise}</div>
-                                      <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""} · {isSelected ? "tap to close" : "tap for full history"}</div>
+                                      <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""}</div>
                                     </div>
-                                    {isPR && <span style={{ fontSize: 9, background: "rgba(74,124,89,0.12)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.28)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
+                                    <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                                      {isTopPerformer && <span style={{ fontSize: 9, background: "rgba(74,124,89,0.12)", color: "var(--teal, #4A7C59)", border: "1px solid rgba(74,124,89,0.28)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>Top performer</span>}
+                                      {isPR && <span style={{ fontSize: 9, background: "rgba(74,124,89,0.12)", color: "var(--teal, #4A7C59)", border: "1px solid rgba(74,124,89,0.28)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
+                                    </div>
                                   </div>
-                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: path ? 8 : 0 }}>
+
+                                  {/* Concentric / Eccentric tiles */}
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                                     <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "7px 10px" }}>
                                       <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Concentric</div>
                                       <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{conc !== null ? Math.round(conc) : "--"} <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span></div>
@@ -3542,18 +3606,35 @@ export function DashboardReactClient({
                                       <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{ecc !== null ? Math.round(ecc) : "--"} <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span></div>
                                     </div>
                                   </div>
-                                  {ratioInfo && (
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: path ? 8 : 0 }}>
-                                      <span style={{ fontSize: 10, color: "var(--text3)" }}>Ecc:Conc</span>
-                                      <span style={{ fontSize: 11, fontWeight: 600, color: ratioInfo.color }}>{ratio!.toFixed(2)}\u00d7</span>
-                                      <span style={{ fontSize: 9, color: ratioInfo.color, background: `${ratioInfo.color}18`, border: `1px solid ${ratioInfo.color}40`, borderRadius: 4, padding: "1px 5px" }}>{ratioInfo.label}</span>
+
+                                  {/* Ecc:Conc ratio + badge + explanation */}
+                                  {ratioInfo && ratio !== null && (
+                                    <div style={{ marginBottom: 8 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                                        <span style={{ fontSize: 10, color: "var(--text3)" }}>Ecc:Conc</span>
+                                        <span style={{ fontSize: 11, fontWeight: 600, color: ratioInfo.color }}>{ratio.toFixed(2)}×</span>
+                                        <span style={{ fontSize: 9, color: ratioInfo.color, background: `${ratioInfo.color}18`, border: `1px solid ${ratioInfo.color}40`, borderRadius: 4, padding: "1px 5px" }}>{ratioInfo.label}</span>
+                                      </div>
+                                      <div style={{ fontSize: 10, color: "var(--text3)", lineHeight: 1.5 }}>{eccRatioExplanation(ratio)}</div>
                                     </div>
                                   )}
+
+                                  {/* Sparkline + time label */}
                                   {path ? (
-                                    <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block" }}>
-                                      <path d={path} fill="none" stroke={trending ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
+                                    <>
+                                      <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 2 }}>
+                                        <path d={path} fill="none" stroke={sentimentColor(exTrend.sentiment)} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                      {sparkTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 6 }}>{sparkTimeLabel}</div>}
+                                    </>
                                   ) : null}
+
+                                  {/* View history footer link */}
+                                  <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: path ? 0 : 4 }}>
+                                    <span style={{ fontSize: 10, color: "var(--teal, #4A7C59)", fontWeight: 500 }}>
+                                      {isSelected ? "Close ↑" : "View history →"}
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })}
