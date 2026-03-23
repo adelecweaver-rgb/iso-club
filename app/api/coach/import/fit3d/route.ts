@@ -567,6 +567,11 @@ export async function POST(request: Request) {
       await updateUserProteinGoalWithFallback(supabaseAdmin, memberProfile.id, proteinGoal);
     }
 
+    // ── Background: trigger AI goal suggestions and check achievements ────────
+    // Fire-and-forget: don't block the import response
+    void triggerGoalSuggestionIfNeeded(memberProfile.id, request).catch(() => { /* non-critical */ });
+    void checkGoalAchievements(memberProfile.id, latestScan ?? null, supabaseAdmin).catch(() => { /* non-critical */ });
+
     return NextResponse.json({
       success: true,
       imported_count: prepared.rows.length,
@@ -578,5 +583,106 @@ export async function POST(request: Request) {
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unable to import Fit3D data.";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
+  }
+}
+
+// ── Helpers for background post-import tasks ──────────────────────────────────
+
+async function triggerGoalSuggestionIfNeeded(memberId: string, _originalRequest: Request): Promise<void> {
+  const supabase = createSupabaseAdminClient();
+  if (!supabase) return;
+
+  // Only trigger if no approved suggestion exists yet for this member
+  const existingRes = await supabase
+    .from("goal_suggestions")
+    .select("id,status")
+    .eq("member_id", memberId)
+    .in("status", ["approved", "modified", "pending"])
+    .limit(1);
+  if (existingRes.data && existingRes.data.length > 0) return;
+
+  // Derive the base URL from the request origin
+  const origin = process.env.NEXT_PUBLIC_SUPABASE_URL
+    ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).origin
+    : "";
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? origin ?? "http://localhost:3000";
+
+  // Call /api/goals/suggest using service-role auth header as a trusted internal call
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SECRET_KEY ?? "";
+  await fetch(`${appUrl}/api/goals/suggest`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-service-key": serviceRoleKey,
+    },
+    body: JSON.stringify({ member_id: memberId }),
+  });
+}
+
+async function checkGoalAchievements(
+  memberId: string,
+  latestScan: Fit3dPreparedRow | null,
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+): Promise<void> {
+  if (!supabase || !latestScan) return;
+
+  // Fetch active goals with targets
+  const goalsRes = await supabase
+    .from("member_goals")
+    .select("id,goal_type,target_value")
+    .eq("member_id", memberId)
+    .eq("is_active", true);
+  if (goalsRes.error || !goalsRes.data) return;
+
+  const goals = goalsRes.data as Array<{ id: string; goal_type: string; target_value: number | null }>;
+
+  // Fetch total session count for months_to_achieve calculation
+  const sessionCountRes = await supabase
+    .from("arx_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("member_id", memberId);
+  const sessionCount = sessionCountRes.count ?? 0;
+
+  // Fetch first membership date to compute months
+  const memberRes = await supabase.from("users").select("created_at").eq("id", memberId).single();
+  const joinedAt = memberRes.data ? new Date(String(memberRes.data.created_at)) : new Date();
+  const now = new Date();
+  const monthsActive = Math.max(1, Math.round((now.getTime() - joinedAt.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+
+  for (const goal of goals) {
+    if (goal.target_value === null) continue;
+
+    let currentValue: number | null = null;
+    let achieved = false;
+
+    if (goal.goal_type === "lose_fat" && latestScan.body_fat_pct !== null) {
+      currentValue = latestScan.body_fat_pct;
+      achieved = currentValue <= goal.target_value;
+    } else if (goal.goal_type === "gain_muscle" && latestScan.lean_mass_lbs !== null) {
+      currentValue = latestScan.lean_mass_lbs;
+      achieved = currentValue >= goal.target_value;
+    }
+
+    if (!achieved || currentValue === null) continue;
+
+    // Check if already recorded
+    const existingRes = await supabase
+      .from("goal_achievements")
+      .select("id")
+      .eq("member_id", memberId)
+      .eq("goal_id", goal.id)
+      .limit(1);
+    if (existingRes.data && existingRes.data.length > 0) continue;
+
+    await supabase.from("goal_achievements").insert({
+      member_id: memberId,
+      goal_id: goal.id,
+      achieved_at: new Date().toISOString(),
+      final_value: currentValue,
+      target_value: goal.target_value,
+      months_to_achieve: monthsActive,
+      celebration_shown: false,
+      sessions_to_achieve: sessionCount,
+    });
   }
 }
