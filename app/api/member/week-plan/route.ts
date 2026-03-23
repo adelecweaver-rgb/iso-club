@@ -80,6 +80,7 @@ export async function GET() {
           bookingUrl: a.booking_url ? asStr(a.booking_url) : null,
           isOptional: a.is_optional === true,
           alternativeActivity: a.alternative_activity ? asStr(a.alternative_activity) : null,
+          coldPlunge: a.cold_plunge ? asStr(a.cold_plunge) : null,
         }));
       return {
         id: asStr(dr.id),

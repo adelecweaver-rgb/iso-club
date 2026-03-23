@@ -951,7 +951,7 @@ export function DashboardReactClient({
   const [sessionStep, setSessionStep] = useState(0);
   const [sessionCompleted, setSessionCompleted] = useState<Set<number>>(new Set());
   const [weekViewOpen, setWeekViewOpen] = useState(false);
-  type WeekDay = { id: string; dayOfWeek: number; dayName: string; dayTheme: string; dayDescription: string; activities: Array<{ id: string; order: number; type: string; name: string; durationMinutes: number; description: string; whyItMatters: string; steps: string[]; isBookable: boolean; bookingUrl: string | null; isOptional: boolean; alternativeActivity: string | null }>; totalMinutes: number };
+  type WeekDay = { id: string; dayOfWeek: number; dayName: string; dayTheme: string; dayDescription: string; activities: Array<{ id: string; order: number; type: string; name: string; durationMinutes: number; description: string; whyItMatters: string; steps: string[]; isBookable: boolean; bookingUrl: string | null; isOptional: boolean; alternativeActivity: string | null; coldPlunge: string | null }>; totalMinutes: number };
   type WeekOverride = { protocolDayId: string; originalDow: number; overrideDow: number };
   const [weekPlan, setWeekPlan] = useState<WeekDay[]>([]);
   const [weekViewDay, setWeekViewDay] = useState<number | null>(null);
@@ -1596,22 +1596,28 @@ export function DashboardReactClient({
             const isToday   = viewingDay.dayOfWeek === currentDow;
             const DOW_NAMES = ["","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
             const cardLabel = isToday ? "Today's session" : `${DOW_NAMES[viewingDay.dayOfWeek]}'s session`;
-            function icoStyle(type: string, isOpt?: boolean): React.CSSProperties {
-              if (type === "recovery") {
-                if (isOpt) return { border: "0.5px dashed #B5D4F4", background: "transparent" };
-                return { background: "#E6F1FB" };
-              }
+            // Icon background based on coldPlunge field (from DB) — matches mockup spec:
+            //   RECOMMENDED        → blue fill
+            //   OPTIONAL_CONTRAST  → blue dashed outline, no fill
+            //   OPTIONAL_CARDIO    → blue dashed outline, no fill
+            //   null (core)        → warm gray fill
+            function icoStyle(coldPlunge: string | null, type: string): React.CSSProperties {
+              const cp = (coldPlunge ?? "").toUpperCase();
+              if (cp === "RECOMMENDED") return { background: "#E6F1FB", border: "0.5px solid #B5D4F4" };
+              if (cp === "OPTIONAL_CONTRAST" || cp === "OPTIONAL_CARDIO") return { background: "transparent", border: "0.5px dashed #B5D4F4" };
+              if (type === "recovery") return { background: "#E6F1FB", border: "0.5px solid #D1E8F5" };
               return { background: "#F1EFE8" };
             }
             function actIcon(act: { type: string; name: string }): string {
               const n = act.name.toLowerCase();
               if (n.includes("cold") || n.includes("plunge")) return "🧊";
-              if (n.includes("arx") || n.includes("strength")) return "🏋";
-              if (n.includes("carol") || n.includes("zone 2") || n.includes("bike")) return "🚴";
+              if (n.includes("arx") || n.includes("strength") || n.includes("full body")) return "🏋";
+              if (n.includes("carol") || n.includes("zone 2") || n.includes("bike") || n.includes("rehit") || n.includes("fat burn") || n.includes("norwegian")) return "🚴";
               if (n.includes("compression") || n.includes("boots")) return "🦵";
               if (n.includes("sauna") || n.includes("infrared")) return "🌡";
               if (n.includes("vasper")) return "💧";
               if (n.includes("katalyst") || n.includes("ems")) return "⚡";
+              if (n.includes("proteus")) return "🔄";
               if (act.type === "coaching") return "👤";
               return "●";
             }
@@ -1668,7 +1674,6 @@ export function DashboardReactClient({
                     {required.map((act) => {
                       const isExpanded = expandedActivityId === act.id;
                       const hasDetail  = (act.steps && act.steps.length > 0) || !!act.whyItMatters;
-                      const isColdOpt  = act.isOptional && (act.name.toLowerCase().includes("cold") || act.name.toLowerCase().includes("plunge"));
                       return (
                         <div key={act.id}>
                           <div
@@ -1678,7 +1683,7 @@ export function DashboardReactClient({
                             onKeyDown={(e) => hasDetail && e.key === " " && setExpandedActivityId(isExpanded ? null : act.id)}
                             style={{ display: "flex", alignItems: "center", gap: 10, cursor: hasDetail ? "pointer" : "default" }}
                           >
-                            <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, ...icoStyle(act.type, isColdOpt) }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, ...icoStyle(act.coldPlunge, act.type) }}>
                               {actIcon(act)}
                             </div>
                             <div style={{ flex: 1 }}>
@@ -3801,119 +3806,6 @@ export function DashboardReactClient({
             </div>
           )}
         </div>
-
-        {/* ── Session Guide modal ────────────────────────────────────────── */}
-        {sessionGuideOpen && payload.todaysPlan && payload.todaysPlan.activities.length > 0 && (() => {
-          const acts = payload.todaysPlan.activities;
-          const act = acts[sessionStep];
-          const allDone = sessionCompleted.size >= acts.length;
-          const isDone = sessionCompleted.has(sessionStep);
-
-          async function markComplete() {
-            if (!act) return;
-            const logData = planActToLog(act);
-            try { await fetch("/api/member/activity-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to_add: logData.to_add ?? [], bonus: logData.bonus ?? [] }) }); } catch { /* */ }
-            setSessionCompleted((prev) => new Set([...prev, sessionStep]));
-          }
-
-          return (
-            <div style={{ position: "fixed", inset: 0, background: "#1C2B1E", zIndex: 2000, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-              {/* Header */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-                <div style={{ fontSize: 12, color: "#6B7B6E" }}>{payload.todaysPlan.dayName} — {payload.todaysPlan.dayTheme}</div>
-                <button type="button" style={{ background: "none", border: "none", color: "#6B7B6E", cursor: "pointer", fontSize: 20, padding: 0 }} onClick={() => setSessionGuideOpen(false)}>✕</button>
-              </div>
-              {/* Progress dots */}
-              <div style={{ display: "flex", gap: 6, padding: "12px 20px", flexShrink: 0 }}>
-                {acts.map((_, i) => (
-                  <div key={i} style={{ height: 4, flex: 1, borderRadius: 2, background: sessionCompleted.has(i) ? "#4A7C59" : i === sessionStep ? "rgba(74,124,89,0.38)" : "rgba(255,255,255,0.1)" }} />
-                ))}
-              </div>
-
-              {allDone ? (
-                /* Completion screen */
-                <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" }}>
-                  <div style={{ fontSize: 48, marginBottom: 16 }}>✓</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: "#1C2B1E", marginBottom: 10, fontFamily: "Georgia, serif" }}>Today&apos;s plan complete</div>
-                  <p style={{ fontSize: 14, color: "#6B7B6E", lineHeight: 1.6, maxWidth: 320 }}>Great work. Your body is doing the work now. Rest, eat well, and come back tomorrow.</p>
-                  <button type="button" className="btn btn-lime" style={{ marginTop: 24, fontSize: 13 }} onClick={() => setSessionGuideOpen(false)}>Back to dashboard</button>
-                </div>
-              ) : act ? (
-                /* Activity screen */
-                <div style={{ flex: 1, padding: "20px 24px", maxWidth: 600, margin: "0 auto", width: "100%" }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#6B7B6E", marginBottom: 8 }}>Activity {sessionStep + 1} of {acts.length}</div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                    <div style={{ fontSize: 24, fontWeight: 800, color: "#1C2B1E", fontFamily: "Georgia, serif", lineHeight: 1.2 }}>{act.name}</div>
-                    <div style={{ fontSize: 13, color: "#6B7B6E", flexShrink: 0, marginLeft: 12 }}>{act.durationMinutes} min</div>
-                  </div>
-                  <p style={{ fontSize: 14, color: "#c4c0b4", lineHeight: 1.65, marginBottom: 16 }}>{act.description}</p>
-                  <div style={{ background: "rgba(28,43,30,0.04)", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
-                    <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "#6B7B6E", marginBottom: 8 }}>Why it matters</div>
-                    <p style={{ fontSize: 13, color: "#6B7B6E", lineHeight: 1.6, margin: 0 }}>{act.whyItMatters}</p>
-                  </div>
-                  {act.steps.length > 0 && (
-                    <div style={{ marginBottom: 20 }}>
-                      <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.12em", color: "#6B7B6E", marginBottom: 10 }}>How to do it</div>
-                      {act.steps.map((step, i) => (
-                        <div key={i} style={{ display: "flex", gap: 12, marginBottom: 10 }}>
-                          <span style={{ width: 20, height: 20, borderRadius: "50%", background: "rgba(74,124,89,0.12)", color: "#4A7C59", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{i + 1}</span>
-                          <span style={{ fontSize: 13.5, color: "#c4c0b4", lineHeight: 1.5 }}>{step}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {act.isOptional && act.alternativeActivity && (
-                    <div style={{ fontSize: 12, color: "#6B7B6E", marginBottom: 14 }}>Can&apos;t make it in? <span style={{ color: "#4A7C59", textDecoration: "underline", cursor: "pointer" }}>{act.alternativeActivity}</span></div>
-                  )}
-                  {/* Zone 2 walk swap */}
-                  {act.name.toLowerCase().includes("zone 2") && (
-                    <div style={{ fontSize: 12, color: "#6B7B6E", marginBottom: 14 }}>
-                      Can&apos;t make it in?{" "}
-                      <button type="button" style={{ background: "none", border: "none", color: "#4A7C59", cursor: "pointer", fontSize: 12, padding: 0, textDecoration: "underline" }}
-                        onClick={async () => {
-                          try {
-                            await fetch("/api/member/activity-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bonus: ["walk"], to_add: [{ type: "carol", subtype: "FAT_BURN_45" }] }) });
-                          } catch { /* */ }
-                          setSessionCompleted((prev) => new Set([...prev, sessionStep]));
-                        }}>
-                        Take a walk instead →
-                      </button>
-                      <span style={{ fontSize: 11, color: "#6B7B6E", marginLeft: 6 }}>— counts as Zone 2</span>
-                    </div>
-                  )}
-                  {/* Action buttons */}
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    {act.isBookable && act.bookingUrl ? (
-                      <a href={act.bookingUrl} target="_blank" rel="noreferrer" className="btn btn-lime" style={{ fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Book with Dustin →</a>
-                    ) : (
-                      <button type="button" className="btn btn-lime" style={{ fontSize: 13 }} disabled={isDone}
-                        onClick={() => { void markComplete(); }}>
-                        {isDone ? "✓ Marked complete" : "Mark complete"}
-                      </button>
-                    )}
-                    {isDone && sessionStep < acts.length - 1 && (
-                      <button type="button" className="btn btn-sm" style={{ fontSize: 13 }} onClick={() => setSessionStep(sessionStep + 1)}>
-                        Next activity →
-                      </button>
-                    )}
-                    {isDone && sessionStep >= acts.length - 1 && !allDone && (
-                      <button type="button" className="btn btn-lime" style={{ fontSize: 13 }} onClick={() => setSessionCompleted(new Set(acts.map((_, i) => i)))}>
-                        Complete session ✓
-                      </button>
-                    )}
-                  </div>
-                  {/* Prev/Next nav */}
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 24, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                    <button type="button" style={{ background: "none", border: "none", color: "#6B7B6E", cursor: sessionStep > 0 ? "pointer" : "not-allowed", opacity: sessionStep > 0 ? 1 : 0.3, fontSize: 13 }}
-                      disabled={sessionStep === 0} onClick={() => setSessionStep(sessionStep - 1)}>← Previous</button>
-                    <button type="button" style={{ background: "none", border: "none", color: "#6B7B6E", cursor: sessionStep < acts.length - 1 ? "pointer" : "not-allowed", opacity: sessionStep < acts.length - 1 ? 1 : 0.3, fontSize: 13 }}
-                      disabled={sessionStep >= acts.length - 1} onClick={() => setSessionStep(sessionStep + 1)}>Next →</button>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          );
-        })()}
 
         {/* ── Week View modal ────────────────────────────────────────────── */}
         {weekViewOpen && (
