@@ -971,6 +971,8 @@ export function DashboardReactClient({
   const [sessionCardCompleted, setSessionCardCompleted] = useState<Record<string, boolean>>({});
   // Which activity ID is expanded in the inline session card
   const [expandedActivityId, setExpandedActivityId] = useState<string | null>(null);
+  // Whether the rest plan has been revealed (after tapping "See recovery options")
+  const [showRestPlan, setShowRestPlan] = useState(false);
   const [submittingCheckin, setSubmittingCheckin] = useState(false);
   const [checkinLoaded, setCheckinLoaded] = useState(false);
   const [showProtocolModal, setShowProtocolModal] = useState(false);
@@ -1451,572 +1453,136 @@ export function DashboardReactClient({
 
         <div id="view-dashboard" className="content" style={{ display: mode === "member" && memberView === "dashboard" ? "block" : "none" }}>
 
-          {/* ── Greeting header ─────────────────────────────────────── */}
+          {/* ── Greeting ─────────────────────────────────────────────── */}
           {(() => {
-            const now = new Date();
+            const now  = new Date();
             const hour = now.getHours();
-            const g = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+            const g    = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
             return (
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ padding: "20px 16px 8px" }}>
                 <div style={{ fontSize: 12, color: "var(--text3)", marginBottom: 3 }}>
                   {now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                 </div>
-                <div style={{ fontSize: 24, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2 }}>
+                <div style={{ fontSize: 22, fontWeight: 500, color: "var(--text)", lineHeight: 1.2 }}>
                   {g}, {greetingName}.
                 </div>
               </div>
             );
           })()}
 
-          {/* ── Connect nudge — shown until at least one data source is linked ── */}
+          {/* Connect nudge */}
           {payload.carolSessions.length === 0 && payload.arxSessions.length === 0 && payload.scanHistory.length === 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 14, background: "rgba(157,204,58,0.06)", border: "1px solid rgba(157,204,58,0.25)", borderRadius: "var(--r)", padding: "14px 18px", marginBottom: 18 }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>Connect your devices to see real data</div>
-                <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5 }}>Link ARX and CAROL in Settings to populate your Progress tab with strength and cardio metrics.</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, margin: "0 12px 8px", background: "rgba(29,158,117,0.06)", border: "0.5px solid #1D9E75", borderRadius: 14, padding: "12px 14px" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text)", marginBottom: 2 }}>Connect your devices to see real data</div>
+                <div style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.5 }}>Link ARX and CAROL in Settings.</div>
               </div>
-              <Link
-                href="/dashboard/settings"
-                style={{ flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#9dcc3a", textDecoration: "none", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}
-              >
-                Settings →
-              </Link>
+              <Link href="/dashboard/settings" style={{ flexShrink: 0, fontSize: 12, fontWeight: 500, color: "#0F6E56", textDecoration: "none" }}>Settings →</Link>
             </div>
           )}
 
           {/* ══════════════════════════════════════════════════════════════
-              SECTION 1 — TODAY'S FOCUS
-              Check-in first. When "strong", reveal the day's protocol
-              focus with a one-tap "Log Complete" button.
+              CARD 1 — READINESS CHECK
           ══════════════════════════════════════════════════════════════ */}
-          {(() => {
-            const tp = payload.todaysPlan;
-            const cl = generateChecklist(payload.protocol);
-            const c = payload.checklistCompletions;
-
+          {!todayCheckin && (() => {
             async function submitCheckin(feeling: "strong" | "low" | "hurt") {
               if (submittingCheckin) return;
               setSubmittingCheckin(true);
               try {
                 await fetch("/api/member/checkin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ feeling }) });
                 setTodayCheckin(feeling);
+                setShowRestPlan(false);
               } catch { /* silent */ } finally { setSubmittingCheckin(false); }
             }
-
-            const RECOVERY_ACTS = [
-              { n: "Infrared Sauna", m: 20 }, { n: "Cold Plunge", m: 3 }, { n: "Compression Boots", m: 20 },
-            ];
-            const PAIN_ACTS = [
-              { n: "Infrared Sauna — heat therapy for inflammation", m: 20 },
-              { n: "Compression Boots — circulation and recovery", m: 20 },
-            ];
-
-            const hasProtocol = !!payload.protocol.targetSystem;
-            const todayActivities = (tp?.activities ?? []).filter((a) => !a.isOptional);
-
             return (
-              <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "20px 22px", marginBottom: 16 }}>
-                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 14 }}>Today&apos;s Focus</div>
-
-                {/* ── Not yet checked in ── */}
-                {!todayCheckin && (
-                  <>
-                    <div style={{ fontSize: 13, color: "var(--text2)", marginBottom: 12 }}>How are you feeling today?</div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-                      <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "14px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #4A7C59", color: "var(--text)", cursor: "pointer", fontSize: 13, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1, transition: "background 0.15s" }}
-                        onClick={() => { void submitCheckin("strong"); }}>
-                        ⚡<br />Feeling strong
-                      </button>
-                      <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "14px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #C4831A", color: "var(--text)", cursor: "pointer", fontSize: 13, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1, transition: "background 0.15s" }}
-                        onClick={() => { void submitCheckin("low"); }}>
-                        😴<br />Low energy
-                      </button>
-                      <button type="button" disabled={submittingCheckin}
-                        style={{ padding: "14px 8px", borderRadius: 10, background: "transparent", border: "1.5px solid #B84040", color: "var(--text)", cursor: "pointer", fontSize: 13, fontWeight: 500, lineHeight: 1.4, textAlign: "center", opacity: submittingCheckin ? 0.6 : 1, transition: "background 0.15s" }}
-                        onClick={() => { void submitCheckin("hurt"); }}>
-                        🤕<br />Something hurts
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Feeling strong → show protocol focus ── */}
-                {todayCheckin === "strong" && (
-                  <>
-                    {!hasProtocol ? (
-                      <div>
-                        <div style={{ fontSize: 18, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>Your plan is being prepared</div>
-                        <p style={{ fontSize: 13, color: "var(--text3)", margin: "0 0 14px 0", lineHeight: 1.6 }}>Dustin will assign your protocol after your first session.</p>
-                        <a href="https://theiso.club/book" target="_blank" rel="noreferrer" className="btn btn-lime btn-sm" style={{ fontSize: 12, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>Book your first session →</a>
-                      </div>
-                    ) : tp?.isRestDay ? (
-                      <div>
-                        <div style={{ fontSize: 18, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>Rest Day</div>
-                        <p style={{ fontSize: 13, color: "var(--text2)", margin: 0, lineHeight: 1.65 }}>Rest is where your results are made. Protect your sleep, eat well, and hydrate.</p>
-                      </div>
-                    ) : (
-                      <div>
-                        {/* Protocol prompt */}
-                        <div style={{ fontSize: 22, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.15, marginBottom: 6 }}>
-                          Ready to go.
-                        </div>
-                        <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 14px 0" }}>
-                          Move forward with a session from your protocol. Check off what you complete below.
-                        </p>
-
-                        {/* Today's activities list */}
-                        {todayActivities.length > 0 && (
-                          <div style={{ background: "rgba(74,124,89,0.05)", border: "1px solid rgba(74,124,89,0.14)", borderRadius: "var(--r-sm)", padding: "4px 0", marginBottom: 16 }}>
-                            {todayActivities.map((act, i) => (
-                              <div key={act.id} style={{ display: "flex", alignItems: "center", padding: "9px 14px", borderBottom: i < todayActivities.length - 1 ? "1px solid rgba(74,124,89,0.08)" : "none" }}>
-                                <span style={{ fontSize: 10, color: "#4A7C59", width: 20, flexShrink: 0, fontWeight: 600 }}>{i + 1}</span>
-                                <span style={{ flex: 1, fontSize: 13.5, color: "var(--text)", fontWeight: 500 }}>{act.name}</span>
-                                <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* "View guided plan" removed — session detail is inline in the session card below */}
-                      </div>
-                    )}
-                    <div style={{ marginTop: 14 }}>
-                      <button type="button" style={{ background: "none", border: "none", fontSize: 11, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                        onClick={() => { setTodayCheckin(null); setActivitySavedMsg(""); }}>
-                        change
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {/* ── Low energy → recovery plan ── */}
-                {todayCheckin === "low" && (
-                  <>
-                    <div style={{ fontSize: 18, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>Recovery Day</div>
-                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 14 }}>
-                      Listening to your body is part of the protocol. Rest and light recovery today sets you up for a stronger session tomorrow.
-                    </p>
-                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", marginBottom: 8 }}>Suggested recovery</div>
-                    <div style={{ borderRadius: "var(--r-sm)", border: "1px solid var(--border)", overflow: "hidden", marginBottom: 14 }}>
-                      {RECOVERY_ACTS.map((a, i) => (
-                        <div key={i} style={{ display: "flex", padding: "10px 14px", borderBottom: i < RECOVERY_ACTS.length - 1 ? "1px solid var(--border)" : "none", background: "var(--bg2)" }}>
-                          <span style={{ fontSize: 11, color: "var(--text3)", width: 22 }}>{i + 1}</span>
-                          <span style={{ flex: 1, fontSize: 13, color: "var(--text)" }}>{a.n}</span>
-                          <span style={{ fontSize: 11, color: "var(--text3)" }}>{a.m} min</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 12, color: "var(--text3)", fontStyle: "italic", marginBottom: 14 }}>Optional: Easy walk outside — 20–30 minutes</div>
-                    <button type="button" style={{ background: "none", border: "none", fontSize: 11, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                      onClick={() => setTodayCheckin(null)}>change</button>
-                  </>
-                )}
-
-                {/* ── Something hurts ── */}
-                {todayCheckin === "hurt" && (
-                  <>
-                    <div style={{ fontSize: 18, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", marginBottom: 10 }}>Listen to Your Body</div>
-                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 10 }}>Pain is important information. Do not push through it.</p>
-                    <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, marginBottom: 14 }}>
-                      We recommend booking a private session with Dustin to assess and adjust your plan.
-                    </p>
-                    <a
-                      href={`mailto:dustin@theiso.club?subject=${encodeURIComponent("Request 1:1")}&body=${encodeURIComponent("Hi Dustin,\n\nI'd like to schedule a one-on-one assessment. I've been dealing with some pain and want to make sure I'm moving correctly before my next session.\n\nCould you find a time that works?\n\nThank you.")}`}
-                      style={{ display: "inline-flex", alignItems: "center", background: "#B84040", color: "white", borderRadius: 8, padding: "10px 18px", fontSize: 13, fontWeight: 600, textDecoration: "none", marginBottom: 16 }}>
-                      Email Dustin to schedule →
-                    </a>
-                    <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 8 }}>In the meantime, gentle recovery only:</div>
-                    <div style={{ borderRadius: "var(--r-sm)", border: "1px solid var(--border)", overflow: "hidden", marginBottom: 14 }}>
-                      {PAIN_ACTS.map((a, i) => (
-                        <div key={i} style={{ display: "flex", padding: "10px 14px", borderBottom: i < PAIN_ACTS.length - 1 ? "1px solid var(--border)" : "none", background: "var(--bg2)" }}>
-                          <span style={{ fontSize: 11, color: "var(--text3)", width: 22 }}>{i + 1}</span>
-                          <span style={{ flex: 1, fontSize: 13, color: "var(--text)" }}>{a.n}</span>
-                          <span style={{ fontSize: 11, color: "var(--text3)" }}>{a.m} min</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 11, color: "rgba(184,64,64,0.75)", marginBottom: 14 }}>No cold plunge, no training today.</div>
-                    <button type="button" style={{ background: "none", border: "none", fontSize: 11, color: "var(--text3)", cursor: "pointer", padding: 0, textDecoration: "underline" }}
-                      onClick={() => setTodayCheckin(null)}>change</button>
-                  </>
-                )}
+              <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", overflow: "hidden" }}>
+                <div style={{ padding: "14px 16px 12px" }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Before you come in</div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#1a1a1a", marginBottom: 12, lineHeight: 1.4 }}>How are you feeling today?</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                    <button type="button" disabled={submittingCheckin} onClick={() => { void submitCheckin("strong"); }}
+                      style={{ padding: "10px 6px", borderRadius: 10, border: "0.5px solid #1D9E75", background: "#F0FAF6", color: "#0F6E56", fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "center", lineHeight: 1.4, opacity: submittingCheckin ? 0.6 : 1 }}>
+                      <div style={{ fontSize: 18, marginBottom: 3 }}>💪</div>Feeling strong
+                    </button>
+                    <button type="button" disabled={submittingCheckin} onClick={() => { void submitCheckin("low"); }}
+                      style={{ padding: "10px 6px", borderRadius: 10, border: "0.5px solid #D3D1C7", background: "#F5F5F2", color: "#5F5E5A", fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "center", lineHeight: 1.4, opacity: submittingCheckin ? 0.6 : 1 }}>
+                      <div style={{ fontSize: 18, marginBottom: 3 }}>😴</div>Feeling tired
+                    </button>
+                    <button type="button" disabled={submittingCheckin} onClick={() => { void submitCheckin("hurt"); }}
+                      style={{ padding: "10px 6px", borderRadius: 10, border: "0.5px solid #F09595", background: "#FEF5F5", color: "#791F1F", fontSize: 12, fontWeight: 500, cursor: "pointer", textAlign: "center", lineHeight: 1.4, opacity: submittingCheckin ? 0.6 : 1 }}>
+                      <div style={{ fontSize: 18, marginBottom: 3 }}>🤕</div>Something&apos;s hurt
+                    </button>
+                  </div>
+                </div>
               </div>
             );
           })()}
 
-          {/* ══════════════════════════════════════════════════════════════
-              SECTION 2 — THIS WEEK'S PROTOCOL
-              Shows Dustin's assigned protocol for each day this week.
-              Members check off sessions as they complete them.
-          ══════════════════════════════════════════════════════════════ */}
-          {(() => {
-            const proto = payload.protocol;
-            const c = payload.checklistCompletions;
-
-            // ── Helpers ──────────────────────────────────────────────────
-            function fmtShortDate(iso: string): string {
-              const d = new Date(iso + "T00:00:00");
-              return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-            }
-
-            // ISO date for each day of the current week (Mon=weekStart)
-            function isoForDow(dow: number): string {
-              // dow: 1=Mon … 7=Sun (protocol convention)
-              const base = new Date(c.weekStartDate + "T00:00:00");
-              base.setDate(base.getDate() + (dow - 1));
-              return base.toISOString().slice(0, 10);
-            }
-
-            const todayIso = c.todayDate;
-            const weekStart = c.weekStartDate;
-
-            // Which calendar date is "today" as a day-of-week in the protocol (1=Mon…7=Sun)
-            const todayDow = (() => {
-              const diff = Math.round((new Date(todayIso + "T00:00:00").getTime() - new Date(weekStart + "T00:00:00").getTime()) / 86400000) + 1;
-              return Math.max(1, Math.min(7, diff));
-            })();
-
-            // ── Determine whether a protocol day is "done" ───────────────
-            // A training day is complete if at least one session was logged
-            // on that calendar date (arx or carol or recovery).
-            function isDayComplete(dow: number, dayId: string): boolean {
-              if (checkedDayIds[dayId]) return true;
-              const iso = isoForDow(dow);
-              const hasArx     = c.arxWeekDates.some((d) => d === iso);
-              const hasCarol   = payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === iso);
-              const hasRecovery = false; // recovery sessions don't carry a date in completions
-              return hasArx || hasCarol || hasRecovery;
-            }
-
-            // Map activity type → log payload
-            function activityToLogItem(act: { type: string; name: string }): { type: "arx" | "carol" | "recovery"; subtype: string } | null {
-              const n = act.name.toLowerCase();
-              if (act.type === "strength") return { type: "arx", subtype: "manual_checkin" };
-              if (act.type === "cardio") {
-                if (n.includes("rehit")) return { type: "carol", subtype: "REHIT" };
-                if (n.includes("norwegian") || n.includes("4x4") || n.includes("fat burn 60")) return { type: "carol", subtype: "FAT_BURN_60" };
-                if (n.includes("fat burn 45") || n.includes("fat burn")) return { type: "carol", subtype: "FAT_BURN_45" };
-                if (n.includes("zone 2") || n.includes("free ride")) return { type: "carol", subtype: "FAT_BURN_30" };
-                return { type: "carol", subtype: "REHIT" };
-              }
-              if (act.type === "recovery") {
-                if (n.includes("cold")) return { type: "recovery", subtype: "cold_plunge" };
-                if (n.includes("sauna") || n.includes("infrared")) return { type: "recovery", subtype: "infrared_sauna" };
-                if (n.includes("compression")) return { type: "recovery", subtype: "compression" };
-                return { type: "recovery", subtype: "infrared_sauna" };
-              }
-              return null;
-            }
-
-            // Category dot color per activity type
-            function actTypeColor(type: string): string {
-              if (type === "strength") return "#4A7C59";
-              if (type === "cardio")   return "#C4831A";
-              if (type === "recovery") return "#A0729A";
-              return "#9B8EA0";
-            }
-
-            // ── Log a completed day ────────────────────────────────────────
-            async function handleLogDay(day: (typeof weekPlan)[number]) {
-              if (savingActivity) return;
-              setSavingActivity(true);
-              try {
-                const required = day.activities.filter((a) => !a.isOptional);
-                const toAdd = required
-                  .map(activityToLogItem)
-                  .filter((x): x is { type: "arx" | "carol" | "recovery"; subtype: string } => x !== null);
-
-                if (toAdd.length > 0) {
-                  await fetch("/api/member/activity-log", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: [] }),
-                  });
-                  const iso = isoForDow(day.dayOfWeek);
-                  for (const item of toAdd) {
-                    if (item.type === "arx") { c.arxWeekDates.push(iso); }
-                    else if (item.type === "carol") { c.carolWeekTypes.push(item.subtype); }
-                    else if (item.type === "recovery") { c.recoveryWeekModalities.push(item.subtype); }
-                  }
-                }
-                setCheckedDayIds((prev) => ({ ...prev, [day.id]: true }));
-                setActivitySavedMsg(`✓ ${day.dayName} logged — great work`);
-              } catch { setActivitySavedMsg("Something went wrong — please try again"); }
-              finally { setSavingActivity(false); }
-            }
-
-            // ── Counts for status bar ─────────────────────────────────────
-            const trainingDays = weekPlan.filter((d) => !d.dayTheme.toLowerCase().includes("rest"));
-            const completedCount = trainingDays.filter((d) => isDayComplete(d.dayOfWeek, d.id)).length;
-            const totalTraining  = trainingDays.length;
-
-            // Fall back if week plan not yet loaded
-            if (!proto.targetSystem && proto.arxPerWeek === 0 && proto.carolPerWeek === 0) return null;
-
+          {/* CARD 1b — READINESS RESULT BANNER */}
+          {todayCheckin && (() => {
+            const isStrong = todayCheckin === "strong";
+            const isHurt   = todayCheckin === "hurt";
             return (
-              <div className="card" style={{ marginBottom: 16 }}>
-
-                {/* ── Header ── */}
-                <div style={{ padding: "16px 20px 14px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                  <div>
-                    <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>This Week&apos;s Protocol</div>
-                    {proto.name && <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>{proto.name}</div>}
+              <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: isStrong ? "0.5px solid #1D9E75" : "0.5px solid #EF9F27", overflow: "hidden" }}>
+                <div style={{ padding: "14px 16px 12px" }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 500, padding: "3px 10px", borderRadius: 20, marginBottom: 8, background: isStrong ? "#E1F5EE" : "#FAEEDA", color: isStrong ? "#0F6E56" : "#633806" }}>
+                    {isStrong ? "Ready to train" : "Rest day recommended"}
                   </div>
-                  {totalTraining > 0 && (
-                    <div style={{ fontSize: 12, color: completedCount === totalTraining ? "#4A7C59" : "var(--text3)", fontWeight: 600 }}>
-                      {completedCount}/{totalTraining} sessions{completedCount === totalTraining ? " ✓" : ""}
-                    </div>
+                  <div style={{ fontSize: 15, fontWeight: 500, color: "#1a1a1a", marginBottom: 4 }}>
+                    {isStrong ? "You're good to go." : isHurt ? "Listen to your body today." : "Take it easy today."}
+                  </div>
+                  <div style={{ fontSize: 13, color: "#5F5E5A", lineHeight: 1.55 }}>
+                    {isStrong
+                      ? "Proceed with your full session plan. Your schedule is loaded below."
+                      : isHurt
+                        ? "Pain is important information. Skip the ARX and Katalyst today. Your recovery stack below will help."
+                        : "Skip the ARX and Katalyst. Your recovery stack below is still worth doing — sauna and Vasper will help you feel better and protect your progress."}
+                  </div>
+                </div>
+                <div style={{ padding: "0 16px 14px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {!isStrong && !showRestPlan && (
+                    <button type="button" onClick={() => setShowRestPlan(true)}
+                      style={{ padding: "9px 14px", borderRadius: 10, background: "#1D9E75", color: "white", border: "none", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                      See recovery options
+                    </button>
                   )}
+                  {isHurt && (
+                    <a href={`mailto:dustin@theiso.club?subject=${encodeURIComponent("Request 1:1")}&body=${encodeURIComponent("Hi Dustin,\n\nI'd like to schedule a one-on-one assessment. I've been dealing with some pain and want to make sure I'm moving correctly before my next session.\n\nCould you find a time that works?\n\nThank you.")}`}
+                      style={{ padding: "9px 14px", borderRadius: 10, background: "transparent", border: "0.5px solid #E5E5E0", color: "#5F5E5A", fontSize: 13, fontWeight: 500, textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                      Email Dustin →
+                    </a>
+                  )}
+                  <button type="button" onClick={() => { setTodayCheckin(null); setShowRestPlan(false); }}
+                    style={{ padding: "9px 14px", borderRadius: 10, background: "transparent", border: "0.5px solid #E5E5E0", color: "#5F5E5A", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                    Change
+                  </button>
                 </div>
-
-                {/* ── Loading state ── */}
-                {weekPlan.length === 0 && (
-                  <div style={{ padding: "20px", textAlign: "center", color: "var(--text3)", fontSize: 13 }}>
-                    {weekPlanLoaded ? "Protocol days not yet seeded. Ask Dustin to set up your week plan." : "Loading your week…"}
-                  </div>
-                )}
-
-                {/* ── Day rows ── */}
-                {weekPlan.length > 0 && (
-                  <div>
-                    {weekPlan.map((day, di) => {
-                      const isRestDay  = day.dayTheme.toLowerCase().includes("rest");
-                      const dayIso     = isoForDow(day.dayOfWeek);
-                      const isToday    = day.dayOfWeek === todayDow;
-                      const isPast     = day.dayOfWeek < todayDow;
-                      const isFuture   = day.dayOfWeek > todayDow;
-                      const done       = isDayComplete(day.dayOfWeek, day.id);
-                      const required   = day.activities.filter((a) => !a.isOptional);
-                      const isLast     = di === weekPlan.length - 1;
-
-                      // Override: check weekPlanMeta overrides
-                      const hasOverride = weekPlanMeta.overrides.some((o) => o.protocolDayId === day.id);
-
-                      return (
-                        <div
-                          key={day.id}
-                          style={{
-                            padding: "12px 20px",
-                            borderBottom: isLast ? "none" : "1px solid var(--border)",
-                            background: isToday ? "rgba(74,124,89,0.04)" : "transparent",
-                          }}
-                        >
-                          {/* Day header */}
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: required.length > 0 ? 8 : 0 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                              {/* Checkbox */}
-                              {!isRestDay && (
-                                <div
-                                  role="button"
-                                  tabIndex={0}
-                                  onClick={() => {
-                                    if (done) {
-                                      setCheckedDayIds((prev) => { const n = { ...prev }; delete n[day.id]; return n; });
-                                    } else {
-                                      void handleLogDay(day);
-                                    }
-                                  }}
-                                  onKeyDown={(e) => e.key === " " && !done && void handleLogDay(day)}
-                                  style={{
-                                    width: 22, height: 22, borderRadius: 6, flexShrink: 0,
-                                    background: done ? "#4A7C59" : "transparent",
-                                    border: `2px solid ${done ? "#4A7C59" : isPast && !done ? "#C4831A" : "rgba(28,43,30,0.22)"}`,
-                                    display: "flex", alignItems: "center", justifyContent: "center",
-                                    cursor: "pointer", transition: "all 0.13s",
-                                  }}
-                                >
-                                  {done && <span style={{ color: "#fff", fontSize: 12, fontWeight: 900, lineHeight: 1 }}>✓</span>}
-                                </div>
-                              )}
-                              {isRestDay && <div style={{ width: 22, height: 22, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--border2)" }} /></div>}
-
-                              <div>
-                                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                  <span style={{ fontSize: 13.5, fontWeight: isToday ? 700 : 500, color: done ? "var(--text3)" : "var(--text)", textDecoration: done ? "line-through" : "none" }}>
-                                    {day.dayName}
-                                  </span>
-                                  {isToday && <span style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.10em", color: "#fff", background: "#4A7C59", borderRadius: 4, padding: "1px 6px" }}>Today</span>}
-                                  {hasOverride && <span style={{ fontSize: 9, color: "var(--text3)" }}>rescheduled</span>}
-                                </div>
-                                <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 1 }}>
-                                  {fmtShortDate(dayIso)}
-                                  {day.dayTheme && !isRestDay && <span style={{ marginLeft: 6 }}>· {day.dayTheme}</span>}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Right: status badge or log button */}
-                            {!isRestDay && (
-                              <div>
-                                {done ? (
-                                  <span style={{ fontSize: 11, color: "#4A7C59", fontWeight: 600 }}>Done ✓</span>
-                                ) : isToday ? (
-                                  <button
-                                    type="button"
-                                    disabled={savingActivity}
-                                    onClick={() => { void handleLogDay(day); }}
-                                    style={{ padding: "5px 14px", borderRadius: 20, background: "#4A7C59", color: "#fff", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer", opacity: savingActivity ? 0.6 : 1 }}
-                                  >
-                                    {savingActivity ? "…" : "Log session"}
-                                  </button>
-                                ) : isPast ? (
-                                  <button
-                                    type="button"
-                                    disabled={savingActivity}
-                                    onClick={() => { void handleLogDay(day); }}
-                                    style={{ padding: "5px 12px", borderRadius: 20, background: "transparent", color: "#C4831A", border: "1px solid #C4831A", fontSize: 11, fontWeight: 500, cursor: "pointer" }}
-                                  >
-                                    Log missed
-                                  </button>
-                                ) : (
-                                  <span style={{ fontSize: 11, color: "var(--text3)" }}>Upcoming</span>
-                                )}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Activity list (non-rest days, collapsed for future, expanded for today/past) */}
-                          {!isRestDay && required.length > 0 && (isToday || isPast || done) && (
-                            <div style={{ marginLeft: 30, display: "flex", flexDirection: "column", gap: 3, marginTop: 4 }}>
-                              {required.map((act) => (
-                                <div key={act.id} style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                                  <div style={{ width: 5, height: 5, borderRadius: "50%", background: actTypeColor(act.type), flexShrink: 0 }} />
-                                  <span style={{ fontSize: 12, color: done ? "var(--text3)" : "var(--text2)", textDecoration: done ? "line-through" : "none" }}>{act.name}</span>
-                                  {act.durationMinutes > 0 && <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Future days: compact activity type tags only */}
-                          {!isRestDay && required.length > 0 && isFuture && !done && (
-                            <div style={{ marginLeft: 30, display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
-                              {required.map((act) => (
-                                <span key={act.id} style={{ fontSize: 10, color: actTypeColor(act.type), background: `${actTypeColor(act.type)}12`, border: `1px solid ${actTypeColor(act.type)}28`, borderRadius: 4, padding: "1px 7px", fontWeight: 500 }}>
-                                  {act.name}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Rest day */}
-                          {isRestDay && (
-                            <div style={{ marginLeft: 30, fontSize: 11, color: "var(--text3)", marginTop: 2, fontStyle: "italic" }}>Rest & recovery</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* ── Save message ── */}
-                {activitySavedMsg && (
-                  <div style={{ margin: "0 20px 12px", padding: "10px 14px", background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.16)", borderRadius: "var(--r-sm)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 13, color: "#4A7C59", fontWeight: 600 }}>{activitySavedMsg}</span>
-                    <button type="button" style={{ fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                      onClick={() => setActivitySavedMsg("")}>dismiss</button>
-                  </div>
-                )}
-
-                {/* ── Week status bar ── */}
-                {totalTraining > 0 && (
-                  <div style={{ padding: "16px 20px 20px", borderTop: "1px solid var(--border)" }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
-                      <span style={{ fontSize: 32, fontFamily: "var(--serif)", fontWeight: 700, color: completedCount === totalTraining ? "#4A7C59" : "var(--text)", lineHeight: 1 }}>
-                        {completedCount}
-                      </span>
-                      <span style={{ fontSize: 15, color: "var(--text3)" }}>
-                        of {totalTraining} sessions complete this week
-                        {completedCount === totalTraining && <span style={{ marginLeft: 8, color: "#4A7C59", fontWeight: 600 }}>✓</span>}
-                      </span>
-                    </div>
-                  </div>
-                )}
-
               </div>
             );
           })()}
 
-          {/* Coach note */}
-          {payload.sessionNote && (
-            <div style={{ background: "rgba(196,131,26,0.04)", border: "1px solid rgba(196,131,26,0.14)", borderRadius: "var(--r)", padding: "16px 20px", marginBottom: 16 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(196,131,26,0.90)" }}>Note from {payload.sessionNote.coachName}</div>
-                <div style={{ fontSize: 11, color: "var(--text3)" }}>{payload.sessionNote.date}</div>
-              </div>
-              <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.7, margin: 0, fontStyle: "italic" }}>&ldquo;{payload.sessionNote.text}&rdquo;</p>
-            </div>
-          )}
-
-          {/* ══════════════════════════════════════════════════════════════
-              SESSION CARD (readiness === strong)
-              REST DAY CARD (readiness === low | hurt)
-          ══════════════════════════════════════════════════════════════ */}
-          {(todayCheckin === "strong" || todayCheckin === "low" || todayCheckin === "hurt") && (() => {
-            const isRest = todayCheckin === "low" || todayCheckin === "hurt";
-
-            if (isRest) {
-              const REST_STACK = [
-                { name: "Infrared Sauna",    note: "Deep heat · muscle repair",     dur: 20, optional: false },
-                { name: "Vasper",            note: "Compression cooling · recovery",dur: 20, optional: false },
-                { name: "Cold Plunge",       note: "Contrast after sauna",          dur: 3,  optional: true  },
-                { name: "Compression Boots", note: "Circulation · lymphatic",       dur: 15, optional: false },
-              ];
-              return (
-                <div className="card" style={{ marginBottom: 16, overflow: "hidden" }}>
-                  <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)" }}>
-                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 6 }}>Recovery options for today</div>
-                    <div style={{ fontSize: 20, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2, marginBottom: 3 }}>Rest day stack</div>
-                    <div style={{ fontSize: 12, color: "var(--text3)" }}>No ARX or Katalyst today — just recovery</div>
-                  </div>
-                  <div>
-                    {REST_STACK.map((item, i) => (
-                      <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 20px", borderBottom: i < REST_STACK.length - 1 ? "1px solid var(--border)" : "none" }}>
-                        <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(107,159,212,0.12)", border: "1px solid rgba(107,159,212,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#6B9FD4" }} />
-                        </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--text)" }}>
-                            {item.name}{item.optional && <span style={{ marginLeft: 6, fontSize: 10, color: "var(--text3)", fontWeight: 400 }}>optional</span>}
-                          </div>
-                          <div style={{ fontSize: 11, color: "var(--text3)" }}>{item.note}</div>
-                        </div>
-                        <div style={{ fontSize: 11, color: "var(--text3)", flexShrink: 0 }}>{item.dur} min</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            }
-
-            if (weekPlan.length === 0) return null;
-
+          {/* CARD 2a — SESSION CARD (strong + week plan loaded) */}
+          {todayCheckin === "strong" && weekPlan.length > 0 && (() => {
             const todayIsoSC  = payload.checklistCompletions.todayDate;
             const weekStartSC = payload.checklistCompletions.weekStartDate;
             const rawDiff     = Math.round((new Date(todayIsoSC + "T00:00:00").getTime() - new Date(weekStartSC + "T00:00:00").getTime()) / 86400000);
             const currentDow  = Math.max(1, Math.min(7, rawDiff + 1));
-
-            const navDays  = weekPlan.filter((d) => d.dayOfWeek >= currentDow);
-            const activeDow = sessionCardDow ?? (navDays[0]?.dayOfWeek ?? currentDow);
-            const viewingDay = weekPlan.find((d) => d.dayOfWeek === activeDow) ?? weekPlan.find((d) => d.dayOfWeek >= currentDow) ?? weekPlan[0];
+            const navDays     = weekPlan.filter((d) => d.dayOfWeek >= currentDow);
+            const activeDow   = sessionCardDow ?? (navDays[0]?.dayOfWeek ?? currentDow);
+            const viewingDay  = weekPlan.find((d) => d.dayOfWeek === activeDow) ?? navDays[0] ?? weekPlan[0];
             if (!viewingDay) return null;
-
             const navIdx  = navDays.findIndex((d) => d.dayOfWeek === activeDow);
             const canBack = navIdx > 0;
             const canFwd  = navIdx < navDays.length - 1;
-
             function isoForDowSC(dow: number): string {
               const base = new Date(weekStartSC + "T00:00:00");
               base.setDate(base.getDate() + (dow - 1));
               return base.toISOString().slice(0, 10);
             }
-            const dayIso   = isoForDowSC(viewingDay.dayOfWeek);
-            const hasArxSC = payload.arxSessions.some((s) => s.sessionDate.slice(0, 10) === dayIso);
-            const hasCarolSC = payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === dayIso);
-            const isDone   = sessionCardCompleted[viewingDay.id] || hasArxSC || hasCarolSC;
-
+            const dayIso  = isoForDowSC(viewingDay.dayOfWeek);
+            const isDone  = sessionCardCompleted[viewingDay.id]
+              || payload.arxSessions.some((s) => s.sessionDate.slice(0, 10) === dayIso)
+              || payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === dayIso);
             const required = viewingDay.activities.filter((a) => !a.isOptional);
             const actTypes = [...new Set(required.map((a) => {
               if (a.type === "strength") return "Strength";
@@ -2025,55 +1591,53 @@ export function DashboardReactClient({
               if (a.type === "coaching") return "Coaching";
               return a.type.charAt(0).toUpperCase() + a.type.slice(1);
             }))];
-            const totalDur = required.reduce((s, a) => s + a.durationMinutes, 0);
+            const totalDur = required.reduce((s, a) => s + (a.durationMinutes ?? 0), 0);
             const subtitle = `${actTypes.join(" · ")} · ~${totalDur} min`;
-
-            const isToday  = viewingDay.dayOfWeek === currentDow;
-            const DOW_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+            const isToday   = viewingDay.dayOfWeek === currentDow;
+            const DOW_NAMES = ["","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
             const cardLabel = isToday ? "Today's session" : `${DOW_NAMES[viewingDay.dayOfWeek]}'s session`;
-
-            function actIconBg(type: string): React.CSSProperties {
-              if (type === "strength") return { background: "rgba(74,124,89,0.12)", border: "1px solid rgba(74,124,89,0.25)" };
-              if (type === "cardio")   return { background: "rgba(196,131,26,0.10)", border: "1px solid rgba(196,131,26,0.22)" };
-              if (type === "recovery") return { background: "rgba(107,159,212,0.10)", border: "1px solid rgba(107,159,212,0.22)" };
-              return { background: "rgba(155,142,160,0.10)", border: "1px solid rgba(155,142,160,0.20)" };
+            function icoStyle(type: string, isOpt?: boolean): React.CSSProperties {
+              if (type === "recovery") {
+                if (isOpt) return { border: "0.5px dashed #B5D4F4", background: "transparent" };
+                return { background: "#E6F1FB" };
+              }
+              return { background: "#F1EFE8" };
             }
-            function actDot(type: string): string {
-              if (type === "strength") return "#4A7C59";
-              if (type === "cardio")   return "#C4831A";
-              if (type === "recovery") return "#6B9FD4";
-              return "#9B8EA0";
+            function actIcon(act: { type: string; name: string }): string {
+              const n = act.name.toLowerCase();
+              if (n.includes("cold") || n.includes("plunge")) return "🧊";
+              if (n.includes("arx") || n.includes("strength")) return "🏋";
+              if (n.includes("carol") || n.includes("zone 2") || n.includes("bike")) return "🚴";
+              if (n.includes("compression") || n.includes("boots")) return "🦵";
+              if (n.includes("sauna") || n.includes("infrared")) return "🌡";
+              if (n.includes("vasper")) return "💧";
+              if (n.includes("katalyst") || n.includes("ems")) return "⚡";
+              if (act.type === "coaching") return "👤";
+              return "●";
             }
-
             async function handleMarkComplete() {
               if (isDone) return;
               setSessionCardCompleted((prev) => ({ ...prev, [viewingDay.id]: true }));
               setCheckedDayIds((prev) => ({ ...prev, [viewingDay.id]: true }));
-              const toAdd = required
-                .map((a): { type: "arx" | "carol" | "recovery"; subtype: string } | null => {
-                  const n = a.name.toLowerCase();
-                  if (a.type === "strength") return { type: "arx", subtype: "manual_checkin" };
-                  if (a.type === "cardio") {
-                    if (n.includes("rehit")) return { type: "carol", subtype: "REHIT" };
-                    if (n.includes("norwegian") || n.includes("4x4")) return { type: "carol", subtype: "FAT_BURN_60" };
-                    if (n.includes("zone 2") || n.includes("free ride")) return { type: "carol", subtype: "FAT_BURN_30" };
-                    return { type: "carol", subtype: "FAT_BURN_45" };
-                  }
-                  if (a.type === "recovery") {
-                    if (n.includes("cold")) return { type: "recovery", subtype: "cold_plunge" };
-                    if (n.includes("sauna") || n.includes("infrared")) return { type: "recovery", subtype: "infrared_sauna" };
-                    if (n.includes("compression")) return { type: "recovery", subtype: "compression" };
-                    return null;
-                  }
-                  return null;
-                })
-                .filter((x): x is { type: "arx" | "carol" | "recovery"; subtype: string } => x !== null);
+              const toAdd = required.map((a): { type: "arx" | "carol" | "recovery"; subtype: string } | null => {
+                const n = a.name.toLowerCase();
+                if (a.type === "strength") return { type: "arx", subtype: "manual_checkin" };
+                if (a.type === "cardio") {
+                  if (n.includes("rehit")) return { type: "carol", subtype: "REHIT" };
+                  if (n.includes("norwegian") || n.includes("4x4")) return { type: "carol", subtype: "FAT_BURN_60" };
+                  if (n.includes("zone 2") || n.includes("free ride")) return { type: "carol", subtype: "FAT_BURN_30" };
+                  return { type: "carol", subtype: "FAT_BURN_45" };
+                }
+                if (a.type === "recovery") {
+                  if (n.includes("cold")) return { type: "recovery", subtype: "cold_plunge" };
+                  if (n.includes("sauna") || n.includes("infrared")) return { type: "recovery", subtype: "infrared_sauna" };
+                  if (n.includes("compression")) return { type: "recovery", subtype: "compression" };
+                }
+                return null;
+              }).filter((x): x is { type: "arx" | "carol" | "recovery"; subtype: string } => x !== null);
               try {
                 if (toAdd.length > 0) {
-                  await fetch("/api/member/activity-log", {
-                    method: "POST", headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: [] }),
-                  });
+                  await fetch("/api/member/activity-log", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ to_add: toAdd, to_remove: [], bonus: [] }) });
                   const c = payload.checklistCompletions;
                   for (const item of toAdd) {
                     if (item.type === "arx") c.arxWeekDates.push(dayIso);
@@ -2081,265 +1645,227 @@ export function DashboardReactClient({
                     else if (item.type === "recovery") c.recoveryWeekModalities.push(item.subtype);
                   }
                 }
-              } catch { /* optimistic — already updated */ }
+              } catch { /* optimistic */ }
             }
-
             return (
-              <div className="card" style={{ marginBottom: 16, overflow: "hidden" }}>
-                {/* Header + day nav */}
-                <div style={{ padding: "14px 20px 12px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)" }}>{cardLabel}</div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+              <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", overflow: "hidden" }}>
+                <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "0.5px solid #E5E5E0" }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.05em" }}>{cardLabel}</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <button type="button" disabled={!canBack}
                       onClick={() => { if (canBack) { setSessionCardDow(navDays[navIdx - 1]!.dayOfWeek); setExpandedActivityId(null); } }}
-                      style={{ background: "none", border: "none", color: canBack ? "var(--text2)" : "var(--border2)", cursor: canBack ? "pointer" : "default", padding: "4px 7px", fontSize: 16, lineHeight: 1 }}>‹</button>
-                    <span style={{ fontSize: 12, color: "var(--text2)", fontWeight: 500, minWidth: 76, textAlign: "center" }}>{DOW_NAMES[viewingDay.dayOfWeek]}</span>
+                      style={{ width: 28, height: 28, borderRadius: 8, border: "0.5px solid #E5E5E0", background: canBack ? "#FAFAF8" : "#F5F5F2", display: "flex", alignItems: "center", justifyContent: "center", cursor: canBack ? "pointer" : "default", fontSize: 14, color: canBack ? "#5F5E5A" : "#C8C7C2", opacity: canBack ? 1 : 0.35 }}>←</button>
+                    <span style={{ fontSize: 12, color: "#888780", minWidth: 70, textAlign: "center" }}>{DOW_NAMES[viewingDay.dayOfWeek]}</span>
                     <button type="button" disabled={!canFwd}
                       onClick={() => { if (canFwd) { setSessionCardDow(navDays[navIdx + 1]!.dayOfWeek); setExpandedActivityId(null); } }}
-                      style={{ background: "none", border: "none", color: canFwd ? "var(--text2)" : "var(--border2)", cursor: canFwd ? "pointer" : "default", padding: "4px 7px", fontSize: 16, lineHeight: 1 }}>›</button>
+                      style={{ width: 28, height: 28, borderRadius: 8, border: "0.5px solid #E5E5E0", background: canFwd ? "#FAFAF8" : "#F5F5F2", display: "flex", alignItems: "center", justifyContent: "center", cursor: canFwd ? "pointer" : "default", fontSize: 14, color: canFwd ? "#5F5E5A" : "#C8C7C2", opacity: canFwd ? 1 : 0.35 }}>→</button>
                   </div>
                 </div>
-
-                {/* Title + subtitle */}
-                <div style={{ padding: "14px 20px 10px" }}>
-                  <div style={{ fontSize: 20, fontFamily: "var(--serif)", fontWeight: 600, color: "var(--text)", lineHeight: 1.2, marginBottom: 4 }}>
-                    {viewingDay.dayTheme || viewingDay.dayName}
-                  </div>
-                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{subtitle}</div>
-                </div>
-
-                {/* Activity list — tap a row to expand steps inline */}
-                <div style={{ borderTop: "1px solid var(--border)" }}>
-                  {required.map((act, i) => {
-                    const isExpanded = expandedActivityId === act.id;
-                    const hasDetail  = (act.steps && act.steps.length > 0) || !!act.whyItMatters;
-                    return (
-                      <div key={act.id} style={{ borderBottom: i < required.length - 1 || isExpanded ? "1px solid var(--border)" : "none" }}>
-                        {/* Row — tappable if there are steps */}
-                        <div
-                          role={hasDetail ? "button" : undefined}
-                          tabIndex={hasDetail ? 0 : undefined}
-                          onClick={() => hasDetail && setExpandedActivityId(isExpanded ? null : act.id)}
-                          onKeyDown={(e) => hasDetail && e.key === " " && setExpandedActivityId(isExpanded ? null : act.id)}
-                          style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 20px", cursor: hasDetail ? "pointer" : "default" }}
-                        >
-                          <div style={{ width: 36, height: 36, borderRadius: 9, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", ...actIconBg(act.type) }}>
-                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: actDot(act.type) }} />
+                <div style={{ padding: "14px 16px" }}>
+                  <div style={{ fontSize: 17, fontWeight: 500, color: "#1a1a1a", marginBottom: 2 }}>{viewingDay.dayTheme || viewingDay.dayName}</div>
+                  <div style={{ fontSize: 12, color: "#888780", marginBottom: 14 }}>{subtitle}</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+                    {required.map((act) => {
+                      const isExpanded = expandedActivityId === act.id;
+                      const hasDetail  = (act.steps && act.steps.length > 0) || !!act.whyItMatters;
+                      const isColdOpt  = act.isOptional && (act.name.toLowerCase().includes("cold") || act.name.toLowerCase().includes("plunge"));
+                      return (
+                        <div key={act.id}>
+                          <div
+                            role={hasDetail ? "button" : undefined}
+                            tabIndex={hasDetail ? 0 : undefined}
+                            onClick={() => hasDetail && setExpandedActivityId(isExpanded ? null : act.id)}
+                            onKeyDown={(e) => hasDetail && e.key === " " && setExpandedActivityId(isExpanded ? null : act.id)}
+                            style={{ display: "flex", alignItems: "center", gap: 10, cursor: hasDetail ? "pointer" : "default" }}
+                          >
+                            <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, ...icoStyle(act.type, isColdOpt) }}>
+                              {actIcon(act)}
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, color: "#1a1a1a" }}>{act.name}{act.isOptional && <span style={{ marginLeft: 5, fontSize: 10, color: "#888780" }}>optional</span>}</div>
+                              {act.durationMinutes > 0 && <div style={{ fontSize: 11, color: "#888780" }}>{act.durationMinutes} min</div>}
+                            </div>
+                            {hasDetail && <span style={{ fontSize: 12, color: "#888780", transform: isExpanded ? "rotate(90deg)" : "none", display: "inline-block", transition: "transform 0.14s" }}>›</span>}
                           </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 13.5, fontWeight: 600, color: "var(--text)" }}>{act.name}</div>
-                            {!isExpanded && act.description && (
-                              <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                {act.description.length > 72 ? act.description.slice(0, 72) + "…" : act.description}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                            {act.durationMinutes > 0 && <span style={{ fontSize: 11, color: "var(--text3)" }}>{act.durationMinutes} min</span>}
-                            {hasDetail && (
-                              <span style={{ fontSize: 13, color: "var(--text3)", lineHeight: 1, transform: isExpanded ? "rotate(90deg)" : "none", display: "inline-block", transition: "transform 0.15s" }}>›</span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Expanded detail */}
-                        {isExpanded && (
-                          <div style={{ padding: "0 20px 16px 68px" }}>
-                            {act.description && (
-                              <p style={{ fontSize: 13, color: "var(--text2)", lineHeight: 1.65, margin: "0 0 12px 0" }}>
-                                {act.description}
-                              </p>
-                            )}
-                            {act.whyItMatters && (
-                              <div style={{ marginBottom: 12 }}>
-                                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", fontWeight: 600, marginBottom: 5 }}>Why it matters</div>
-                                <p style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{act.whyItMatters}</p>
-                              </div>
-                            )}
-                            {act.steps && act.steps.length > 0 && (
-                              <div>
-                                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "var(--text3)", fontWeight: 600, marginBottom: 8 }}>Steps</div>
-                                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                          {isExpanded && (
+                            <div style={{ paddingLeft: 40, paddingTop: 8, paddingBottom: 4 }}>
+                              {act.whyItMatters && <p style={{ fontSize: 12, color: "#5F5E5A", lineHeight: 1.6, margin: "0 0 8px 0" }}>{act.whyItMatters}</p>}
+                              {act.steps && act.steps.length > 0 && (
+                                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                                   {act.steps.map((step, si) => (
-                                    <div key={si} style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                                      <span style={{ fontSize: 10, fontWeight: 700, color: actDot(act.type), minWidth: 18, marginTop: 2, lineHeight: 1 }}>{si + 1}</span>
-                                      <span style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.55 }}>{step}</span>
+                                    <div key={si} style={{ display: "flex", gap: 8 }}>
+                                      <span style={{ fontSize: 10, fontWeight: 700, color: "#0F6E56", minWidth: 16, marginTop: 2 }}>{si + 1}</span>
+                                      <span style={{ fontSize: 12, color: "#5F5E5A", lineHeight: 1.55 }}>{step}</span>
                                     </div>
                                   ))}
                                 </div>
-                              </div>
-                            )}
-                            {act.alternativeActivity && (
-                              <div style={{ marginTop: 10, fontSize: 11, color: "var(--text3)", fontStyle: "italic" }}>
-                                Alternative: {act.alternativeActivity}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Mark as complete — full width, no navigation away */}
-                <div style={{ padding: "14px 20px", borderTop: "1px solid var(--border)" }}>
-                  <button type="button" onClick={() => { void handleMarkComplete(); }} disabled={isDone}
-                    style={{ width: "100%", padding: "13px 0", borderRadius: 8, background: isDone ? "rgba(74,124,89,0.10)" : "#4A7C59", color: isDone ? "#4A7C59" : "#fff", border: isDone ? "1.5px solid rgba(74,124,89,0.28)" : "none", fontSize: 14, fontWeight: 700, cursor: isDone ? "default" : "pointer", transition: "all 0.15s" }}>
-                    {isDone ? "✓ Completed" : "Mark as complete"}
-                  </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button type="button" onClick={() => { void handleMarkComplete(); }} disabled={isDone}
+                      style={{ flex: 1, padding: "11px", borderRadius: 10, background: isDone ? "#E1F5EE" : "#1D9E75", color: isDone ? "#0F6E56" : "white", border: isDone ? "0.5px solid #1D9E75" : "none", fontSize: 13, fontWeight: 500, cursor: isDone ? "default" : "pointer", transition: "all 0.15s" }}>
+                      {isDone ? "✓ Completed" : "Mark as complete"}
+                    </button>
+                    <button type="button" onClick={() => setMemberSection("protocol")}
+                      style={{ padding: "11px 14px", borderRadius: 10, background: "transparent", border: "0.5px solid #E5E5E0", color: "#5F5E5A", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                      Full plan
+                    </button>
+                  </div>
                 </div>
               </div>
             );
           })()}
 
-          {/* ══════════════════════════════════════════════════════════════
-              BOOKING CARD — always visible
-          ══════════════════════════════════════════════════════════════ */}
+          {/* CARD 2b — REST STACK */}
+          {(todayCheckin === "low" || todayCheckin === "hurt") && showRestPlan && (
+            <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", overflow: "hidden" }}>
+              <div style={{ padding: "12px 14px", borderBottom: "0.5px solid #E5E5E0" }}>
+                <div style={{ fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.05em" }}>Recovery options for today</div>
+              </div>
+              <div style={{ padding: "14px 16px" }}>
+                <div style={{ fontSize: 17, fontWeight: 500, color: "#1a1a1a", marginBottom: 2 }}>Rest day stack</div>
+                <div style={{ fontSize: 12, color: "#888780", marginBottom: 14 }}>No ARX or Katalyst today — just recovery</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    { e: "🌡", name: "Infrared sauna",   note: "Heat stress supports recovery",  dur: 20, opt: false },
+                    { e: "💧", name: "Vasper",            note: "Reduces cortisol, aids repair",  dur: 20, opt: false },
+                    { e: "🧊", name: "Cold plunge",       note: "Contrast therapy after sauna",   dur: null, opt: true  },
+                    { e: "🦵", name: "Compression boots", note: "Lymphatic support",              dur: 15, opt: false },
+                  ].map((item) => (
+                    <div key={item.name} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, ...(item.opt ? { border: "0.5px dashed #B5D4F4", background: "transparent" } : { background: "#E6F1FB" }) }}>
+                        {item.e}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, color: "#1a1a1a" }}>{item.name}{item.opt && <span style={{ marginLeft: 5, fontSize: 10, color: "#888780" }}>optional</span>}</div>
+                        <div style={{ fontSize: 11, color: "#888780" }}>{item.note}{item.dur ? ` · ${item.dur} min` : ""}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* CARD 3 — BOOKING */}
           {(() => {
-            const next     = payload.bookings[0] ?? null;
+            const next = payload.bookings[0] ?? null;
             const isBooked = !!next && next.status !== "cancelled";
-            let dateDisplay = "";
+            let timeStr = "", dateStr = "";
             if (next?.scheduledAt) {
               const d = new Date(next.scheduledAt);
-              const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-              const date = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
-              dateDisplay = isBooked ? `${time} · ${date}` : date;
-            } else if (next?.label) {
-              dateDisplay = next.label;
-            }
+              timeStr = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+              dateStr = d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+            } else if (next?.label) { dateStr = next.label; }
             return (
-              <div className="card" style={{ marginBottom: 16, padding: "14px 20px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div>
-                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)", marginBottom: 5 }}>Next booking</div>
-                    <div style={{ fontSize: 15, fontWeight: 600, color: isBooked ? "var(--text)" : "#C4831A" }}>{isBooked ? "Booked" : "Not booked"}</div>
-                    {dateDisplay && <div style={{ fontSize: 12, color: "var(--text3)", marginTop: 2 }}>{dateDisplay}</div>}
-                  </div>
-                  <a href="https://theiso.club/book" target="_blank" rel="noreferrer"
-                    style={{ padding: "9px 18px", borderRadius: 8, textDecoration: "none", background: isBooked ? "transparent" : "#4A7C59", color: isBooked ? "#4A7C59" : "#fff", border: isBooked ? "1.5px solid rgba(74,124,89,0.38)" : "none", fontSize: 13, fontWeight: 600, flexShrink: 0 }}>
-                    {isBooked ? "Manage ↗" : "Book now ↗"}
-                  </a>
+              <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Next booking</div>
+                  <div style={{ fontSize: 14, fontWeight: 500, color: "#1a1a1a" }}>{isBooked ? `${timeStr} booked` : "Not booked"}</div>
+                  {dateStr && <div style={{ fontSize: 12, color: "#888780", marginTop: 1 }}>{dateStr}</div>}
                 </div>
+                <a href="https://theiso.club/book" target="_blank" rel="noreferrer"
+                  style={{ padding: "9px 14px", borderRadius: 10, textDecoration: "none", fontSize: 12, fontWeight: 500, flexShrink: 0, ...(isBooked ? { background: "#F1EFE8", border: "0.5px solid #D3D1C7", color: "#5F5E5A" } : { background: "#F0FAF6", border: "0.5px solid #1D9E75", color: "#0F6E56" }) }}>
+                  {isBooked ? "Manage ↗" : "Book now ↗"}
+                </a>
               </div>
             );
           })()}
 
-          {/* ══════════════════════════════════════════════════════════════
-              WEEKLY PROGRESS CARD — always visible
-          ══════════════════════════════════════════════════════════════ */}
+          {/* CARD 4 — WEEKLY PROGRESS */}
           {(() => {
-            const weekStartWP = payload.checklistCompletions.weekStartDate;
-            const todayIsoWP  = payload.checklistCompletions.todayDate;
+            const weekStartWP    = payload.checklistCompletions.weekStartDate;
+            const todayIsoWP     = payload.checklistCompletions.todayDate;
             const trainingDaysWP = weekPlan.filter((d) => !d.dayTheme.toLowerCase().includes("rest"));
-
             function isoForDowWP(dow: number): string {
-              const base = new Date(weekStartWP + "T00:00:00");
-              base.setDate(base.getDate() + (dow - 1));
+              const base = new Date(weekStartWP + "T00:00:00"); base.setDate(base.getDate() + (dow - 1));
               return base.toISOString().slice(0, 10);
             }
             const currentDowWP = Math.max(1, Math.min(7,
               Math.round((new Date(todayIsoWP + "T00:00:00").getTime() - new Date(weekStartWP + "T00:00:00").getTime()) / 86400000) + 1
             ));
-
             function isDayDoneWP(dow: number, dayId: string): boolean {
               if (sessionCardCompleted[dayId] || checkedDayIds[dayId]) return true;
               const iso = isoForDowWP(dow);
               return payload.arxSessions.some((s) => s.sessionDate.slice(0, 10) === iso)
                   || payload.carolSessions.some((s) => s.sessionDate.slice(0, 10) === iso);
             }
-
             const completedWP = trainingDaysWP.filter((d) => isDayDoneWP(d.dayOfWeek, d.id)).length;
-            const totalWP     = trainingDaysWP.length;
-
-            // Streak: consecutive weeks (Mon-based) with ≥1 session
+            const totalWP = trainingDaysWP.length;
             function mondayOf(iso: string): string {
-              const d = new Date(iso + "T00:00:00");
-              const dow = d.getDay();
+              const d = new Date(iso + "T00:00:00"); const dow = d.getDay();
               d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));
               return d.toISOString().slice(0, 10);
             }
             const activeWeeks = new Set<string>();
             for (const s of payload.arxSessions)  activeWeeks.add(mondayOf(s.sessionDate.slice(0, 10)));
             for (const s of payload.carolSessions) activeWeeks.add(mondayOf(s.sessionDate.slice(0, 10)));
-
             let streak = 0;
-            const curMonday = new Date(weekStartWP + "T00:00:00");
-            while (activeWeeks.has(curMonday.toISOString().slice(0, 10))) {
-              streak++;
-              curMonday.setDate(curMonday.getDate() - 7);
-            }
+            const curMon = new Date(weekStartWP + "T00:00:00");
+            while (activeWeeks.has(curMon.toISOString().slice(0, 10))) { streak++; curMon.setDate(curMon.getDate() - 7); }
             if (streak === 0 && completedWP > 0) streak = 1;
-
-            const DOW_SHORT = ["Mo","Tu","We","Th","Fr","Sa","Su"];
-
             return (
-              <div className="card" style={{ marginBottom: 16, padding: "16px 20px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                  <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.16em", color: "var(--text3)" }}>This week</div>
-                  {streak > 0 && <div style={{ fontSize: 11, color: "#4A7C59", fontWeight: 600 }}>{streak} week{streak !== 1 ? "s" : ""} consistent</div>}
+              <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", padding: "14px 16px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.05em" }}>This week</div>
+                  {streak > 0 && <div style={{ fontSize: 11, color: "#0F6E56", fontWeight: 500 }}>{streak} week{streak !== 1 ? "s" : ""} consistent</div>}
                 </div>
                 {trainingDaysWP.length > 0 && (
-                  <div style={{ display: "flex", gap: 6, marginBottom: 12, alignItems: "flex-end" }}>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
                     {trainingDaysWP.map((day) => {
-                      const done   = isDayDoneWP(day.dayOfWeek, day.id);
+                      const done = isDayDoneWP(day.dayOfWeek, day.id);
                       const isToday = day.dayOfWeek === currentDowWP;
-                      const isPast  = day.dayOfWeek < currentDowWP;
-                      return (
-                        <div key={day.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1 }}>
-                          <div style={{ width: "100%", height: 6, borderRadius: 3, background: done ? "#4A7C59" : isToday ? "rgba(74,124,89,0.28)" : isPast ? "rgba(196,131,26,0.22)" : "var(--border)", transition: "background 0.2s" }} />
-                          <div style={{ fontSize: 9, color: "var(--text3)" }}>{DOW_SHORT[(day.dayOfWeek - 1)]}</div>
-                        </div>
-                      );
+                      return <div key={day.id} style={{ flex: 1, height: 6, borderRadius: 3, background: done ? "#1D9E75" : isToday ? "#9FE1CB" : "#F1EFE8", transition: "background 0.2s" }} />;
                     })}
                   </div>
                 )}
-                <div style={{ fontSize: 13, color: "var(--text2)" }}>
-                  <span style={{ fontFamily: "var(--serif)", fontWeight: 700, fontSize: 22, color: completedWP === totalWP && totalWP > 0 ? "#4A7C59" : "var(--text)" }}>{completedWP}</span>
-                  {" "}<span style={{ color: "var(--text3)" }}>of {totalWP} sessions complete this week</span>
-                  {completedWP === totalWP && totalWP > 0 && <span style={{ marginLeft: 6, color: "#4A7C59", fontWeight: 600 }}>✓</span>}
+                <div style={{ fontSize: 13, color: "#5F5E5A" }}>
+                  <span style={{ fontWeight: 500, color: "#1a1a1a" }}>{completedWP} of {totalWP}</span> sessions complete this week
                 </div>
               </div>
             );
           })()}
 
-          {/* ══════════════════════════════════════════════════════════════
-              COACH MESSAGE CARD — unread messages only
-          ══════════════════════════════════════════════════════════════ */}
+          {/* CARD 5 — COACH MESSAGE */}
           {(() => {
             if (unreadCount === 0 || messages.length === 0) return null;
             const memberId = payload.memberId ?? "";
             const unread = [...messages].reverse().find((m) => !m.read_at && m.sender_id !== memberId);
             if (!unread) return null;
             function relTime(iso: string): string {
-              const diff  = Date.now() - new Date(iso).getTime();
-              const mins  = Math.floor(diff / 60000);
-              const hours = Math.floor(mins / 60);
-              if (mins < 5)   return "Just now";
-              if (hours < 1)  return `${mins}m ago`;
-              if (hours < 4)  return "This morning";
+              const diff = Date.now() - new Date(iso).getTime();
+              const mins = Math.floor(diff / 60000); const hours = Math.floor(mins / 60);
+              if (mins < 5) return "Just now";
+              if (hours < 1) return `${mins}m ago`;
+              if (hours < 4) return "This morning";
               if (hours < 20) return `${hours}h ago`;
               if (hours < 28) return "Yesterday";
               return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
             }
             return (
-              <div className="card" style={{ marginBottom: 16, padding: "14px 20px", position: "relative" }}>
-                <div style={{ position: "absolute", top: 12, right: 14, width: 8, height: 8, borderRadius: "50%", background: "#6B9FD4" }} />
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(107,159,212,0.14)", border: "1.5px solid rgba(107,159,212,0.28)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#6B9FD4" }}>D</span>
+              <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px 24px", border: "0.5px solid #E5E5E0", overflow: "hidden" }}>
+                <div style={{ padding: "12px 16px", display: "flex", alignItems: "center", gap: 10, borderBottom: "0.5px solid #E5E5E0" }}>
+                  <div style={{ width: 32, height: 32, borderRadius: "50%", background: "#E1F5EE", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 500, color: "#0F6E56", flexShrink: 0 }}>D</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: "#1a1a1a" }}>Coach Dustin</div>
+                    <div style={{ fontSize: 11, color: "#888780" }}>{relTime(unread.created_at)}</div>
                   </div>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>Coach Dustin</div>
-                    <div style={{ fontSize: 11, color: "var(--text3)" }}>{relTime(unread.created_at)}</div>
-                  </div>
+                  <div style={{ width: 7, height: 7, borderRadius: "50%", background: "#1D9E75", flexShrink: 0 }} />
                 </div>
-                <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 12px 0" }}>
-                  {unread.body.length > 140 ? unread.body.slice(0, 140) + "…" : unread.body}
-                </p>
-                <button type="button" onClick={() => setMemberSection("messages")}
-                  style={{ padding: "8px 20px", borderRadius: 8, background: "transparent", border: "1.5px solid rgba(107,159,212,0.38)", color: "#6B9FD4", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  Reply →
-                </button>
+                <div style={{ padding: "12px 16px", fontSize: 13, color: "#444441", lineHeight: 1.6 }}>
+                  {unread.body.length > 160 ? unread.body.slice(0, 160) + "…" : unread.body}
+                </div>
+                <div style={{ padding: "0 16px 12px" }}>
+                  <button type="button" onClick={() => setMemberSection("messages")}
+                    style={{ width: "100%", padding: "9px", borderRadius: 10, border: "0.5px solid #E5E5E0", background: "#FAFAF8", fontSize: 13, color: "#5F5E5A", fontWeight: 500, cursor: "pointer", textAlign: "center" }}>
+                    Reply
+                  </button>
+                </div>
               </div>
             );
           })()}
