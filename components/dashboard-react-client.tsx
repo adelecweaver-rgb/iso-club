@@ -14,6 +14,7 @@ import {
   type EquipmentKey,
   type ColdPlungePosition,
 } from "@/lib/protocolContent";
+import { recommendProtocol as recommendProtocolLib } from "@/lib/onboarding";
 
 type MemberSection =
   | "dashboard"
@@ -224,6 +225,8 @@ type DashboardPayload = {
       recovery: string;
       muscle: string;
       session: string;
+      member_status?: string;
+      review_requested_at?: string | null;
     }>;
   };
 };
@@ -724,15 +727,9 @@ function tierDaysRange(tier: ProtocolTier | null): string {
   return "1–6";
 }
 
+// Thin shim — delegates to shared lib so both member + coach views use the same logic.
 function recommendProtocol(activeGoals: string[]): string | null {
-  const g = new Set(activeGoals);
-  if (g.size === 0) return null;
-  if ((g.has("gain_muscle") && g.has("lose_fat") && g.has("improve_cardio")) || g.size >= 4) return "Longevity Protocol";
-  if (g.has("gain_muscle") && g.has("improve_cardio")) return "Longevity Protocol";
-  if (g.has("gain_muscle") && g.has("lose_fat")) return "Metabolic Reset";
-  if (g.has("lose_fat")) return "Metabolic Reset";
-  if (g.has("improve_cardio")) return "Cardio Focus";
-  return "Strength Foundation";
+  return recommendProtocolLib(activeGoals).name;
 }
 
 const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -912,7 +909,7 @@ export function DashboardReactClient({
   const [protocolDaysCache, setProtocolDaysCache] = useState<Record<string, ProtocolDay[]>>({});
   const [loadingProtocolDays, setLoadingProtocolDays] = useState<string | null>(null);
   const [protocolFreqSelection, setProtocolFreqSelection] = useState<Record<string, number>>({});
-  const [allMembers, setAllMembers] = useState<Array<{ id: string; name: string; tier: string }>>([]);
+  const [allMembers, setAllMembers] = useState<Array<{ id: string; name: string; tier: string; member_status?: string; review_requested_at?: string | null }>>([]);
   const [assignMemberId, setAssignMemberId] = useState("");
   const [assignProtocolId, setAssignProtocolId] = useState("");
   const [localGoals, setLocalGoals] = useState<Record<string, boolean>>(() => {
@@ -986,9 +983,38 @@ export function DashboardReactClient({
   const [whyExpanded, setWhyExpanded] = useState(false);
   const [expandedSessionDay, setExpandedSessionDay] = useState<number | null>(null);
   const [notifPanelOpen, setNotifPanelOpen] = useState(false);
-  const [coachNotifs, setCoachNotifs] = useState<Array<{ id: string; member_id: string; member_name: string; type: string; message: string; is_read: boolean; created_at: string }>>([]);
+  type CoachNotif = {
+    id: string;
+    member_id: string;
+    member_name: string;
+    type: string;
+    message: string;
+    is_read: boolean;
+    created_at: string;
+    payload?: {
+      diff?: Array<{ field: string; label: string; oldValue: string; newValue: string }>;
+      recommendation?: string | null;
+      recommendation_reason?: string | null;
+    } | null;
+  };
+  const [coachNotifs, setCoachNotifs] = useState<CoachNotif[]>([]);
   const [notifUnreadCount, setNotifUnreadCount] = useState(0);
   const [notifLoaded, setNotifLoaded] = useState(false);
+
+  // Review screen state
+  const [reviewMemberId, setReviewMemberId] = useState<string | null>(null);
+  const [reviewNotifId, setReviewNotifId] = useState<string | null>(null);
+  const [reviewDiff, setReviewDiff] = useState<Array<{ field: string; label: string; oldValue: string; newValue: string }>>([]);
+  const [reviewRecommendation, setReviewRecommendation] = useState<string | null>(null);
+  const [reviewRecommendationReason, setReviewRecommendationReason] = useState<string | null>(null);
+  const [reviewMemberName, setReviewMemberName] = useState("");
+  const [reviewCoachNote, setReviewCoachNote] = useState("");
+  const [reviewProtocolChanged, setReviewProtocolChanged] = useState(false);
+  const [reviewNewProtocolId, setReviewNewProtocolId] = useState("");
+  const [reviewNewDays, setReviewNewDays] = useState<number | null>(null);
+  const [confirmingReview, setConfirmingReview] = useState(false);
+  const [reviewConfirmMsg, setReviewConfirmMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const [reviewDiffCollapsed, setReviewDiffCollapsed] = useState(false);
   const [assignStartDate, setAssignStartDate] = useState(new Date().toISOString().slice(0, 10));
   const [assignCoachNotes, setAssignCoachNotes] = useState("");
   const [assignStatus, setAssignStatus] = useState("");
@@ -3462,10 +3488,272 @@ export function DashboardReactClient({
         </div>
 
         <div id="coach-members" className="content" style={{ display: mode === "coach" && coachView === "members" ? "block" : "none" }}>
+          {/* Review screen — shown when coach clicks a review_requested member */}
+          {reviewMemberId ? (() => {
+            const diffChanged = reviewDiff.filter((d) => d.oldValue !== d.newValue);
+            return (
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+                  <button
+                    type="button"
+                    style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", fontSize: 13, padding: 0 }}
+                    onClick={() => {
+                      setReviewMemberId(null);
+                      setReviewNotifId(null);
+                      setReviewDiff([]);
+                      setReviewRecommendation(null);
+                      setReviewRecommendationReason(null);
+                      setReviewCoachNote("");
+                      setReviewProtocolChanged(false);
+                      setReviewConfirmMsg(null);
+                    }}
+                  >← Back to members</button>
+                </div>
+                <div className="sec-header">
+                  <div className="sec-title">Protocol review requested</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)" }}>{reviewMemberName}</div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+                  {/* Left — diff */}
+                  <div className="card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, color: "var(--text3)", marginBottom: 14 }}>What changed</div>
+                    {diffChanged.length === 0 ? (
+                      <p style={{ fontSize: 13, color: "var(--text3)" }}>No prior answers on file — all fields are new.</p>
+                    ) : (
+                      <>
+                        {diffChanged.map((d) => (
+                          <div key={d.field} style={{ marginBottom: 14 }}>
+                            <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 4 }}>{d.label}</div>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 12, color: "var(--text3)", textDecoration: "line-through" }}>{d.oldValue}</span>
+                              <span style={{ fontSize: 11, color: "var(--text3)" }}>→</span>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)" }}>{d.newValue}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {reviewDiff.filter((d) => d.oldValue === d.newValue).length > 0 && (
+                          <div>
+                            <button
+                              type="button"
+                              style={{ fontSize: 11, color: "var(--text3)", background: "none", border: "none", cursor: "pointer", padding: 0, marginTop: 4 }}
+                              onClick={() => setReviewDiffCollapsed(!reviewDiffCollapsed)}
+                            >
+                              {reviewDiffCollapsed ? "▶" : "▼"} Unchanged fields
+                            </button>
+                            {!reviewDiffCollapsed && (
+                              <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: "2px solid var(--border)" }}>
+                                {reviewDiff.filter((d) => d.oldValue === d.newValue).map((d) => (
+                                  <div key={d.field} style={{ fontSize: 11, color: "var(--text3)", marginBottom: 6 }}>
+                                    <span style={{ textTransform: "uppercase", letterSpacing: "0.08em", fontSize: 10 }}>{d.label}:</span>{" "}
+                                    <span>{d.newValue}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Right — recommendation */}
+                  <div className="card" style={{ padding: "16px 18px" }}>
+                    <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", fontWeight: 700, color: "var(--text3)", marginBottom: 14 }}>System recommendation</div>
+                    {reviewRecommendation ? (
+                      <>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>{reviewRecommendation}</div>
+                        {reviewRecommendationReason && (
+                          <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.6, marginBottom: 16, marginTop: 0 }}>{reviewRecommendationReason}</p>
+                        )}
+                      </>
+                    ) : (
+                      <p style={{ fontSize: 13, color: "var(--text3)" }}>No recommendation available.</p>
+                    )}
+
+                    {/* Protocol change toggle */}
+                    <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", marginBottom: 14 }}>
+                        <input
+                          type="checkbox"
+                          checked={reviewProtocolChanged}
+                          onChange={(e) => setReviewProtocolChanged(e.target.checked)}
+                          style={{ width: 15, height: 15, accentColor: "var(--lime)" }}
+                        />
+                        <span style={{ fontSize: 13, color: "var(--text2)" }}>Assign updated protocol</span>
+                      </label>
+
+                      {reviewProtocolChanged && (
+                        <div style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Select protocol</div>
+                          <select
+                            className="form-input"
+                            style={{ width: "100%", fontSize: 12 }}
+                            value={reviewNewProtocolId}
+                            onChange={(e) => setReviewNewProtocolId(e.target.value)}
+                          >
+                            <option value="">— choose —</option>
+                            {coachProtocols.map((p) => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                          <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6, marginTop: 10 }}>Days per week</div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {[1,2,3,4,5,6].map((n) => (
+                              <button
+                                key={n}
+                                type="button"
+                                onClick={() => setReviewNewDays(reviewNewDays === n ? null : n)}
+                                style={{ width: 30, height: 30, borderRadius: "50%", fontSize: 11, fontWeight: 600, cursor: "pointer", background: reviewNewDays === n ? "var(--lime)" : "var(--bg3)", border: `1px solid ${reviewNewDays === n ? "var(--lime)" : "var(--border)"}`, color: reviewNewDays === n ? "#0b0c09" : "var(--text3)" }}
+                              >{n}</button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Coach note */}
+                      <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Coach note (required)</div>
+                      <textarea
+                        className="form-input"
+                        style={{ width: "100%", minHeight: 70, resize: "vertical", fontSize: 12, marginBottom: 12, boxSizing: "border-box" }}
+                        placeholder="Note visible to the member…"
+                        value={reviewCoachNote}
+                        onChange={(e) => setReviewCoachNote(e.target.value)}
+                      />
+
+                      {reviewConfirmMsg && (
+                        <div style={{ fontSize: 12, padding: "8px 12px", borderRadius: 6, marginBottom: 10, background: reviewConfirmMsg.ok ? "rgba(74,124,89,0.08)" : "rgba(184,64,64,0.08)", color: reviewConfirmMsg.ok ? "#4A7C59" : "#B84040", border: `1px solid ${reviewConfirmMsg.ok ? "rgba(74,124,89,0.2)" : "rgba(184,64,64,0.2)"}` }}>
+                          {reviewConfirmMsg.text}
+                        </div>
+                      )}
+
+                      <button
+                        type="button"
+                        className="btn btn-lime"
+                        disabled={confirmingReview || !reviewCoachNote.trim() || (reviewProtocolChanged && !reviewNewProtocolId)}
+                        onClick={async () => {
+                          if (!reviewCoachNote.trim()) return;
+                          setConfirmingReview(true);
+                          setReviewConfirmMsg(null);
+                          try {
+                            await postJson("/api/coach/review-confirm", {
+                              member_id: reviewMemberId,
+                              notification_id: reviewNotifId,
+                              protocol_changed: reviewProtocolChanged,
+                              new_protocol_id: reviewProtocolChanged ? reviewNewProtocolId : undefined,
+                              new_days_per_week: reviewProtocolChanged ? reviewNewDays : undefined,
+                              coach_notes: reviewCoachNote,
+                            });
+                            setReviewConfirmMsg({ text: "Confirmed — member notified.", ok: true });
+                            // Mark notification read in local state
+                            if (reviewNotifId) {
+                              setCoachNotifs((prev) => prev.map((n) => n.id === reviewNotifId ? { ...n, is_read: true } : n));
+                              setNotifUnreadCount((c) => Math.max(0, c - 1));
+                            }
+                            setTimeout(() => {
+                              setReviewMemberId(null);
+                              setReviewNotifId(null);
+                              setReviewDiff([]);
+                              setReviewCoachNote("");
+                              setReviewProtocolChanged(false);
+                              setReviewConfirmMsg(null);
+                            }, 2000);
+                          } catch (err) {
+                            setReviewConfirmMsg({ text: err instanceof Error ? err.message : "Failed to confirm.", ok: false });
+                          } finally {
+                            setConfirmingReview(false);
+                          }
+                        }}
+                      >
+                        {confirmingReview ? "Confirming…" : reviewProtocolChanged ? "Update protocol and notify member" : "Confirm — no changes needed"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })() : (
+          <>
           <div className="sec-header"><div className="sec-title">All members</div></div>
+          {/* Needs attention — review_requested and awaiting_protocol members */}
+          {(() => {
+            const attention = payload.coach.members.filter(
+              (m) => m.member_status === "review_requested" || m.member_status === "awaiting_protocol",
+            );
+            if (attention.length === 0) return null;
+            return (
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", fontWeight: 700, color: "var(--text3)", marginBottom: 10 }}>Needs attention</div>
+                <div className="card">
+                  {attention.map((member) => {
+                    const isReview = member.member_status === "review_requested";
+                    const daysAgo = member.review_requested_at
+                      ? Math.floor((Date.now() - new Date(member.review_requested_at).getTime()) / 86400000)
+                      : null;
+                    const matchingNotif = coachNotifs.find(
+                      (n) => n.member_id === member.id && n.type === "protocol_review_requested" && !n.is_read,
+                    ) ?? coachNotifs.find(
+                      (n) => n.member_id === member.id && n.type === "protocol_review_requested",
+                    );
+                    return (
+                      <div
+                        key={member.id}
+                        className="metric-row"
+                        style={{ cursor: isReview ? "pointer" : "default" }}
+                        onClick={() => {
+                          if (!isReview) return;
+                          setReviewMemberId(member.id);
+                          setReviewMemberName(member.name);
+                          setReviewNotifId(matchingNotif?.id ?? null);
+                          setReviewDiff(matchingNotif?.payload?.diff ?? []);
+                          setReviewRecommendation(matchingNotif?.payload?.recommendation ?? null);
+                          setReviewRecommendationReason(matchingNotif?.payload?.recommendation_reason ?? null);
+                          setReviewCoachNote("");
+                          setReviewProtocolChanged(false);
+                          setReviewConfirmMsg(null);
+                          setReviewDiffCollapsed(true);
+                          // Load protocols for the dropdown if not loaded
+                          if (coachProtocols.length === 0) {
+                            void getJson<{ protocols: CoachProtocol[] }>("/api/coach/protocols")
+                              .then((r) => { if (Array.isArray(r.protocols)) setCoachProtocols(r.protocols); })
+                              .catch(() => {/* silent */});
+                          }
+                        }}
+                      >
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)" }}>{member.name}</span>
+                            {isReview && (
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: "rgba(139,105,20,0.12)", color: "#8B6914", border: "1px solid rgba(139,105,20,0.25)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                                Review requested
+                              </span>
+                            )}
+                            {member.member_status === "awaiting_protocol" && (
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 8px", borderRadius: 12, background: "rgba(74,124,89,0.12)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.25)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                                Awaiting protocol
+                              </span>
+                            )}
+                          </div>
+                          {isReview && daysAgo !== null && (
+                            <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>
+                              {daysAgo === 0 ? "Today" : `${daysAgo} day${daysAgo === 1 ? "" : "s"} ago`}
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--text3)" }}>{member.tier}</div>
+                        {isReview && <div style={{ fontSize: 11, color: "#8B6914" }}>Review →</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
           <div className="card">
             {payload.coach.members.length ? (
-              payload.coach.members.map((member) => (
+              payload.coach.members
+                .filter((m) => m.member_status !== "review_requested" && m.member_status !== "awaiting_protocol")
+                .map((member) => (
                 <div className="metric-row" key={member.id}>
                   <div className="metric-label">{member.name}</div>
                   <div className="metric-label">{member.tier}</div>
@@ -3478,6 +3766,7 @@ export function DashboardReactClient({
               <div className="card-body"><p style={{ color: "var(--text3)" }}>No members available.</p></div>
             )}
           </div>
+          </>)}
         </div>
 
         <div id="coach-log" className="content" style={{ display: mode === "coach" && coachView === "log" ? "block" : "none" }}>
@@ -4222,10 +4511,12 @@ export function DashboardReactClient({
                       </span>
                     </div>
                     <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
-                      {notif.type === "protocol_change_request" ? "Protocol change request" : "General"}
+                      {notif.type === "protocol_review_requested" ? "Profile review request"
+                        : notif.type === "protocol_change_request" ? "Protocol change request"
+                        : "General"}
                     </div>
                     <p style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 10px 0" }}>{notif.message}</p>
-                    <div style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       {!notif.is_read && (
                         <button
                           type="button"
@@ -4240,6 +4531,35 @@ export function DashboardReactClient({
                           }}
                         >
                           Mark read
+                        </button>
+                      )}
+                      {notif.type === "protocol_review_requested" && (
+                        <button
+                          type="button"
+                          className="btn btn-lime btn-sm"
+                          style={{ fontSize: 10 }}
+                          onClick={() => {
+                            setReviewMemberId(notif.member_id);
+                            setReviewMemberName(notif.member_name);
+                            setReviewNotifId(notif.id);
+                            setReviewDiff(notif.payload?.diff ?? []);
+                            setReviewRecommendation(notif.payload?.recommendation ?? null);
+                            setReviewRecommendationReason(notif.payload?.recommendation_reason ?? null);
+                            setReviewCoachNote("");
+                            setReviewProtocolChanged(false);
+                            setReviewConfirmMsg(null);
+                            setReviewDiffCollapsed(true);
+                            setCoachView("members");
+                            setMode("coach");
+                            setNotifPanelOpen(false);
+                            if (coachProtocols.length === 0) {
+                              void getJson<{ protocols: CoachProtocol[] }>("/api/coach/protocols")
+                                .then((r) => { if (Array.isArray(r.protocols)) setCoachProtocols(r.protocols); })
+                                .catch(() => {/* silent */});
+                            }
+                          }}
+                        >
+                          Review profile →
                         </button>
                       )}
                       <button

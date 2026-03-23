@@ -13,7 +13,7 @@ export async function GET() {
 
     const res = await context.supabase
       .from("users")
-      .select("id,full_name,membership_tier")
+      .select("id,full_name,membership_tier,member_status,onboarding_updated_at")
       .eq("role", "member")
       .eq("is_active", true)
       .order("full_name");
@@ -26,6 +26,8 @@ export async function GET() {
         id: String(m.id ?? ""),
         name: String(m.full_name ?? "Member"),
         tier: String(m.membership_tier ?? ""),
+        member_status: String(m.member_status ?? "active"),
+        review_requested_at: (m.onboarding_updated_at as string) ?? null,
       })),
     });
   } catch (err) {
