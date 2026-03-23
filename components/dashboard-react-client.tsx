@@ -1280,6 +1280,12 @@ export function DashboardReactClient({
   const setMemberSection = (view: MemberSection) => {
     setMode("member");
     setMemberView(view);
+    // Reset session card navigation when leaving the dashboard so
+    // returning always shows today's session, not a previously browsed day
+    if (view !== "dashboard") {
+      setSessionCardDow(null);
+      setExpandedActivityId(null);
+    }
   };
 
   const latestCarol = carolStatRows[0];
@@ -1795,12 +1801,14 @@ export function DashboardReactClient({
                     })}
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <button type="button" onClick={() => { void handleMarkComplete(); }} disabled={isDone}
-                      style={{ flex: 1, padding: "11px", borderRadius: 10, background: isDone ? "#E1F5EE" : "#1D9E75", color: isDone ? "#0F6E56" : "white", border: isDone ? "0.5px solid #1D9E75" : "none", fontSize: 13, fontWeight: 500, cursor: isDone ? "default" : "pointer", transition: "all 0.15s" }}>
-                      {isDone ? "✓ Completed" : "Mark as complete"}
-                    </button>
+                    {isToday && (
+                      <button type="button" onClick={() => { void handleMarkComplete(); }} disabled={isDone}
+                        style={{ flex: 1, padding: "11px", borderRadius: 10, background: isDone ? "#E1F5EE" : "#1D9E75", color: isDone ? "#0F6E56" : "white", border: isDone ? "0.5px solid #1D9E75" : "none", fontSize: 13, fontWeight: 500, cursor: isDone ? "default" : "pointer", transition: "all 0.15s" }}>
+                        {isDone ? "✓ Completed" : "Mark as complete"}
+                      </button>
+                    )}
                     <button type="button" onClick={() => setMemberSection("protocol")}
-                      style={{ padding: "11px 14px", borderRadius: 10, background: "transparent", border: "0.5px solid #E5E5E0", color: "#5F5E5A", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                      style={{ padding: "11px 14px", borderRadius: 10, background: "transparent", border: "0.5px solid #E5E5E0", color: "#5F5E5A", fontSize: 13, fontWeight: 500, cursor: "pointer", ...(isToday ? {} : { flex: 1 }) }}>
                       Full plan
                     </button>
                   </div>
