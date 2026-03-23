@@ -111,6 +111,7 @@ type DashboardPayload = {
   };
   scanHistory: Array<{
     scanDate: string;
+    scanDateRaw: string;
     bodyFatPct: string;
     weightLbs: string;
     leanMassLbs: string;
@@ -686,6 +687,7 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
   };
   payload.scanHistory = scanRows.map((row) => ({
     scanDate: formatDateForLabel(row.scan_date),
+    scanDateRaw: typeof row.scan_date === "string" ? row.scan_date.slice(0, 10) : "",
     bodyFatPct: hasValue(row.body_fat_pct) ? numberOr(row.body_fat_pct, 0).toFixed(1) : "--",
     weightLbs: hasValue(row.weight_lbs) ? numberOr(row.weight_lbs, 0).toFixed(1) : "--",
     leanMassLbs: hasValue(row.lean_mass_lbs) ? numberOr(row.lean_mass_lbs, 0).toFixed(1) : "--",

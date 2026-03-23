@@ -121,6 +121,7 @@ type DashboardPayload = {
   };
   scanHistory: Array<{
     scanDate: string;
+    scanDateRaw: string;
     bodyFatPct: string;
     weightLbs: string;
     leanMassLbs: string;
@@ -329,6 +330,31 @@ function scanInsight(current: ScanItem | undefined, previous: ScanItem | undefin
     return `Your body fat is down and the overall direction is positive.${bsrNote} The priority now is protecting and growing lean muscle — focused, consistent ARX sessions combined with hitting your daily protein target are the key levers here. Small improvements in lean mass each scan period compound significantly over time.`;
   }
   return "Your body composition is stable. Let's discuss your next goals.";
+}
+
+// ── Trend sentiment system ────────────────────────────────────────────────────
+type TrendSentiment = "positive" | "negative" | "neutral";
+type TrendData = { direction: "up" | "down" | "none"; sentiment: TrendSentiment };
+
+function sentimentColor(sentiment: TrendSentiment): string {
+  if (sentiment === "positive") return "var(--teal, #4A7C59)";
+  if (sentiment === "negative") return "var(--red, #B84040)";
+  return "var(--text3)";
+}
+
+function trendLabel(trend: TrendData): string {
+  if (trend.sentiment === "neutral") return "Recent trend";
+  return trend.direction === "up" ? "Trending up" : trend.direction === "down" ? "Trending down" : "Stable";
+}
+
+function trendArrow(direction: "up" | "down" | "none"): string {
+  if (direction === "up") return "\u2191";
+  if (direction === "down") return "\u2193";
+  return "";
+}
+
+function makeTrend(direction: "up" | "down" | "none", sentiment: TrendSentiment = "neutral"): TrendData {
+  return { direction, sentiment };
 }
 
 function sparklinePath(values: (number | null)[], w: number, h: number): string {
@@ -2636,6 +2662,21 @@ export function DashboardReactClient({
             const fatLast = [...fatSparkVals].reverse().find((v) => v !== null) ?? null;
             const leanTrendGood = leanFirst !== null && leanLast !== null ? leanLast >= leanFirst : true;
             const fatTrendGood = fatFirst !== null && fatLast !== null ? fatLast <= fatFirst : true;
+            const leanTrend: TrendData = makeTrend(
+              leanFirst !== null && leanLast !== null ? (leanLast >= leanFirst ? "up" : "down") : "none"
+            );
+            const fatTrend: TrendData = makeTrend(
+              fatFirst !== null && fatLast !== null ? (fatLast <= fatFirst ? "down" : "up") : "none"
+            );
+            // Sparkline time range label: "last N months" derived from actual date span
+            const sparklineTimeLabel = (() => {
+              const firstRaw = scansAsc[0]?.scanDateRaw;
+              const lastRaw = scansAsc[scansAsc.length - 1]?.scanDateRaw;
+              if (!firstRaw || !lastRaw || firstRaw === lastRaw) return null;
+              const msPerMonth = 1000 * 60 * 60 * 24 * 30.44;
+              const months = Math.round((new Date(lastRaw).getTime() - new Date(firstRaw).getTime()) / msPerMonth);
+              return months >= 1 ? `last ${months} month${months !== 1 ? "s" : ""}` : null;
+            })();
             const scanMetrics: Array<{ label: string; value: string; raw: number | null; prevRaw: number | null; good: "up" | "down" | "neutral"; unit?: string }> = [
               { label: "Lean mass", value: payload.scan.leanMassLbs, raw: currentScan?.leanMassLbsRaw ?? null, prevRaw: prevScan?.leanMassLbsRaw ?? null, good: "up", unit: "lbs" },
               { label: "Body fat %", value: payload.scan.bodyFatPct, raw: currentScan?.bodyFatPctRaw ?? null, prevRaw: prevScan?.bodyFatPctRaw ?? null, good: "down", unit: "%" },
@@ -2655,8 +2696,11 @@ export function DashboardReactClient({
             const topConc = topExercise?.sessions[0]?.concentricMax ?? null;
             const topConcHistory = topExercise?.sessions.slice(0, 12).reverse().map((s) => s.concentricMax) ?? [];
             const topConcPrev = topExercise?.sessions.slice(1, 4).reduce((mx, s) => Math.max(mx, s.concentricMax ?? 0), 0) ?? 0;
-            const strengthTrend = topConc !== null && topConcPrev > 0
+            const strengthTrendRaw = topConc !== null && topConcPrev > 0
               ? topConc > topConcPrev ? "improving" : topConc < topConcPrev ? "declining" : "stable"
+              : null;
+            const strengthTrend: TrendData | null = strengthTrendRaw !== null
+              ? makeTrend(strengthTrendRaw === "improving" ? "up" : strengthTrendRaw === "declining" ? "down" : "none")
               : null;
             const latestArxDate = payload.arxSessions[0]?.sessionDate?.slice(0, 10);
             const latestArxSessions = latestArxDate
@@ -2669,6 +2713,20 @@ export function DashboardReactClient({
             }
             const latestConcByEx = arxGroups.map(({ exercise, sessions }) => ({ exercise, value: sessions[0]?.concentricMax ?? 0 }));
             const maxConcAll = latestConcByEx.reduce((m, e) => Math.max(m, e.value), 0);
+            // Top 3 exercises by latest concentric max for the summary card
+            const top3Exercises = [...latestConcByEx]
+              .filter((e) => e.value > 0)
+              .sort((a, b) => b.value - a.value)
+              .slice(0, 3)
+              .map((e) => {
+                const group = arxGroups.find((g) => g.exercise === e.exercise);
+                const sessions = group?.sessions ?? [];
+                const prevPeak = sessions.slice(1, 5).reduce((mx, s) => Math.max(mx, s.concentricMax ?? 0), 0);
+                const dir: "up" | "down" | "none" = prevPeak > 0
+                  ? e.value > prevPeak ? "up" : e.value < prevPeak ? "down" : "none"
+                  : "none";
+                return { exercise: e.exercise, value: e.value, trend: makeTrend(dir) };
+              });
 
             // ── 4. Cardio ─────────────────────────────────────────────────────────
             const rehitSessions = allCarol.filter((s) => normalizeCarolTabKey(s.rideType) === "rehit");
@@ -2701,6 +2759,50 @@ export function DashboardReactClient({
 
             const sectionLabelStyle: React.CSSProperties = { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 12, fontWeight: 600 };
             const detailBtnStyle: React.CSSProperties = { background: "none", border: "none", padding: "8px 0 0", fontSize: 11, color: "#4A7C59", cursor: "pointer", fontWeight: 500, textAlign: "left" };
+
+            // Last-updated dates for section headers
+            const formatLastUpdated = (isoDate: string | null | undefined): string => {
+              if (!isoDate) return "No data yet";
+              const d = new Date(isoDate + "T12:00:00");
+              return isNaN(d.getTime()) ? "No data yet" : `Last updated ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+            };
+            const scanLastUpdated = currentScan?.scanDateRaw ? formatLastUpdated(currentScan.scanDateRaw) : "No data yet";
+            const strengthLastUpdated = formatLastUpdated(payload.arxSessions[0]?.sessionDate?.slice(0, 10));
+            const cardioLastUpdated = formatLastUpdated(allCarol[0]?.sessionDate?.slice(0, 10));
+
+            // ── 5. Consistency ────────────────────────────────────────────────────
+            const consistencyData = (() => {
+              const targetPerWeek = payload.protocol.arxPerWeek + payload.protocol.carolPerWeek;
+              // Build 12 complete Mon–Sun week buckets ending with the current week
+              const now = new Date();
+              const dayOfWeek = now.getDay(); // 0=Sun..6=Sat
+              const daysToMonday = (dayOfWeek + 6) % 7;
+              const thisMonday = new Date(now);
+              thisMonday.setHours(0, 0, 0, 0);
+              thisMonday.setDate(now.getDate() - daysToMonday);
+              const weeks: { start: string; end: string; count: number; isCurrent: boolean }[] = [];
+              for (let i = 11; i >= 0; i--) {
+                const monday = new Date(thisMonday);
+                monday.setDate(thisMonday.getDate() - i * 7);
+                const sunday = new Date(monday);
+                sunday.setDate(monday.getDate() + 6);
+                const startStr = monday.toISOString().slice(0, 10);
+                const endStr = sunday.toISOString().slice(0, 10);
+                const count = [
+                  ...payload.arxSessions.filter((s) => s.sessionDate.slice(0, 10) >= startStr && s.sessionDate.slice(0, 10) <= endStr),
+                  ...allCarol.filter((s) => s.sessionDate.slice(0, 10) >= startStr && s.sessionDate.slice(0, 10) <= endStr),
+                ].length;
+                weeks.push({ start: startStr, end: endStr, count, isCurrent: i === 0 });
+              }
+              const totalSessions = weeks.reduce((s, w) => s + w.count, 0);
+              const avgPerWeek = +(totalSessions / 12).toFixed(1);
+              const maxCount = Math.max(...weeks.map((w) => w.count), targetPerWeek, 1);
+              // Latest session date across both arx and carol
+              const latestArxStr = payload.arxSessions[0]?.sessionDate?.slice(0, 10) ?? null;
+              const latestCarolStr = allCarol[0]?.sessionDate?.slice(0, 10) ?? null;
+              const latestSessionDate = [latestArxStr, latestCarolStr].filter(Boolean).sort().reverse()[0] ?? null;
+              return { weeks, targetPerWeek, avgPerWeek, maxCount, latestSessionDate };
+            })();
 
             return (
               <>
@@ -2751,8 +2853,9 @@ export function DashboardReactClient({
 
                 {/* ── 2. Body Composition ────────────────────────────────────────── */}
                 <div style={{ marginBottom: 28 }}>
-                  <div style={sectionLabelStyle}>
-                    Body Composition{currentScan?.scanDate ? ` \u00b7 Last scan ${currentScan.scanDate}` : ""}
+                  <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Body Composition</span>
+                    <span style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--text3)", fontWeight: 400, textTransform: "none" }}>{scanLastUpdated}</span>
                   </div>
 
                   {!currentScan ? (
@@ -2771,14 +2874,17 @@ export function DashboardReactClient({
                             <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{payload.scan.leanMassLbs !== "--" ? payload.scan.leanMassLbs : "\u2014"}</span>
                             {payload.scan.leanMassLbs !== "--" && <span style={{ fontSize: 10, color: "var(--text3)" }}>lbs</span>}
                           </div>
-                          {leanSparkVals.some((v) => v !== null) && sparklinePath(leanSparkVals, 100, 28) ? (
-                            <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 4 }}>
-                              <path d={sparklinePath(leanSparkVals, 100, 28)} fill="none" stroke={leanTrendGood ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                          {leanSparkVals.filter((v) => v !== null).length >= 2 && sparklinePath(leanSparkVals, 100, 28) ? (
+                            <>
+                              <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 2 }}>
+                                <path d={sparklinePath(leanSparkVals, 100, 28)} fill="none" stroke={sentimentColor(leanTrend.sentiment)} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              {sparklineTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4 }}>{sparklineTimeLabel}</div>}
+                            </>
                           ) : null}
                           {leanFirst !== null && leanLast !== null && (
-                            <div style={{ fontSize: 10, color: leanTrendGood ? "#4A7C59" : "#B84040" }}>
-                              {leanTrendGood ? "\u2191" : "\u2193"} {Math.abs(leanLast - leanFirst).toFixed(1)} lbs since first scan
+                            <div style={{ fontSize: 10, color: sentimentColor(leanTrend.sentiment) }}>
+                              {trendArrow(leanTrend.direction)} {Math.abs(leanLast - leanFirst).toFixed(1)} lbs since first scan
                             </div>
                           )}
                         </div>
@@ -2788,24 +2894,34 @@ export function DashboardReactClient({
                             <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{payload.scan.bodyFatPct !== "--" ? payload.scan.bodyFatPct : "\u2014"}</span>
                             {payload.scan.bodyFatPct !== "--" && <span style={{ fontSize: 10, color: "var(--text3)" }}>%</span>}
                           </div>
-                          {fatSparkVals.some((v) => v !== null) && sparklinePath(fatSparkVals, 100, 28) ? (
-                            <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 4 }}>
-                              <path d={sparklinePath(fatSparkVals, 100, 28)} fill="none" stroke={fatTrendGood ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                          {fatSparkVals.filter((v) => v !== null).length >= 2 && sparklinePath(fatSparkVals, 100, 28) ? (
+                            <>
+                              <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 2 }}>
+                                <path d={sparklinePath(fatSparkVals, 100, 28)} fill="none" stroke={sentimentColor(fatTrend.sentiment)} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              {sparklineTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4 }}>{sparklineTimeLabel}</div>}
+                            </>
                           ) : null}
                           {fatFirst !== null && fatLast !== null && (
-                            <div style={{ fontSize: 10, color: fatTrendGood ? "#4A7C59" : "#B84040" }}>
-                              {fatTrendGood ? "\u2193" : "\u2191"} {Math.abs(fatLast - fatFirst).toFixed(1)}% since first scan
+                            <div style={{ fontSize: 10, color: sentimentColor(fatTrend.sentiment) }}>
+                              {trendArrow(fatTrend.direction)} {Math.abs(fatLast - fatFirst).toFixed(1)}% since first scan
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Coach insight */}
+                      {/* Dustin's Analysis — before trend label */}
                       {(currentScan || prevScan) && (
-                        <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                        <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 8 }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
                           <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{scanInsight(currentScan, prevScan)}</p>
+                        </div>
+                      )}
+
+                      {/* Trend label — below analysis, sentiment-colored */}
+                      {(leanFirst !== null || fatFirst !== null) && (
+                        <div style={{ fontSize: 10, color: sentimentColor(leanTrend.sentiment), fontWeight: 500, marginBottom: 10 }}>
+                          {trendArrow(leanTrend.direction)} {trendLabel(leanTrend)}
                         </div>
                       )}
 
@@ -2881,20 +2997,23 @@ export function DashboardReactClient({
                           {scansAsc.length >= 2 && (
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                               {[
-                                { label: "Lean mass", vals: leanSparkVals, good: "up" as const, first: leanFirst, last: leanLast },
-                                { label: "Body fat %", vals: fatSparkVals, good: "down" as const, first: fatFirst, last: fatLast },
-                                { label: "Weight", vals: wtSparkVals, good: "neutral" as const, first: null, last: null },
+                                { label: "Lean mass", vals: leanSparkVals, trend: leanTrend },
+                                { label: "Body fat %", vals: fatSparkVals, trend: fatTrend },
+                                { label: "Weight", vals: wtSparkVals, trend: makeTrend("none") },
                               ].map((chart) => {
-                                const path = sparklinePath(chart.vals, 100, 36);
-                                const trendGood = chart.good === "neutral" ? true : chart.good === "down" ? (chart.last ?? 0) <= (chart.first ?? 0) : (chart.last ?? 0) >= (chart.first ?? 0);
-                                const lineColor = chart.good === "neutral" ? "var(--text3)" : trendGood ? "#4A7C59" : "#B84040";
+                                const validCount = chart.vals.filter((v) => v !== null).length;
+                                const path = validCount >= 2 ? sparklinePath(chart.vals, 100, 36) : "";
+                                const lineColor = sentimentColor(chart.trend.sentiment);
                                 return (
                                   <div key={chart.label} style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
                                     <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{chart.label}</div>
                                     {path ? (
-                                      <svg viewBox="0 0 100 36" style={{ width: "100%", height: 36, display: "block" }}>
-                                        <path d={path} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
+                                      <>
+                                        <svg viewBox="0 0 100 36" style={{ width: "100%", height: 36, display: "block", marginBottom: 2 }}>
+                                          <path d={path} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                        {sparklineTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)" }}>{sparklineTimeLabel}</div>}
+                                      </>
                                     ) : (
                                       <div style={{ height: 36, display: "flex", alignItems: "center" }}>
                                         <span style={{ fontSize: 10, color: "var(--text3)" }}>Not enough data</span>
@@ -2913,7 +3032,10 @@ export function DashboardReactClient({
 
                 {/* ── 3. Strength ────────────────────────────────────────────────── */}
                 <div style={{ marginBottom: 28 }}>
-                  <div style={sectionLabelStyle}>Strength</div>
+                  <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Strength</span>
+                    <span style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--text3)", fontWeight: 400, textTransform: "none" }}>{strengthLastUpdated}</span>
+                  </div>
 
                   {arxGroups.length === 0 ? (
                     <div className="card" style={{ padding: "20px 22px" }}>
@@ -2924,39 +3046,36 @@ export function DashboardReactClient({
                     </div>
                   ) : (
                     <div className="card" style={{ padding: "16px 18px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                        <div>
-                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>Top exercise \u00b7 {topExercise?.exercise}</div>
-                          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{topConc !== null ? Math.round(topConc) : "\u2014"}</span>
-                            {topConc !== null && <span style={{ fontSize: 10, color: "var(--text3)" }}>lbs concentric</span>}
+                      {/* Top 3 exercises by concentric output */}
+                      <div style={{ marginBottom: 14 }}>
+                        {top3Exercises.map((ex, idx) => (
+                          <div key={ex.exercise} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: idx < top3Exercises.length - 1 ? "1px solid var(--border)" : "none" }}>
+                            <div style={{ fontSize: 12, color: "var(--text2)", fontWeight: 500 }}>{ex.exercise}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{Math.round(ex.value)}</span>
+                              <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span>
+                              {ex.trend.direction !== "none" && (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: sentimentColor(ex.trend.sentiment) }}>
+                                  {trendArrow(ex.trend.direction)}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>This month</div>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{arxSessionsThisMonth}</div>
-                        </div>
+                        ))}
                       </div>
 
-                      {topConcHistory.length >= 2 && sparklinePath(topConcHistory, 100, 28) ? (
-                        <>
-                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Concentric trend</div>
-                          <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 6 }}>
-                            <path d={sparklinePath(topConcHistory, 100, 28)} fill="none" stroke={strengthTrend === "improving" ? "#4A7C59" : strengthTrend === "declining" ? "#B84040" : "var(--text3)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </>
-                      ) : null}
-
-                      {strengthTrend && (
-                        <div style={{ fontSize: 11, color: strengthTrend === "improving" ? "#4A7C59" : strengthTrend === "declining" ? "#B84040" : "var(--text3)", fontWeight: 500, marginBottom: 8 }}>
-                          {strengthTrend === "improving" ? "\u2191 Trending up" : strengthTrend === "declining" ? "\u2193 Trending down" : "Stable"}
-                        </div>
-                      )}
-
-                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                      {/* Dustin's Analysis — before trend label */}
+                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 8 }}>
                         <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
                         <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{buildArxInsight(arxGroups)}</p>
                       </div>
+
+                      {/* Trend label — below analysis, sentiment-colored */}
+                      {strengthTrend && (
+                        <div style={{ fontSize: 10, color: sentimentColor(strengthTrend.sentiment), fontWeight: 500, marginBottom: 10 }}>
+                          {trendArrow(strengthTrend.direction)} {trendLabel(strengthTrend)}
+                        </div>
+                      )}
 
                       <button type="button" style={detailBtnStyle} onClick={() => setProgressExpandStrength((v) => !v)}>
                         {progressExpandStrength ? "Hide details \u2191" : `View all ${arxGroups.length} exercise${arxGroups.length !== 1 ? "s" : ""} \u2193`}
@@ -2967,7 +3086,7 @@ export function DashboardReactClient({
                           {latestArxDate && latestArxByEx.size > 0 && (
                             <div style={{ marginBottom: 16 }}>
                               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>
-                                Last workout \u00b7 {new Date(latestArxDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                                Last workout · {new Date(latestArxDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                               </div>
                               {Array.from(latestArxByEx.entries()).map(([ex, vals]) => {
                                 const ratio = vals.conc && vals.ecc ? vals.ecc / vals.conc : null;
@@ -3025,7 +3144,7 @@ export function DashboardReactClient({
                                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
                                     <div>
                                       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{exercise}</div>
-                                      <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""} \u00b7 {isSelected ? "tap to close" : "tap for full history"}</div>
+                                      <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""} · {isSelected ? "tap to close" : "tap for full history"}</div>
                                     </div>
                                     {isPR && <span style={{ fontSize: 9, background: "rgba(74,124,89,0.12)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.28)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
                                   </div>
@@ -3063,7 +3182,10 @@ export function DashboardReactClient({
 
                 {/* ── 4. Cardio ──────────────────────────────────────────────────── */}
                 <div style={{ marginBottom: 16 }}>
-                  <div style={sectionLabelStyle}>Cardio</div>
+                  <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Cardio</span>
+                    <span style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--text3)", fontWeight: 400, textTransform: "none" }}>{cardioLastUpdated}</span>
+                  </div>
 
                   {allCarol.length === 0 ? (
                     <div className="card" style={{ padding: "20px 22px" }}>
@@ -3180,6 +3302,56 @@ export function DashboardReactClient({
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* ── 5. Consistency ─────────────────────────────────────────────── */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Consistency</span>
+                    {consistencyData.latestSessionDate && (
+                      <span style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--text3)", fontWeight: 400, textTransform: "none" }}>
+                        Last updated {new Date(consistencyData.latestSessionDate + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="card" style={{ padding: "16px 18px" }}>
+                    {(() => {
+                      const { weeks, targetPerWeek, avgPerWeek, maxCount } = consistencyData;
+                      const chartW = 280;
+                      const chartH = 72;
+                      const barGap = 3;
+                      const barW = (chartW - barGap * (weeks.length - 1)) / weeks.length;
+                      const refY = targetPerWeek > 0 ? chartH - (targetPerWeek / maxCount) * chartH : null;
+                      return (
+                        <>
+                          <div style={{ overflowX: "auto", marginBottom: 10 }}>
+                            <svg viewBox={`0 0 ${chartW} ${chartH}`} style={{ width: "100%", height: chartH, display: "block", overflow: "visible" }}>
+                              {weeks.map((week, i) => {
+                                const barH = week.count > 0 ? Math.max(3, (week.count / maxCount) * chartH) : 0;
+                                const x = i * (barW + barGap);
+                                const y = chartH - barH;
+                                const fill = week.isCurrent ? "var(--teal, #4A7C59)" : "var(--text3)";
+                                const opacity = week.isCurrent ? 1 : 0.38;
+                                return (
+                                  <rect key={week.start} x={x.toFixed(1)} y={y.toFixed(1)} width={barW.toFixed(1)} height={barH.toFixed(1)} fill={fill} fillOpacity={opacity} rx="2" />
+                                );
+                              })}
+                              {refY !== null && targetPerWeek > 0 && (
+                                <>
+                                  <line x1="0" y1={refY.toFixed(1)} x2={chartW} y2={refY.toFixed(1)} stroke="var(--text3)" strokeWidth="1" strokeDasharray="4 3" />
+                                  <text x={chartW - 2} y={(refY - 3).toFixed(1)} textAnchor="end" fontSize="8" fill="var(--text3)">Your target</text>
+                                </>
+                              )}
+                            </svg>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text3)" }}>
+                            Averaging <b style={{ color: "var(--text)" }}>{avgPerWeek}</b> sessions / week over 12 weeks
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               </>
             );
