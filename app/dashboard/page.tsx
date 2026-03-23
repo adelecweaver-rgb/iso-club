@@ -194,6 +194,9 @@ type DashboardPayload = {
   reports: Array<{ title: string }>;
   goals: {
     activeGoals: string[];
+    hasScan: boolean;
+    suggestionStatus: "none" | "pending" | "approved";
+    goalTargets: Record<string, number | null>;
     progress: {
       gain_muscle: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
       lose_fat: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
@@ -384,6 +387,9 @@ function makeDefaultPayload(clerkName: string): DashboardPayload {
     reports: [],
     goals: {
       activeGoals: [],
+      hasScan: false,
+      suggestionStatus: "none",
+      goalTargets: {},
       progress: {
         gain_muscle: { status: "no_data", display: "Complete a body scan to track progress.", direction: "no_data" },
         lose_fat: { status: "no_data", display: "Complete a body scan to track progress.", direction: "no_data" },
@@ -796,12 +802,41 @@ export async function loadDashboardLiveData(userId: string, authRole: AppRole): 
 
   // ─── Goal progress ───────────────────────────────────────────────────────────
   // member_goals query (after main Promise.all to avoid blocking)
-  const goalsRes = await supabase.from("member_goals").select("goal_type,is_active").eq("member_id", memberId);
-  const activeGoals = (Array.isArray(goalsRes.data) ? (goalsRes.data as Array<Record<string, unknown>>) : [])
+  const goalsRes = await supabase.from("member_goals").select("goal_type,is_active,target_value").eq("member_id", memberId);
+  const goalRows = (Array.isArray(goalsRes.data) ? (goalsRes.data as Array<Record<string, unknown>>) : []);
+  const activeGoals = goalRows
     .filter((g) => g.is_active !== false)
     .map((g) => stringOr(g.goal_type, ""))
     .filter(Boolean);
   payload.goals.activeGoals = activeGoals;
+  payload.goals.hasScan = scanRows.length > 0;
+
+  // Load goal suggestion status
+  const [suggestionRes, targetValuesMap] = await (async () => {
+    try {
+      const sr = await supabase
+        .from("goal_suggestions")
+        .select("status")
+        .eq("member_id", memberId)
+        .in("status", ["pending", "approved", "modified"])
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const status = sr.data && sr.data.length > 0
+        ? (String((sr.data[0] as Record<string, unknown>).status ?? "none") as "pending" | "approved" | "modified" | "none")
+        : "none";
+      const mappedStatus: "none" | "pending" | "approved" = status === "approved" || status === "modified" ? "approved" : status === "pending" ? "pending" : "none";
+      const targets: Record<string, number | null> = {};
+      for (const g of goalRows) {
+        const gt = stringOr(g.goal_type, "");
+        if (gt) targets[gt] = hasValue(g.target_value) ? numberOr(g.target_value, 0) : null;
+      }
+      return [mappedStatus, targets] as const;
+    } catch {
+      return ["none" as const, {} as Record<string, number | null>] as const;
+    }
+  })();
+  payload.goals.suggestionStatus = suggestionRes;
+  payload.goals.goalTargets = targetValuesMap;
 
   // gain_muscle: compare last two scan lean_mass_lbs
   const lean0 = scanRows.length >= 1 && hasValue(scanRows[0].lean_mass_lbs) ? numberOr(scanRows[0].lean_mass_lbs, 0) : null;

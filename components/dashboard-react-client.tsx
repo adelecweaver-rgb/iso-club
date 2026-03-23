@@ -195,6 +195,9 @@ type DashboardPayload = {
   reports: Array<{ title: string }>;
   goals: {
     activeGoals: string[];
+    hasScan: boolean;
+    suggestionStatus: "none" | "pending" | "approved";
+    goalTargets: Record<string, number | null>;
     progress: {
       gain_muscle: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
       lose_fat: { status: string; display: string; direction: "positive" | "neutral" | "negative" | "no_data"; current?: number; target?: number };
@@ -956,6 +959,22 @@ export function DashboardReactClient({
   const [memberNotes, setMemberNotes] = useState<Array<{ id: string; note: string; created_at: string }>>([]);
   const [notesForMember, setNotesForMember] = useState("");
   const [todayCheckin, setTodayCheckin] = useState<"low" | "normal" | "strong" | "hurt" | null>(null);
+
+  // Goal achievement celebration state
+  type GoalAchievement = {
+    id: string;
+    goal_id: string;
+    achieved_at: string;
+    final_value: number | null;
+    target_value: number | null;
+    months_to_achieve: number | null;
+    celebration_shown: boolean;
+    member_goals: { goal_type: string } | null;
+  };
+  const [pendingAchievements, setPendingAchievements] = useState<GoalAchievement[]>([]);
+  const [achievementsLoaded, setAchievementsLoaded] = useState(false);
+  const [celebrationNewTarget, setCelebrationNewTarget] = useState<Record<string, string>>({});
+  const [settingNewTarget, setSettingNewTarget] = useState<string | null>(null);
   const [sessionGuideOpen, setSessionGuideOpen] = useState(false);
   const [guardrailItem, setGuardrailItem] = useState<ChecklistItem | null>(null);
   const [sendingGuardrail, setSendingGuardrail] = useState(false);
@@ -1030,6 +1049,31 @@ export function DashboardReactClient({
   const [notifUnreadCount, setNotifUnreadCount] = useState(0);
   const [notifLoaded, setNotifLoaded] = useState(false);
 
+  // Goal suggestion review state
+  type GoalSuggestionItem = {
+    id: string;
+    member_id: string;
+    member_name: string;
+    suggestions: Array<{
+      type: string;
+      current_value: number;
+      target_value: number;
+      unit: string;
+      label: string;
+      reasoning: string;
+    }>;
+    protocol_suggestion: string;
+    protocol_reasoning: string;
+    created_at: string;
+    status: string;
+  };
+  const [pendingSuggestions, setPendingSuggestions] = useState<GoalSuggestionItem[]>([]);
+  const [suggestionsLoaded, setSuggestionsLoaded] = useState(false);
+  const [editingTargets, setEditingTargets] = useState<Record<string, number>>({});
+  const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
+  const [approvingSuggestionId, setApprovingSuggestionId] = useState<string | null>(null);
+  const [suggestionMsg, setSuggestionMsg] = useState<Record<string, string>>({});
+
   // Review screen state
   const [reviewMemberId, setReviewMemberId] = useState<string | null>(null);
   const [reviewNotifId, setReviewNotifId] = useState<string | null>(null);
@@ -1092,6 +1136,20 @@ export function DashboardReactClient({
     })();
   }, [isCoachAccount, checkinLoaded]);
 
+  // Load uncelebrated goal achievements on mount for members
+  useEffect(() => {
+    if (isCoachAccount || achievementsLoaded) return;
+    setAchievementsLoaded(true);
+    void (async () => {
+      try {
+        const res = await getJson<{ achievements: GoalAchievement[] }>("/api/goals/achievements");
+        if (Array.isArray(res.achievements) && res.achievements.length > 0) {
+          setPendingAchievements(res.achievements);
+        }
+      } catch { /* table may not exist yet */ }
+    })();
+  }, [isCoachAccount, achievementsLoaded]);
+
   // Load the week plan — triggered on mount AND whenever the member taps "Feeling strong"
   // (so it retries if the first fetch returned empty due to a timing issue)
   useEffect(() => {
@@ -1141,6 +1199,20 @@ export function DashboardReactClient({
       } catch { /* table may not exist yet */ }
     })();
   }, [isCoachAccount, notifLoaded, coachNotifs]);
+
+  // Load pending goal suggestions when coach views morning or members panel
+  useEffect(() => {
+    if (!isCoachAccount || mode !== "coach") return;
+    if (coachView !== "morning" && coachView !== "members") return;
+    if (suggestionsLoaded) return;
+    setSuggestionsLoaded(true);
+    void (async () => {
+      try {
+        const res = await getJson<{ suggestions: GoalSuggestionItem[] }>("/api/goals/pending");
+        if (Array.isArray(res.suggestions)) setPendingSuggestions(res.suggestions);
+      } catch { /* table may not exist yet */ }
+    })();
+  }, [isCoachAccount, mode, coachView, suggestionsLoaded]);
 
   useEffect(() => {
     if (!isCoachAccount || !assignMemberId || assignMemberId === notesForMember) return;
@@ -1516,6 +1588,112 @@ export function DashboardReactClient({
         </div>
 
         <div id="view-dashboard" className="content" style={{ display: mode === "member" && memberView === "dashboard" ? "block" : "none" }}>
+
+          {/* ── Goal achievement celebration cards ───────────────────── */}
+          {pendingAchievements.map((ach) => {
+            const goalType = ach.member_goals?.goal_type ?? "";
+            const def = GOAL_DEFS[goalType];
+            const goalLabel = goalType === "lose_fat" ? "Body fat target reached"
+              : goalType === "gain_muscle" ? "Lean mass goal achieved"
+              : goalType === "improve_cardio" ? "Cardio goal achieved"
+              : "Goal achieved";
+            const targetDisplay = ach.target_value !== null && goalType !== "attendance"
+              ? `${ach.target_value}${goalType === "lose_fat" ? "%" : " lbs"}`
+              : null;
+            const currentDisplay = ach.final_value !== null && goalType !== "attendance"
+              ? `${ach.final_value}${goalType === "lose_fat" ? "%" : " lbs"}`
+              : null;
+            const sessionCount = (ach as Record<string, unknown>).sessions_to_achieve as number | undefined;
+            return (
+              <div key={ach.id} style={{ background: "linear-gradient(135deg, rgba(74,124,89,0.12), rgba(74,124,89,0.04))", border: "1px solid rgba(74,124,89,0.3)", borderRadius: "var(--r)", padding: "20px 20px", margin: "12px 0" }}>
+                <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#4A7C59", fontWeight: 700, marginBottom: 8 }}>Goal achieved</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>{goalLabel}</div>
+                {targetDisplay && currentDisplay && (
+                  <p style={{ fontSize: 13.5, color: "var(--text2)", lineHeight: 1.6, margin: "0 0 10px 0" }}>
+                    You set a goal of {targetDisplay} {def ? def.name.toLowerCase() : ""}. Your latest scan shows {currentDisplay}.
+                  </p>
+                )}
+                {(ach.months_to_achieve !== null || sessionCount) && (
+                  <p style={{ fontSize: 12.5, fontWeight: 600, color: "#4A7C59", margin: "0 0 14px 0" }}>
+                    {ach.months_to_achieve !== null ? `${ach.months_to_achieve} month${ach.months_to_achieve !== 1 ? "s" : ""}` : ""}
+                    {ach.months_to_achieve !== null && sessionCount ? " · " : ""}
+                    {sessionCount ? `${sessionCount} session${sessionCount !== 1 ? "s" : ""}` : ""}
+                    {(ach.months_to_achieve !== null || sessionCount) ? ". Real results." : ""}
+                  </p>
+                )}
+                {/* Set new target inline */}
+                {settingNewTarget === ach.id && (
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+                    <input
+                      type="number"
+                      step="0.1"
+                      placeholder={`New target (${goalType === "lose_fat" ? "%" : "lbs"})`}
+                      style={{ width: 140, fontSize: 12, padding: "5px 8px", borderRadius: "var(--r-sm)", border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}
+                      value={celebrationNewTarget[ach.id] ?? ""}
+                      onChange={(e) => setCelebrationNewTarget((prev) => ({ ...prev, [ach.id]: e.target.value }))}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-lime btn-sm"
+                      style={{ fontSize: 11 }}
+                      onClick={async () => {
+                        const newTarget = parseFloat(celebrationNewTarget[ach.id] ?? "");
+                        if (isNaN(newTarget)) return;
+                        try {
+                          await fetch("/api/goals/achievements", {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ achievement_id: ach.id, goal_id: ach.goal_id, new_target: newTarget }),
+                          });
+                          setPendingAchievements((prev) => prev.filter((a) => a.id !== ach.id));
+                          setSettingNewTarget(null);
+                        } catch { /* silent */ }
+                      }}
+                    >Save target</button>
+                    <button type="button" className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setSettingNewTarget(null)}>Cancel</button>
+                  </div>
+                )}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ fontSize: 11 }}
+                    onClick={() => {
+                      const text = [
+                        goalLabel,
+                        targetDisplay && currentDisplay ? `Goal: ${targetDisplay} → Achieved: ${currentDisplay}` : "",
+                        ach.months_to_achieve ? `${ach.months_to_achieve} months of consistent work.` : "",
+                        "Trained at Iso Club, Tulsa. #IsoClub #Longevity",
+                      ].filter(Boolean).join("\n");
+                      void navigator.clipboard?.writeText(text).catch(() => { /* no clipboard API */ });
+                      alert("Progress summary copied to clipboard!");
+                    }}
+                  >Share your progress</button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ fontSize: 11 }}
+                    onClick={() => setSettingNewTarget(ach.id)}
+                  >Set new target</button>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ fontSize: 10, color: "var(--text3)" }}
+                    onClick={async () => {
+                      try {
+                        await fetch("/api/goals/achievements", {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ achievement_id: ach.id }),
+                        });
+                      } catch { /* silent */ }
+                      setPendingAchievements((prev) => prev.filter((a) => a.id !== ach.id));
+                    }}
+                  >Dismiss</button>
+                </div>
+              </div>
+            );
+          })}
 
           {/* ── Greeting ─────────────────────────────────────────────── */}
           {(() => {
@@ -2016,101 +2194,120 @@ export function DashboardReactClient({
 
         <div id="view-goals" className="content" style={{ display: "none" }}>
           <div className="sec-header"><div className="sec-title">My Goals</div></div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginBottom: 20 }}>
-            {(["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).map((goalType) => {
-              const def = GOAL_DEFS[goalType];
-              const prog = payload.goals.progress[goalType];
-              const isActive = localGoals[goalType] ?? false;
-              const isSaving = savingGoal === goalType;
-              const color = goalStatusColor(prog.direction);
-              const progTarget = (prog as { target?: number }).target ?? 0;
-              const progCurrent = (prog as { current?: number }).current ?? 0;
-              const barPct = goalType === "attendance" && progTarget > 0
-                ? Math.min(100, (progCurrent / progTarget) * 100)
-                : prog.direction === "positive" ? 80 : prog.direction === "neutral" ? 50 : prog.direction === "negative" ? 20 : 0;
+          {(() => {
+            const { suggestionStatus, hasScan, activeGoals, goalTargets } = payload.goals;
+            const hasApprovedGoals = activeGoals.length > 0 && suggestionStatus === "approved";
+            const hasPendingReview = suggestionStatus === "pending";
+
+            // ── State 1: Goals approved → show progress cards with targets ──
+            if (hasApprovedGoals) {
               return (
-                <div key={goalType} className="card" style={{ padding: "16px 18px", opacity: isActive ? 1 : 0.55 }}>
-                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{def.name}</div>
-                      <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{def.category}</div>
-                    </div>
-                    {/* Toggle */}
-                    <button
-                      type="button"
-                      onClick={() => { void handleGoalToggle(goalType); }}
-                      disabled={isSaving}
-                      style={{ width: 44, height: 24, borderRadius: 12, background: isActive ? "#4A7C59" : "var(--bg3)", border: `2px solid ${isActive ? "#4A7C59" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0, opacity: isSaving ? 0.5 : 1 }}
-                    >
-                      <div style={{ width: 16, height: 16, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: isActive ? 22 : 2, transition: "left 0.2s" }} />
-                    </button>
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14, marginBottom: 20 }}>
+                    {(["gain_muscle", "lose_fat", "improve_cardio", "attendance"] as const).map((goalType) => {
+                      const def = GOAL_DEFS[goalType];
+                      const prog = payload.goals.progress[goalType];
+                      const isActive = localGoals[goalType] ?? false;
+                      const isSaving = savingGoal === goalType;
+                      const color = goalStatusColor(prog.direction);
+                      const progTarget = (prog as { target?: number }).target ?? goalTargets[goalType] ?? 0;
+                      const progCurrent = (prog as { current?: number }).current ?? 0;
+                      const targetVal = goalTargets[goalType];
+                      const barPct = goalType === "attendance" && progTarget > 0
+                        ? Math.min(100, (progCurrent / progTarget) * 100)
+                        : prog.direction === "positive" ? 80 : prog.direction === "neutral" ? 50 : prog.direction === "negative" ? 20 : 0;
+                      return (
+                        <div key={goalType} className="card" style={{ padding: "16px 18px", opacity: isActive ? 1 : 0.55 }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 12 }}>
+                            <div>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", marginBottom: 3 }}>{def.name}</div>
+                              <div style={{ fontSize: 10, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{def.category}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => { void handleGoalToggle(goalType); }}
+                              disabled={isSaving}
+                              style={{ width: 44, height: 24, borderRadius: 12, background: isActive ? "#4A7C59" : "var(--bg3)", border: `2px solid ${isActive ? "#4A7C59" : "var(--border)"}`, cursor: "pointer", padding: 0, position: "relative", transition: "all 0.2s", flexShrink: 0, opacity: isSaving ? 0.5 : 1 }}
+                            >
+                              <div style={{ width: 16, height: 16, borderRadius: "50%", background: "white", position: "absolute", top: 2, left: isActive ? 22 : 2, transition: "left 0.2s" }} />
+                            </button>
+                          </div>
+                          <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.55, marginBottom: 14 }}>{def.description}</p>
+                          {isActive && (
+                            <>
+                              {targetVal !== undefined && targetVal !== null && goalType !== "attendance" && (
+                                <div style={{ fontSize: 11, color: "var(--text3)", marginBottom: 6 }}>
+                                  Target: <strong style={{ color: "var(--text2)" }}>{targetVal}{goalType === "lose_fat" ? "%" : " lbs"}</strong>
+                                </div>
+                              )}
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                                <span style={{ fontSize: 12, fontWeight: 600, color }}>{goalStatusLabel(prog.status)}</span>
+                              </div>
+                              <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 10 }}>{prog.display}</div>
+                              <div style={{ height: 4, background: "var(--bg2)", borderRadius: 2, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${barPct}%`, background: color, borderRadius: 2, transition: "width 0.4s ease" }} />
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                  <p style={{ fontSize: 12, color: "var(--text3)", lineHeight: 1.55, marginBottom: 14 }}>{def.description}</p>
-                  {isActive && (
-                    <>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                        <span style={{ fontSize: 12, fontWeight: 600, color }}>{goalStatusLabel(prog.status)}</span>
-                      </div>
-                      <div style={{ fontSize: 12, color: "var(--text2)", marginBottom: 10 }}>{prog.display}</div>
-                      <div style={{ height: 4, background: "var(--bg2)", borderRadius: 2, overflow: "hidden" }}>
-                        <div style={{ height: "100%", width: `${barPct}%`, background: color, borderRadius: 2, transition: "width 0.4s ease" }} />
-                      </div>
-                    </>
-                  )}
+                </>
+              );
+            }
+
+            // ── State 2: Goals pending Dustin review ────────────────────────
+            if (hasPendingReview) {
+              return (
+                <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "28px 28px", maxWidth: 520, textAlign: "center" }}>
+                  <div style={{ fontSize: 32, marginBottom: 16 }}>🔍</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Your goals are being reviewed</div>
+                  <p style={{ fontSize: 13.5, color: "var(--text3)", lineHeight: 1.7, margin: 0 }}>
+                    Dustin is reviewing your scan results and will set your targets shortly.
+                  </p>
                 </div>
               );
-            })}
-          </div>
-          {/* Protocol recommendation */}
-          {(() => {
-            const active = Object.entries(localGoals).filter(([, v]) => v).map(([k]) => k);
-            const rec = recommendProtocol(active);
-            if (!rec || active.length === 0) return null;
-            const reason = PROTOCOL_REASONS[rec] ?? "Matched to your current goal combination.";
-            async function handleAskCoach() {
-              if (isRequestingProtocol || protocolRequested) return;
-              setIsRequestingProtocol(true);
-              try {
-                let resolvedPeerId = peerId;
-                if (!resolvedPeerId) {
-                  const inbox = await getJson<{ peer?: { id?: string }; coach?: { id?: string } }>("/api/messages/inbox");
-                  resolvedPeerId = String(inbox.peer?.id || inbox.coach?.id || "");
-                }
-                if (!resolvedPeerId) throw new Error("no peer");
-                const goalNames = active.map((g) => GOAL_DEFS[g]?.name ?? g).join(", ");
-                await postJson("/api/messages/send", {
-                  recipient_id: resolvedPeerId,
-                  body: `Hi Dustin — the dashboard is recommending the ${rec} protocol based on my current goals (${goalNames}). Could you assign this when you have a chance? Thanks!`,
-                });
-                setProtocolRequested(true);
-              } catch { /* silent */ } finally { setIsRequestingProtocol(false); }
             }
-            return (
-              <div style={{ background: "rgba(74,124,89,0.06)", border: "1px solid rgba(74,124,89,0.22)", borderRadius: "var(--r)", padding: "18px 20px" }}>
-                <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.14em", color: "rgba(157,204,58,0.7)", marginBottom: 8 }}>Protocol Recommendation</div>
-                <div style={{ fontSize: 17, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
-                  Based on your goals, we recommend: <span style={{ color: "#4A7C59" }}>{rec}</span>
-                </div>
-                <p style={{ fontSize: 12.5, color: "var(--text3)", lineHeight: 1.6, margin: "0 0 14px 0" }}>{reason}</p>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  {protocolRequested ? (
-                    <span style={{ fontSize: 12, color: "#4A7C59", fontWeight: 500 }}>✓ Request sent to Dustin</span>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn btn-lime btn-sm"
-                      disabled={isRequestingProtocol}
-                      onClick={() => { void handleAskCoach(); }}
-                      style={{ fontSize: 12 }}
-                    >
-                      {isRequestingProtocol ? "Sending…" : "Ask coach to assign this protocol"}
-                    </button>
-                  )}
-                  <button type="button" className="btn btn-sm" style={{ fontSize: 11 }} onClick={() => setMemberSection("protocol")}>
-                    View current protocol →
+
+            // ── State 3: No scan yet ────────────────────────────────────────
+            if (!hasScan) {
+              return (
+                <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "28px 28px", maxWidth: 520, textAlign: "center" }}>
+                  <div style={{ fontSize: 32, marginBottom: 16 }}>📊</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Book your first Fit3D scan</div>
+                  <p style={{ fontSize: 13.5, color: "var(--text3)", lineHeight: 1.7, margin: "0 0 20px 0" }}>
+                    Your personalized goals are generated from your body scan results.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-lime btn-sm"
+                    onClick={() => setMemberSection("messages")}
+                    style={{ fontSize: 12 }}
+                  >
+                    Book a scan →
                   </button>
                 </div>
+              );
+            }
+
+            // ── State 4: No goals, scan exists but no suggestion yet ────────
+            return (
+              <div style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "28px 28px", maxWidth: 520, textAlign: "center" }}>
+                <div style={{ fontSize: 32, marginBottom: 16 }}>🎯</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Let&apos;s set your goals</div>
+                <p style={{ fontSize: 13.5, color: "var(--text3)", lineHeight: 1.7, margin: "0 0 20px 0" }}>
+                  Your coach will review your scan and set personalised targets. Message Dustin to get started.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-lime btn-sm"
+                  onClick={() => setMemberSection("messages")}
+                  style={{ fontSize: 12 }}
+                >
+                  Start setup →
+                </button>
               </div>
             );
           })()}
@@ -3681,6 +3878,132 @@ export function DashboardReactClient({
               ))}
             </div>
           )}
+          {/* Goal Suggestions review queue */}
+          {pendingSuggestions.length > 0 && (
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "#4A7C59", fontWeight: 700, marginBottom: 12 }}>
+                AI Goal Suggestions — {pendingSuggestions.length} pending review
+              </div>
+              {pendingSuggestions.map((sugg) => {
+                const isEditing = editingSuggestionId === sugg.id;
+                const isApproving = approvingSuggestionId === sugg.id;
+                const msg = suggestionMsg[sugg.id] ?? "";
+                const scanDate = sugg.created_at
+                  ? new Date(sugg.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+                  : "";
+                return (
+                  <div key={sugg.id} style={{ background: "var(--bg2)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "18px 20px", marginBottom: 12 }}>
+                    {/* Header */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 14 }}>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text)" }}>{sugg.member_name}</div>
+                        <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>Based on Fit3D scan — {scanDate}</div>
+                      </div>
+                      <span style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", padding: "3px 8px", borderRadius: 3, background: "rgba(74,124,89,0.10)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.22)", fontWeight: 600 }}>AI generated</span>
+                    </div>
+
+                    {/* Goal rows */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+                      {sugg.suggestions.map((g) => (
+                        <div key={g.type} style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+                          <div style={{ minWidth: 100 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)" }}>{g.label}</div>
+                            <div style={{ fontSize: 11, color: "var(--text3)" }}>
+                              {g.current_value}{g.unit} →{" "}
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  style={{ width: 60, fontSize: 11, padding: "1px 4px", borderRadius: 3, border: "1px solid var(--border)", background: "var(--bg)", color: "var(--text)" }}
+                                  value={editingTargets[g.type] ?? g.target_value}
+                                  onChange={(e) => setEditingTargets((prev) => ({ ...prev, [g.type]: Number(e.target.value) }))}
+                                />
+                              ) : (
+                                <strong style={{ color: "#4A7C59" }}>{editingTargets[g.type] ?? g.target_value}{g.unit}</strong>
+                              )}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text3)", lineHeight: 1.5, fontStyle: "italic" }}>&ldquo;{g.reasoning}&rdquo;</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Protocol suggestion */}
+                    {sugg.protocol_suggestion && (
+                      <div style={{ background: "rgba(74,124,89,0.05)", border: "1px solid rgba(74,124,89,0.15)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 14 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>
+                          Suggested protocol: <span style={{ color: "#4A7C59" }}>{sugg.protocol_suggestion}</span>
+                        </div>
+                        {sugg.protocol_reasoning && (
+                          <div style={{ fontSize: 11, color: "var(--text3)", fontStyle: "italic" }}>&ldquo;{sugg.protocol_reasoning}&rdquo;</div>
+                        )}
+                      </div>
+                    )}
+
+                    {msg && (
+                      <div style={{ fontSize: 12, color: msg.startsWith("✓") ? "#4A7C59" : "#B84040", marginBottom: 10 }}>{msg}</div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <button
+                        type="button"
+                        className="btn btn-lime btn-sm"
+                        disabled={isApproving}
+                        onClick={async () => {
+                          setApprovingSuggestionId(sugg.id);
+                          setSuggestionMsg((prev) => ({ ...prev, [sugg.id]: "" }));
+                          try {
+                            const editedGoals = Object.entries(editingTargets)
+                              .filter(([k]) => sugg.suggestions.some((s) => s.type === k))
+                              .map(([type, target_value]) => ({ type, target_value }));
+                            const res = await fetch("/api/goals/approve", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                suggestion_id: sugg.id,
+                                member_id: sugg.member_id,
+                                edited_goals: editedGoals.length > 0 ? editedGoals : undefined,
+                              }),
+                            }).then(async (r) => r.json() as Promise<{ success: boolean; error?: string }>);
+                            if (!res.success) throw new Error(res.error ?? "Failed");
+                            setSuggestionMsg((prev) => ({ ...prev, [sugg.id]: "✓ Approved — goals set and member notified." }));
+                            setPendingSuggestions((prev) => prev.filter((s) => s.id !== sugg.id));
+                            setEditingTargets({});
+                            setEditingSuggestionId(null);
+                          } catch (err) {
+                            setSuggestionMsg((prev) => ({ ...prev, [sugg.id]: err instanceof Error ? err.message : "Failed to approve." }));
+                          } finally {
+                            setApprovingSuggestionId(null);
+                          }
+                        }}
+                      >
+                        {isApproving ? "Approving…" : "Approve all"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ fontSize: 11 }}
+                        onClick={() => {
+                          if (isEditing) {
+                            setEditingSuggestionId(null);
+                          } else {
+                            const init: Record<string, number> = {};
+                            for (const g of sugg.suggestions) init[g.type] = g.target_value;
+                            setEditingTargets(init);
+                            setEditingSuggestionId(sugg.id);
+                          }
+                        }}
+                      >
+                        {isEditing ? "Done editing" : "Edit targets"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div style={{ marginBottom: 20 }}>
             <div className="sec-header"><div className="sec-title">Flags to review</div></div>
             {(payload.coach.alerts.length ? payload.coach.alerts : ["No current alerts."]).map((alert, index) => (
