@@ -1037,9 +1037,12 @@ export function DashboardReactClient({
     })();
   }, [isCoachAccount, checkinLoaded]);
 
-  // Eagerly load the week plan for the dashboard session tracker
+  // Load the week plan — triggered on mount AND whenever the member taps "Feeling strong"
+  // (so it retries if the first fetch returned empty due to a timing issue)
   useEffect(() => {
-    if (isCoachAccount || weekPlanLoaded || weekPlan.length > 0) return;
+    if (isCoachAccount || weekPlan.length > 0) return;
+    // Only fetch once unless todayCheckin just became "strong"
+    if (weekPlanLoaded && todayCheckin !== "strong") return;
     setWeekPlanLoaded(true);
     void (async () => {
       try {
@@ -1050,7 +1053,7 @@ export function DashboardReactClient({
         }
       } catch { /* protocol days may not be seeded */ }
     })();
-  }, [isCoachAccount, weekPlanLoaded, weekPlan.length]);
+  }, [isCoachAccount, weekPlan.length, weekPlanLoaded, todayCheckin]);
 
   const handleGoalToggle = useCallback(async (goalType: string, forMemberId?: string) => {
     if (forMemberId) {
@@ -1559,6 +1562,86 @@ export function DashboardReactClient({
                 </div>
               </div>
             );
+          })()}
+
+          {/* CARD 2a — SESSION CARD (strong) */}
+          {todayCheckin === "strong" && (() => {
+            // Show a loading state while the week plan fetch is in flight
+            if (!weekPlanLoaded && weekPlan.length === 0) {
+              return (
+                <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", padding: "20px 16px", textAlign: "center" }}>
+                  <div style={{ fontSize: 13, color: "#888780" }}>Loading your session plan…</div>
+                </div>
+              );
+            }
+
+            // Fallback: week plan not seeded — use today's plan from server payload
+            if (weekPlan.length === 0) {
+              const tp = payload.todaysPlan;
+              if (!tp || !tp.hasProtocol) {
+                return (
+                  <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", padding: "20px 16px" }}>
+                    <div style={{ fontSize: 15, fontWeight: 500, color: "#1a1a1a", marginBottom: 6 }}>Your plan is being set up</div>
+                    <div style={{ fontSize: 13, color: "#888780", lineHeight: 1.55, marginBottom: 14 }}>
+                      Dustin will assign your protocol after your first session.
+                    </div>
+                    <a href="https://theiso.club/book" target="_blank" rel="noreferrer"
+                      style={{ display: "inline-flex", alignItems: "center", padding: "10px 16px", borderRadius: 10, background: "#1D9E75", color: "white", fontSize: 13, fontWeight: 500, textDecoration: "none" }}>
+                      Book your first session →
+                    </a>
+                  </div>
+                );
+              }
+              // Use todaysPlan activities as a plain list fallback
+              const acts = tp.activities.filter((a) => !a.isOptional);
+              const actTypes = [...new Set(acts.map((a) => {
+                if (a.type === "strength") return "Strength";
+                if (a.type === "cardio")   return "Cardio";
+                if (a.type === "recovery") return "Recovery";
+                return a.type.charAt(0).toUpperCase() + a.type.slice(1);
+              }))];
+              const totalDur = acts.reduce((s, a) => s + a.durationMinutes, 0);
+              return (
+                <div style={{ background: "#FFFFFF", borderRadius: 16, margin: "8px 12px", border: "0.5px solid #E5E5E0", overflow: "hidden" }}>
+                  <div style={{ padding: "12px 14px", borderBottom: "0.5px solid #E5E5E0" }}>
+                    <div style={{ fontSize: 11, fontWeight: 500, color: "#888780", textTransform: "uppercase", letterSpacing: "0.05em" }}>Today&apos;s session</div>
+                  </div>
+                  <div style={{ padding: "14px 16px" }}>
+                    <div style={{ fontSize: 17, fontWeight: 500, color: "#1a1a1a", marginBottom: 2 }}>{tp.dayTheme || tp.dayName || tp.protocolName}</div>
+                    <div style={{ fontSize: 12, color: "#888780", marginBottom: 14 }}>{actTypes.join(" · ")} · ~{totalDur} min</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
+                      {acts.map((act) => {
+                        const n = act.name.toLowerCase();
+                        const icon = n.includes("cold") || n.includes("plunge") ? "🧊"
+                          : n.includes("arx") || n.includes("strength") ? "🏋"
+                          : n.includes("carol") || n.includes("zone 2") || n.includes("bike") ? "🚴"
+                          : n.includes("compression") || n.includes("boots") ? "🦵"
+                          : n.includes("sauna") || n.includes("infrared") ? "🌡"
+                          : n.includes("vasper") ? "💧"
+                          : n.includes("katalyst") || n.includes("ems") ? "⚡"
+                          : "●";
+                        const bg = act.type === "recovery" ? { background: "#E6F1FB" } : { background: "#F1EFE8" };
+                        return (
+                          <div key={act.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, flexShrink: 0, ...bg }}>{icon}</div>
+                            <div>
+                              <div style={{ fontSize: 13, color: "#1a1a1a" }}>{act.name}</div>
+                              {act.durationMinutes > 0 && <div style={{ fontSize: 11, color: "#888780" }}>{act.durationMinutes} min</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button type="button" onClick={() => setMemberSection("protocol")}
+                      style={{ padding: "11px 14px", borderRadius: 10, background: "transparent", border: "0.5px solid #E5E5E0", color: "#5F5E5A", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>
+                      Full plan
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+
+            return null; // handled below
           })()}
 
           {/* CARD 2a — SESSION CARD (strong + week plan loaded) */}
