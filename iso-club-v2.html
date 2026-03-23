@@ -452,7 +452,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="user-av" id="user-av">MR</div>
       <div>
         <div class="user-name" id="user-name">Mark Reynolds</div>
-        <div class="user-tier" id="user-tier">Premier</div>
       </div>
     </div>
     <div class="wearable-dots">
@@ -1099,7 +1098,6 @@ function setMode(mode) {
     document.getElementById('top-title').textContent='Good morning, Mark.';
     document.getElementById('user-av').textContent='MR';
     document.getElementById('user-name').textContent='Mark Reynolds';
-    document.getElementById('user-tier').textContent='Premier';
     document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
     document.querySelector('#member-nav .nav-item').classList.add('active');
   } else {
@@ -1107,7 +1105,6 @@ function setMode(mode) {
     document.getElementById('top-title').textContent='Good morning, Dustin.';
     document.getElementById('user-av').textContent='DW';
     document.getElementById('user-name').textContent='Dustin Weaver';
-    document.getElementById('user-tier').textContent='Head Coach';
     document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
     document.querySelector('#coach-nav .nav-item').classList.add('active');
   }

@@ -1361,7 +1361,6 @@ export function DashboardReactClient({
             <div className="user-av">{userInitials}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="user-name">{displayName}</div>
-              <div className="user-tier">{payload.tier}</div>
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>

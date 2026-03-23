@@ -228,7 +228,6 @@ export function DashboardBootstrapClient({
     const displayName = payload.displayName || "Member";
     setText("#user-name", displayName);
     setText("#user-av", payload.initials || "MB");
-    setText("#user-tier", payload.tier || "Member");
     setText("#top-title", `Good morning, ${firstName(displayName)}.`);
 
     const setStatCardValue = (labelFragment: string, value: string | undefined) => {
