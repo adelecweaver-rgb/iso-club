@@ -3017,7 +3017,7 @@ export function DashboardReactClient({
             const consistMax = Math.max(...consistWeeks.map((w) => w.count), targetPerWeek, 1);
 
             // ── Goals section data ────────────────────────────────────────────────
-            const activeGoals = payload.goals.activeGoals ?? [];
+            const { suggestionStatus, hasScan, activeGoals: progressActiveGoals, goalTargets } = payload.goals;
             type GoalCard = {
               key: string;
               label: string;
@@ -3028,23 +3028,29 @@ export function DashboardReactClient({
               direction: "positive" | "neutral" | "negative" | "no_data";
               trendDisplay: string;
               goodDir: "up" | "down";
+              remainingThisMonth?: number | null;
             };
-            const goalCards: GoalCard[] = (activeGoals.map((goal): GoalCard | null => {
+            const goalCards: GoalCard[] = (progressActiveGoals.map((goal): GoalCard | null => {
               if (goal === "gain_muscle") {
                 const p = payload.goals.progress.gain_muscle;
-                return { key: goal, label: "Build Muscle", current: payload.scan.leanMassLbs, currentRaw: currentScan?.leanMassLbsRaw ?? null, target: null, unit: "lbs lean mass", direction: p.direction, trendDisplay: p.display, goodDir: "up" };
+                const tgt = goalTargets[goal] ?? null;
+                return { key: goal, label: "Build Muscle", current: payload.scan.leanMassLbs, currentRaw: currentScan?.leanMassLbsRaw ?? null, target: tgt, unit: "lbs lean mass", direction: p.direction, trendDisplay: p.display, goodDir: "up" };
               }
               if (goal === "lose_fat") {
                 const p = payload.goals.progress.lose_fat;
-                return { key: goal, label: "Reduce Body Fat", current: payload.scan.bodyFatPct, currentRaw: currentScan?.bodyFatPctRaw ?? null, target: null, unit: "% body fat", direction: p.direction, trendDisplay: p.display, goodDir: "down" };
+                const tgt = goalTargets[goal] ?? null;
+                return { key: goal, label: "Reduce Body Fat", current: payload.scan.bodyFatPct, currentRaw: currentScan?.bodyFatPctRaw ?? null, target: tgt, unit: "% body fat", direction: p.direction, trendDisplay: p.display, goodDir: "down" };
               }
               if (goal === "improve_cardio") {
                 const p = payload.goals.progress.improve_cardio;
-                return { key: goal, label: "Improve Cardio Fitness", current: latestManp ? `${Math.round(latestManp)}` : "--", currentRaw: latestManp ?? null, target: null, unit: "W MANP", direction: p.direction, trendDisplay: p.display, goodDir: "up" };
+                const tgt = goalTargets[goal] ?? null;
+                return { key: goal, label: "Improve Cardio Fitness", current: latestManp ? `${Math.round(latestManp)}` : "--", currentRaw: latestManp ?? null, target: tgt, unit: "W MANP", direction: p.direction, trendDisplay: p.display, goodDir: "up" };
               }
               if (goal === "attendance") {
                 const p = payload.goals.progress.attendance;
-                return { key: goal, label: "Session Consistency", current: `${p.current}`, currentRaw: p.current, target: p.target > 0 ? p.target : null, unit: "sessions this month", direction: p.direction, trendDisplay: p.display, goodDir: "up" };
+                const tgt = goalTargets[goal] ?? (p.target > 0 ? p.target : null);
+                const remaining = tgt !== null ? Math.max(0, tgt - p.current) : null;
+                return { key: goal, label: "Session Consistency", current: `${p.current}`, currentRaw: p.current, target: tgt, unit: "sessions this month", direction: p.direction, trendDisplay: p.display, goodDir: "up", remainingThisMonth: remaining };
               }
               return null;
             })).filter((g): g is GoalCard => g !== null);
@@ -3119,62 +3125,88 @@ export function DashboardReactClient({
                 {/* ── Goals ──────────────────────────────────────────────────────── */}
                 <div style={{ marginBottom: 28 }}>
                   <div style={sectionLabelStyle}>Goals</div>
-                  {goalCards.length === 0 ? (
-                    <div className="card" style={{ padding: "18px 20px" }}>
+
+                  {/* State 1: No scan yet */}
+                  {!hasScan ? (
+                    <div className="card" style={{ padding: "20px 22px", textAlign: "center" }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>Your personalized goals are generated from your Fit3D body scan results.</div>
+                      <p style={{ fontSize: 12, color: "var(--text3)", margin: "0 0 16px", lineHeight: 1.7 }}>Complete your first scan to get started.</p>
+                      <a href="https://theiso.club/book" target="_blank" rel="noreferrer" style={{ display: "inline-block", fontSize: 12, fontWeight: 600, color: "#4A7C59", textDecoration: "none", border: "1px solid rgba(74,124,89,0.35)", borderRadius: "var(--r-sm)", padding: "7px 16px" }}>Book a scan →</a>
+                    </div>
+
+                  /* State 2: Pending Dustin review */
+                  ) : suggestionStatus === "pending" ? (
+                    <div className="card" style={{ padding: "20px 22px" }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>Your goals are being reviewed</div>
                       <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.7 }}>
-                        Your personalized goals will appear here<br />
-                        after your first Fit3D scan and session<br />
-                        with Dustin.
+                        Dustin is reviewing your assessment and will set your targets shortly.<br />
+                        You will be notified when ready.
                       </p>
                     </div>
-                  ) : (
+
+                  /* State 3: Goals approved — show progress cards */
+                  ) : goalCards.length > 0 ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {goalCards.map((g) => {
                         const isMovingAway = g.direction === "negative";
+                        const barColor = isMovingAway ? "#B84040" : g.direction === "neutral" ? "#C4831A" : "#4A7C59";
                         const trendColor = g.direction === "positive" ? "#4A7C59" : g.direction === "negative" ? "#B84040" : "var(--text3)";
-                        const barPct = g.target !== null && g.currentRaw !== null
+                        // Progress bar: proportion of current toward target
+                        const barPct = g.target !== null && g.currentRaw !== null && g.target > 0
                           ? g.goodDir === "up"
                             ? Math.min(100, Math.max(0, (g.currentRaw / g.target) * 100))
-                            : Math.min(100, Math.max(0, ((g.target - Math.max(0, g.currentRaw - g.target)) / g.target) * 100))
+                            : Math.min(100, Math.max(0, (1 - Math.max(0, g.currentRaw - g.target) / g.target) * 100))
                           : null;
-                        const encouragement = isMovingAway
+                        const contextNote = isMovingAway
                           ? g.key === "gain_muscle"
-                            ? "Small dips between scans are normal — consistent training and protein are what matter long-term."
+                            ? "Strength numbers are strong — nutrition timing is the next lever."
                             : g.key === "lose_fat"
-                            ? "Slight increases can reflect muscle gain or scan variation. Stay consistent with your protocol."
+                            ? "Small scan-to-scan fluctuations are normal — trend over time matters most."
                             : g.key === "improve_cardio"
-                            ? "A short-term dip often reflects recovery needs, not fitness loss. Prioritize sleep and session spacing."
-                            : "You're building the habit — that compounds over time."
+                            ? "Often reflects fatigue — prioritize recovery this week."
+                            : g.remainingThisMonth != null
+                            ? `${g.remainingThisMonth} session${g.remainingThisMonth !== 1 ? "s" : ""} remaining this month — you've got this.`
+                            : "Keep going — consistency compounds over time."
                           : null;
                         return (
                           <div key={g.key} className="card" style={{ padding: "14px 16px" }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
                               <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{g.label}</div>
                               <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
                                 <span style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{g.current !== "--" ? g.current : "—"}</span>
                                 {g.current !== "--" && <span style={{ fontSize: 10, color: "var(--text3)" }}>{g.unit}</span>}
-                                {g.target !== null && <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: 4 }}>/ {g.target} target</span>}
                               </div>
                             </div>
                             {barPct !== null && (
-                              <div style={{ height: 4, background: "var(--bg2)", borderRadius: 2, marginBottom: 8, overflow: "hidden" }}>
-                                <div style={{ height: "100%", width: `${barPct}%`, background: "#4A7C59", borderRadius: 2, transition: "width 0.4s ease" }} />
+                              <div style={{ position: "relative", height: 4, background: "var(--bg2)", borderRadius: 2, marginBottom: 4, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${barPct}%`, background: barColor, borderRadius: 2, transition: "width 0.4s ease" }} />
+                              </div>
+                            )}
+                            {g.target !== null && (
+                              <div style={{ display: "flex", justifyContent: "flex-end", fontSize: 9, color: "var(--text3)", marginBottom: 6 }}>
+                                Target: {g.target}{g.key === "lose_fat" ? "%" : g.key === "gain_muscle" ? " lbs" : g.key === "improve_cardio" ? " W" : ""}
                               </div>
                             )}
                             {g.direction !== "no_data" && (
                               <div style={{ fontSize: 11, color: trendColor, fontWeight: 500 }}>
-                                {g.direction === "positive" ? "↑" : g.direction === "negative" ? "↓" : ""}{" "}
-                                {g.trendDisplay}
+                                {g.direction === "positive" ? "↑" : g.direction === "negative" ? "↓" : ""}{" "}{g.trendDisplay}
                               </div>
                             )}
-                            {encouragement && (
-                              <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4, lineHeight: 1.5 }}>
-                                {encouragement}
-                              </div>
+                            {contextNote && (
+                              <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4, lineHeight: 1.5 }}>{contextNote}</div>
                             )}
                           </div>
                         );
                       })}
+                    </div>
+
+                  /* State 4: Scan exists, no goals yet */
+                  ) : (
+                    <div className="card" style={{ padding: "18px 20px" }}>
+                      <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.7 }}>
+                        Your personalized goals will appear here<br />
+                        after your first session with Dustin.
+                      </p>
                     </div>
                   )}
                 </div>
@@ -4136,6 +4168,23 @@ export function DashboardReactClient({
                         }}
                       >
                         {isEditing ? "Done editing" : "Edit targets"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        style={{ fontSize: 11, color: "var(--text3)" }}
+                        onClick={async () => {
+                          try {
+                            await fetch("/api/goals/pending", {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ suggestion_id: sugg.id }),
+                            });
+                            setPendingSuggestions((prev) => prev.filter((s) => s.id !== sugg.id));
+                          } catch { /* silent */ }
+                        }}
+                      >
+                        Skip
                       </button>
                     </div>
                   </div>

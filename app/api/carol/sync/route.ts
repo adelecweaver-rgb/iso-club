@@ -601,6 +601,9 @@ export async function POST(request: Request) {
       }
     }
 
+    // Background: check cardio goal achievement after sync
+    void checkCardioGoalAchievement(targetUserId, supabaseAdmin).catch(() => { /* non-critical */ });
+
     return NextResponse.json({
       success: true,
       imported: dedupedRows.length,
@@ -611,4 +614,67 @@ export async function POST(request: Request) {
     const message = err instanceof Error ? err.message : "Unable to sync CAROL rides.";
     return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
+}
+
+async function checkCardioGoalAchievement(
+  memberId: string,
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+): Promise<void> {
+  if (!supabase) return;
+
+  // Fetch active improve_cardio goal with target
+  const goalRes = await supabase
+    .from("member_goals")
+    .select("id,target_value")
+    .eq("member_id", memberId)
+    .eq("goal_type", "improve_cardio")
+    .eq("is_active", true)
+    .limit(1);
+  if (goalRes.error || !goalRes.data || goalRes.data.length === 0) return;
+  const goal = goalRes.data[0] as { id: string; target_value: number | null };
+  if (goal.target_value === null) return;
+
+  // Average MANP over last 30 days
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const carolRes = await supabase
+    .from("carol_sessions")
+    .select("manp,peak_power_watts")
+    .eq("member_id", memberId)
+    .gte("session_date", thirtyDaysAgo);
+  if (carolRes.error || !carolRes.data) return;
+
+  const vals = (carolRes.data as Array<Record<string, unknown>>)
+    .map((r) => {
+      const v = typeof r.manp === "number" ? r.manp : typeof r.manp === "string" ? parseFloat(r.manp) : null;
+      const w = typeof r.peak_power_watts === "number" ? r.peak_power_watts : null;
+      return v && v > 0 ? v : w && w > 0 ? w : null;
+    })
+    .filter((v): v is number => v !== null);
+
+  if (vals.length < 2) return;
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  if (avg < goal.target_value) return;
+
+  // Check if already recorded
+  const existingRes = await supabase
+    .from("goal_achievements")
+    .select("id")
+    .eq("member_id", memberId)
+    .eq("goal_id", goal.id)
+    .limit(1);
+  if (existingRes.data && existingRes.data.length > 0) return;
+
+  const memberRes = await supabase.from("users").select("created_at").eq("id", memberId).single();
+  const joinedAt = memberRes.data ? new Date(String(memberRes.data.created_at)) : new Date();
+  const monthsActive = Math.max(1, Math.round((Date.now() - joinedAt.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+
+  await supabase.from("goal_achievements").insert({
+    member_id: memberId,
+    goal_id: goal.id,
+    achieved_at: new Date().toISOString(),
+    final_value: Math.round(avg),
+    target_value: goal.target_value,
+    months_to_achieve: monthsActive,
+    celebration_shown: false,
+  });
 }

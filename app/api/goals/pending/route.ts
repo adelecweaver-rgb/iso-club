@@ -58,3 +58,36 @@ export async function GET() {
     );
   }
 }
+
+// PATCH — skip a suggestion (removes from queue)
+export async function PATCH(request: Request) {
+  try {
+    const { context, error } = await getActorContext();
+    if (!context || !isCoachRole(context.role)) {
+      return NextResponse.json({ success: false, error: error ?? "Coach access required." }, { status: 403 });
+    }
+
+    const supabase = createSupabaseAdminClient();
+    if (!supabase) {
+      return NextResponse.json({ success: false, error: "Supabase unavailable." }, { status: 500 });
+    }
+
+    const body = (await request.json()) as { suggestion_id?: string };
+    const suggestionId = asStr(body.suggestion_id);
+    if (!suggestionId) {
+      return NextResponse.json({ success: false, error: "suggestion_id required." }, { status: 400 });
+    }
+
+    await supabase
+      .from("goal_suggestions")
+      .update({ status: "skipped", reviewed_by: asStr(context.dbUser.id), reviewed_at: new Date().toISOString() })
+      .eq("id", suggestionId);
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : "Failed to skip suggestion." },
+      { status: 500 },
+    );
+  }
+}

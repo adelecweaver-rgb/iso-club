@@ -27,30 +27,80 @@ function parseAiJson(raw: string): Record<string, unknown> {
 }
 
 const SYSTEM_PROMPT = `You are an expert health coach assistant at Iso Club, a premium longevity studio in Tulsa, Oklahoma.
+You analyze member health data and suggest specific, achievable goals with measurable targets.
+Respond in valid JSON only. No preamble. No markdown.`;
 
-Analyze this member's Fit3D body scan results and their stated goals to suggest specific measurable targets for each goal.
+function buildUserPrompt(params: {
+  age: number | null;
+  gender: string;
+  statedGoals: string;
+  bodyFat: number | null;
+  leanMass: number | null;
+  weight: number | null;
+  waist: number | null;
+  bodyShapeRating: number | null;
+  avgManp: number | null;
+  peakPower: number | null;
+}): string {
+  const { age, gender, statedGoals, bodyFat, leanMass, weight, waist, bodyShapeRating, avgManp, peakPower } = params;
+  return `Member data:
+Age: ${age ?? "unknown"}
+Gender: ${gender || "not specified"}
+Stated goals from onboarding: ${statedGoals}
 
-Be conservative — targets should be achievable in 6-9 months with consistent effort at 2-3 sessions per week. Prioritize health and longevity over aesthetics. Base all reasoning on established exercise science.
+Most recent Fit3D scan:
+Body fat %: ${bodyFat !== null ? `${bodyFat.toFixed(1)}%` : "not measured"}
+Lean mass lbs: ${leanMass !== null ? `${leanMass.toFixed(1)} lbs` : "not measured"}
+Weight lbs: ${weight !== null ? `${weight.toFixed(1)} lbs` : "not measured"}
+Waist inches: ${waist !== null ? `${waist.toFixed(1)}"` : "not measured"}
+Body shape rating: ${bodyShapeRating !== null ? bodyShapeRating.toFixed(1) : "not measured"}
 
-Respond in JSON only:
+Recent CAROL data:
+Average MANP (last 30 days): ${avgManp !== null ? `${Math.round(avgManp)} W` : "no data"}
+Peak power watts: ${peakPower !== null ? `${Math.round(peakPower)} W` : "no data"}
+
+Based on this data suggest specific measurable goals with conservative targets achievable in 6-9 months with 2-3 sessions per week. Prioritize health and longevity over aesthetics. Only suggest goals supported by the data.
+
+Respond in this exact JSON format:
 {
   "goals": [
     {
       "type": "lose_fat",
+      "label": "Body fat",
       "current_value": 28.4,
       "target_value": 23.0,
       "unit": "%",
-      "label": "Body fat",
-      "reasoning": "28.4% is above the healthy range for this age group. 23% is achievable and reduces cardiovascular risk significantly."
+      "reasoning": "28.4% is above healthy range for this age. 23% reduces cardiovascular risk significantly and is achievable in 6-8 months."
+    },
+    {
+      "type": "gain_muscle",
+      "label": "Lean mass",
+      "current_value": 118.0,
+      "target_value": 124.0,
+      "unit": "lbs",
+      "reasoning": "Modest 6 lb gain protects metabolism during fat loss and improves longevity markers."
+    },
+    {
+      "type": "improve_cardio",
+      "label": "Aerobic power (MANP)",
+      "current_value": 280.0,
+      "target_value": 340.0,
+      "unit": "W",
+      "reasoning": "Current MANP is below average for age group. 340W puts member in above-average range with meaningful longevity benefit."
+    },
+    {
+      "type": "attendance",
+      "label": "Monthly sessions",
+      "current_value": 0,
+      "target_value": 12,
+      "unit": "sessions/month",
+      "reasoning": "12 sessions per month builds the consistency habit while remaining achievable for a busy schedule."
     }
   ],
   "protocol": "Metabolic Reset",
-  "protocol_reasoning": "Body fat is the primary concern. CAROL and ARX combination drives optimal fat loss while preserving lean mass."
+  "protocol_reasoning": "Body fat reduction is the primary opportunity. CAROL and ARX combination drives optimal fat loss while preserving lean mass."
+}`;
 }
-
-Only suggest goals that are supported by the scan data. If lean mass is already excellent do not suggest a muscle gain goal. Let the data guide the recommendations.
-
-Valid goal types: lose_fat (unit: %), gain_muscle (unit: lbs lean mass), improve_cardio (unit: MANP watts).`;
 
 export async function POST(request: Request) {
   try {
@@ -93,7 +143,7 @@ export async function POST(request: Request) {
     // Fetch most recent Fit3D scan
     const scanRes = await supabase
       .from("fit3d_scans")
-      .select("scan_date,body_fat_pct,lean_mass_lbs,fat_mass_lbs,weight_lbs,waist_in,hips_in")
+      .select("scan_date,body_fat_pct,lean_mass_lbs,fat_mass_lbs,weight_lbs,waist_in,body_shape_rating")
       .eq("member_id", memberId)
       .order("scan_date", { ascending: false })
       .limit(1);
@@ -132,13 +182,27 @@ export async function POST(request: Request) {
       .map((g: Record<string, unknown>) => asStr(g.goal_type))
       .filter(Boolean);
 
-    // Build the context string for the AI
-    const scanDate = asStr(scan.scan_date).slice(0, 10);
+    // Fetch recent CAROL data for MANP and peak power
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const carolRes = await supabase
+      .from("carol_sessions")
+      .select("manp,peak_power_watts,session_date")
+      .eq("member_id", memberId)
+      .gte("session_date", thirtyDaysAgo)
+      .order("session_date", { ascending: false })
+      .limit(20);
+    const carolRows = Array.isArray(carolRes.data) ? (carolRes.data as Array<Record<string, unknown>>) : [];
+    const manpVals = carolRows.map((r) => asNum(r.manp)).filter((v): v is number => v !== null && v > 0);
+    const avgManp = manpVals.length > 0 ? manpVals.reduce((a, b) => a + b, 0) / manpVals.length : null;
+    const peakPowerAll = carolRows.map((r) => asNum(r.peak_power_watts)).filter((v): v is number => v !== null && v > 0);
+    const peakPower = peakPowerAll.length > 0 ? Math.max(...peakPowerAll) : null;
+
+    // Build scan and member fields
     const bodyFat = asNum(scan.body_fat_pct);
     const leanMass = asNum(scan.lean_mass_lbs);
-    const fatMass = asNum(scan.fat_mass_lbs);
     const weight = asNum(scan.weight_lbs);
     const waist = asNum(scan.waist_in);
+    const bodyShapeRating = asNum(scan.body_shape_rating);
 
     const primaryGoal = asStr(member.primary_goal).replace(/_/g, " ") || "not specified";
     const secondaryGoals = Array.isArray(member.secondary_goals) && member.secondary_goals.length > 0
@@ -146,24 +210,20 @@ export async function POST(request: Request) {
       : "none";
     const statedGoals = activeGoalTypes.length > 0
       ? activeGoalTypes.map((g) => g.replace(/_/g, " ")).join(", ")
-      : primaryGoal;
+      : `${primaryGoal}${secondaryGoals !== "none" ? `, ${secondaryGoals}` : ""}`;
 
-    const userMessage = `Member: ${asStr(member.full_name, "Member")}
-Age: ${age ?? "unknown"}
-Gender: ${asStr(member.gender, "not specified")}
-
-Fit3D Scan (${scanDate}):
-- Body fat: ${bodyFat !== null ? `${bodyFat.toFixed(1)}%` : "not measured"}
-- Lean mass: ${leanMass !== null ? `${leanMass.toFixed(1)} lbs` : "not measured"}
-- Fat mass: ${fatMass !== null ? `${fatMass.toFixed(1)} lbs` : "not measured"}
-- Weight: ${weight !== null ? `${weight.toFixed(1)} lbs` : "not measured"}
-- Waist: ${waist !== null ? `${waist.toFixed(1)} in` : "not measured"}
-
-Primary goal: ${primaryGoal}
-Secondary goals: ${secondaryGoals}
-Explicitly set goals: ${statedGoals}
-
-Based on this data, suggest specific measurable goals with targets achievable in 6-9 months.`;
+    const userMessage = buildUserPrompt({
+      age,
+      gender: asStr(member.gender, "not specified"),
+      statedGoals,
+      bodyFat,
+      leanMass,
+      weight,
+      waist,
+      bodyShapeRating,
+      avgManp,
+      peakPower,
+    });
 
     // Call Anthropic API
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -174,8 +234,8 @@ Based on this data, suggest specific measurable goals with targets achievable in
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1200,
+        model: "claude-opus-4-5",
+        max_tokens: 1500,
         system: SYSTEM_PROMPT,
         messages: [{ role: "user", content: userMessage }],
       }),
