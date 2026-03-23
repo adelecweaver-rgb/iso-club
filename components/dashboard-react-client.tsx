@@ -3016,9 +3016,51 @@ export function DashboardReactClient({
             const avgPerWeek = (totalSessions12 / 12).toFixed(1);
             const consistMax = Math.max(...consistWeeks.map((w) => w.count), targetPerWeek, 1);
 
+            // ── Goals section data ────────────────────────────────────────────────
+            const activeGoals = payload.goals.activeGoals ?? [];
+            type GoalCard = {
+              key: string;
+              label: string;
+              current: string;
+              currentRaw: number | null;
+              target: number | null;
+              unit: string;
+              direction: "positive" | "neutral" | "negative" | "no_data";
+              trendDisplay: string;
+              goodDir: "up" | "down";
+            };
+            const goalCards: GoalCard[] = (activeGoals.map((goal): GoalCard | null => {
+              if (goal === "gain_muscle") {
+                const p = payload.goals.progress.gain_muscle;
+                return { key: goal, label: "Build Muscle", current: payload.scan.leanMassLbs, currentRaw: currentScan?.leanMassLbsRaw ?? null, target: null, unit: "lbs lean mass", direction: p.direction, trendDisplay: p.display, goodDir: "up" };
+              }
+              if (goal === "lose_fat") {
+                const p = payload.goals.progress.lose_fat;
+                return { key: goal, label: "Reduce Body Fat", current: payload.scan.bodyFatPct, currentRaw: currentScan?.bodyFatPctRaw ?? null, target: null, unit: "% body fat", direction: p.direction, trendDisplay: p.display, goodDir: "down" };
+              }
+              if (goal === "improve_cardio") {
+                const p = payload.goals.progress.improve_cardio;
+                return { key: goal, label: "Improve Cardio Fitness", current: latestManp ? `${Math.round(latestManp)}` : "--", currentRaw: latestManp ?? null, target: null, unit: "W MANP", direction: p.direction, trendDisplay: p.display, goodDir: "up" };
+              }
+              if (goal === "attendance") {
+                const p = payload.goals.progress.attendance;
+                return { key: goal, label: "Session Consistency", current: `${p.current}`, currentRaw: p.current, target: p.target > 0 ? p.target : null, unit: "sessions this month", direction: p.direction, trendDisplay: p.display, goodDir: "up" };
+              }
+              return null;
+            })).filter((g): g is GoalCard => g !== null);
+
+            // ── Fix "since first scan" — actual diff ──────────────────────────────
+            const oldestScan = scansAsc[0];
+            const leanSinceDiff = leanLast !== null && oldestScan?.leanMassLbsRaw != null
+              ? leanLast - oldestScan.leanMassLbsRaw : null;
+            const fatSinceDiff = fatLast !== null && oldestScan?.bodyFatPctRaw != null
+              ? fatLast - oldestScan.bodyFatPctRaw : null;
+
             // ── Last updated labels ───────────────────────────────────────────────
             const fmtDate = (iso: string | null | undefined) =>
               iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
+            const fmtDateWithYear = (iso: string | null | undefined) =>
+              iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : null;
             const scanLastUpdated = fmtDate(currentScan?.scanDateRaw);
             const strengthLastUpdated = fmtDate(latestArxDate);
             const cardioLastUpdated = fmtDate(allCarol[0]?.sessionDate?.slice(0, 10));
@@ -3074,6 +3116,69 @@ export function DashboardReactClient({
                   </div>
                 </div>
 
+                {/* ── Goals ──────────────────────────────────────────────────────── */}
+                <div style={{ marginBottom: 28 }}>
+                  <div style={sectionLabelStyle}>Goals</div>
+                  {goalCards.length === 0 ? (
+                    <div className="card" style={{ padding: "18px 20px" }}>
+                      <p style={{ fontSize: 12, color: "var(--text3)", margin: 0, lineHeight: 1.7 }}>
+                        Your personalized goals will appear here<br />
+                        after your first Fit3D scan and session<br />
+                        with Dustin.
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {goalCards.map((g) => {
+                        const isMovingAway = g.direction === "negative";
+                        const trendColor = g.direction === "positive" ? "#4A7C59" : g.direction === "negative" ? "#B84040" : "var(--text3)";
+                        const barPct = g.target !== null && g.currentRaw !== null
+                          ? g.goodDir === "up"
+                            ? Math.min(100, Math.max(0, (g.currentRaw / g.target) * 100))
+                            : Math.min(100, Math.max(0, ((g.target - Math.max(0, g.currentRaw - g.target)) / g.target) * 100))
+                          : null;
+                        const encouragement = isMovingAway
+                          ? g.key === "gain_muscle"
+                            ? "Small dips between scans are normal — consistent training and protein are what matter long-term."
+                            : g.key === "lose_fat"
+                            ? "Slight increases can reflect muscle gain or scan variation. Stay consistent with your protocol."
+                            : g.key === "improve_cardio"
+                            ? "A short-term dip often reflects recovery needs, not fitness loss. Prioritize sleep and session spacing."
+                            : "You're building the habit — that compounds over time."
+                          : null;
+                        return (
+                          <div key={g.key} className="card" style={{ padding: "14px 16px" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
+                              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{g.label}</div>
+                              <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                                <span style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{g.current !== "--" ? g.current : "—"}</span>
+                                {g.current !== "--" && <span style={{ fontSize: 10, color: "var(--text3)" }}>{g.unit}</span>}
+                                {g.target !== null && <span style={{ fontSize: 10, color: "var(--text3)", marginLeft: 4 }}>/ {g.target} target</span>}
+                              </div>
+                            </div>
+                            {barPct !== null && (
+                              <div style={{ height: 4, background: "var(--bg2)", borderRadius: 2, marginBottom: 8, overflow: "hidden" }}>
+                                <div style={{ height: "100%", width: `${barPct}%`, background: "#4A7C59", borderRadius: 2, transition: "width 0.4s ease" }} />
+                              </div>
+                            )}
+                            {g.direction !== "no_data" && (
+                              <div style={{ fontSize: 11, color: trendColor, fontWeight: 500 }}>
+                                {g.direction === "positive" ? "↑" : g.direction === "negative" ? "↓" : ""}{" "}
+                                {g.trendDisplay}
+                              </div>
+                            )}
+                            {encouragement && (
+                              <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 4, lineHeight: 1.5 }}>
+                                {encouragement}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 {/* ── 2. Body Composition ────────────────────────────────────────── */}
                 <div style={{ marginBottom: 28 }}>
                   <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -3107,9 +3212,19 @@ export function DashboardReactClient({
                               {scanSparkTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4 }}>{scanSparkTimeLabel}</div>}
                             </>
                           ) : null}
-                          {leanFirst !== null && leanLast !== null && (
+                          {leanSinceDiff !== null && (
                             <div style={{ fontSize: 10, color: sentimentColor(leanTrend.sentiment) }}>
-                              {trendArrow(leanTrend.direction)} {Math.abs(leanLast - leanFirst).toFixed(1)} lbs since first scan
+                              {leanSinceDiff === 0
+                                ? "No change since first scan"
+                                : `${leanSinceDiff > 0 ? "↑ +" : "↓ "}${Math.abs(leanSinceDiff).toFixed(1)} lbs since first scan`}
+                            </div>
+                          )}
+                          {/* Decline context note — lean mass */}
+                          {currentScan?.leanMassLbsRaw != null && prevScan?.leanMassLbsRaw != null &&
+                            currentScan.leanMassLbsRaw < prevScan.leanMassLbsRaw && (
+                            <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 6, lineHeight: 1.5 }}>
+                              ↓ {Math.abs(currentScan.leanMassLbsRaw - prevScan.leanMassLbsRaw).toFixed(1)}% vs last scan<br />
+                              Small fluctuations between scans are normal. Trend over time matters more than single scan changes.
                             </div>
                           )}
                         </div>
@@ -3127,9 +3242,11 @@ export function DashboardReactClient({
                               {scanSparkTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4 }}>{scanSparkTimeLabel}</div>}
                             </>
                           ) : null}
-                          {fatFirst !== null && fatLast !== null && (
+                          {fatSinceDiff !== null && (
                             <div style={{ fontSize: 10, color: sentimentColor(fatTrend.sentiment) }}>
-                              {trendArrow(fatTrend.direction)} {Math.abs(fatLast - fatFirst).toFixed(1)}% since first scan
+                              {fatSinceDiff === 0
+                                ? "No change since first scan"
+                                : `${fatSinceDiff < 0 ? "↓ " : "↑ +"}${Math.abs(fatSinceDiff).toFixed(1)}% since first scan`}
                             </div>
                           )}
                         </div>
@@ -3206,7 +3323,9 @@ export function DashboardReactClient({
                                   <tbody>
                                     {[...scansAsc].reverse().map((scan, i) => (
                                       <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
-                                        <td style={{ padding: "7px 8px 7px 0", color: "var(--text3)", whiteSpace: "nowrap" }}>{scan.scanDate}</td>
+                                        <td style={{ padding: "7px 8px 7px 0", color: "var(--text3)", whiteSpace: "nowrap" }}>
+                                          {fmtDateWithYear(scan.scanDateRaw) ?? scan.scanDate}
+                                        </td>
                                         <td style={{ padding: "7px 8px 7px 0", color: "var(--text)", fontWeight: 500 }}>{scan.leanMassLbs}</td>
                                         <td style={{ padding: "7px 8px 7px 0", color: "var(--text)", fontWeight: 500 }}>{scan.bodyFatPct}%</td>
                                         <td style={{ padding: "7px 8px 7px 0", color: "var(--text)" }}>{scan.weightLbs}</td>
@@ -3215,6 +3334,20 @@ export function DashboardReactClient({
                                     ))}
                                   </tbody>
                                 </table>
+                              </div>
+                              {/* Book a scan prompt */}
+                              <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
+                                <p style={{ fontSize: 11, color: "var(--text3)", margin: "0 0 10px", lineHeight: 1.6 }}>
+                                  Regular scans every 60–90 days give the most accurate picture of your progress.
+                                </p>
+                                <a
+                                  href="https://theiso.club/book"
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{ display: "inline-block", fontSize: 11, fontWeight: 600, color: "#4A7C59", textDecoration: "none", border: "1px solid rgba(74,124,89,0.35)", borderRadius: "var(--r-sm)", padding: "6px 14px" }}
+                                >
+                                  Book your next scan →
+                                </a>
                               </div>
                             </>
                           )}
@@ -3504,7 +3637,14 @@ export function DashboardReactClient({
                             {latestManp ? <span style={{ fontSize: 9, color: "var(--text3)" }}>W MANP</span> : null}
                           </div>
                           {manpTrendLabel ? (
-                            <div style={{ fontSize: 10, color: manpTrendColor, fontWeight: 500 }}>{manpTrendLabel}</div>
+                            <>
+                              <div style={{ fontSize: 10, color: manpTrendColor, fontWeight: 500 }}>{manpTrendLabel}</div>
+                              {manpTrendColor === "#B84040" && (
+                                <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 4, lineHeight: 1.5 }}>
+                                  Often reflects fatigue or under-recovery rather than fitness decline.
+                                </div>
+                              )}
+                            </>
                           ) : (
                             <div style={{ fontSize: 10, color: "var(--text3)" }}>
                               {rehitWithManp.length < 2 ? "More REHIT sessions needed" : "Building…"}
