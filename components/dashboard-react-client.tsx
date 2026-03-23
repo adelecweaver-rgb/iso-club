@@ -2448,12 +2448,6 @@ export function DashboardReactClient({
                   </div>
                 )}
 
-                {/* ── Change Protocol ──────────────────────────────────── */}
-                <div style={{ paddingTop: 4, paddingBottom: 8 }}>
-                  <button type="button" className="btn" onClick={() => { setShowChangeProtocol(true); setSwitchProtocolSent(false); setConfirmProtocol(null); }} style={{ fontSize: 13, width: "100%" }}>
-                    Change Protocol
-                  </button>
-                </div>
               </div>
             );
           })()}
