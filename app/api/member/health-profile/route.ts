@@ -79,7 +79,25 @@ export async function GET() {
         .limit(1),
     ]);
 
-    if (userRes.error) throw new Error(userRes.error.message);
+    // If the migration hasn't been run yet the select may return a schema-cache error.
+    // Return empty answers rather than a 500 so the page still loads.
+    if (userRes.error) {
+      const msg = userRes.error.message ?? "";
+      const isMissingColumn = /could not find|schema cache|column.*does not exist/i.test(msg);
+      if (isMissingColumn) {
+        const activeGoals = !goalsRes.error
+          ? (goalsRes.data ?? []).map((g: Record<string, unknown>) => asString(g.goal_type))
+          : [];
+        return NextResponse.json({
+          success: true,
+          answers: { ...emptyAnswers(), goals: activeGoals },
+          onboarding_submitted_at: null,
+          onboarding_updated_at: null,
+          latest_snapshot_id: null,
+        });
+      }
+      throw new Error(msg);
+    }
     if (goalsRes.error) throw new Error(goalsRes.error.message);
 
     const userRow =
@@ -180,7 +198,16 @@ export async function POST(request: Request) {
       })
       .eq("id", memberId);
 
-    if (updateUserRes.error) throw new Error(updateUserRes.error.message);
+    if (updateUserRes.error) {
+      const msg = updateUserRes.error.message ?? "";
+      if (/could not find|schema cache|column.*does not exist/i.test(msg)) {
+        return NextResponse.json(
+          { success: false, error: "Database migration not applied. Run onboarding_health_profile.sql in Supabase SQL Editor first." },
+          { status: 503 },
+        );
+      }
+      throw new Error(msg);
+    }
 
     // Set onboarding_submitted_at only if not already set
     if (!asString(context.dbUser.onboarding_submitted_at)) {
