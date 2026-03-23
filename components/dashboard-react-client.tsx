@@ -1885,7 +1885,16 @@ export function DashboardReactClient({
           {(() => {
             const weekStartWP    = payload.checklistCompletions.weekStartDate;
             const todayIsoWP     = payload.checklistCompletions.todayDate;
-            const trainingDaysWP = weekPlan.filter((d) => !d.dayTheme.toLowerCase().includes("rest"));
+            // Use weekPlan if loaded, otherwise fall back to payload.protocol.days
+            // (same source the session card uses so IDs and completion state stay in sync)
+            const allDaysWP = weekPlan.length > 0
+              ? weekPlan
+              : (payload.protocol.days ?? []).map((d) => ({
+                  id: d.id, dayOfWeek: d.dayOfWeek,
+                  dayName: d.dayName, dayTheme: d.dayTheme,
+                  activities: d.activities,
+                }));
+            const trainingDaysWP = allDaysWP.filter((d) => !d.dayTheme.toLowerCase().includes("rest"));
             function isoForDowWP(dow: number): string {
               const base = new Date(weekStartWP + "T00:00:00"); base.setDate(base.getDate() + (dow - 1));
               return base.toISOString().slice(0, 10);
