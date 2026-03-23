@@ -122,6 +122,7 @@ type DashboardPayload = {
   };
   scanHistory: Array<{
     scanDate: string;
+    scanDateRaw: string;
     bodyFatPct: string;
     weightLbs: string;
     leanMassLbs: string;
@@ -350,6 +351,34 @@ function sparklinePath(values: (number | null)[], w: number, h: number): string 
       return `${i === 0 ? "M" : "L"} ${sx.toFixed(1)} ${sy.toFixed(1)}`;
     })
     .join(" ");
+}
+
+// ── Trend sentiment system ────────────────────────────────────────────────────
+type TrendSentiment = "positive" | "negative" | "neutral";
+type TrendData = { direction: "up" | "down" | "none"; sentiment: TrendSentiment };
+
+function sentimentColor(sentiment: TrendSentiment): string {
+  if (sentiment === "positive") return "var(--teal, #4A7C59)";
+  if (sentiment === "negative") return "var(--red, #B84040)";
+  return "var(--text3)";
+}
+
+function trendArrow(direction: "up" | "down" | "none"): string {
+  if (direction === "up") return "↑";
+  if (direction === "down") return "↓";
+  return "";
+}
+
+function makeTrend(direction: "up" | "down" | "none", sentiment: TrendSentiment = "neutral"): TrendData {
+  return { direction, sentiment };
+}
+
+function eccRatioExplanation(ratio: number): string {
+  const n = ratio.toFixed(2);
+  if (ratio >= 3.0) return `Eccentric strength is ${n}× your concentric — well above average — excellent muscle control`;
+  if (ratio >= 2.0) return `Eccentric strength is ${n}× your concentric — above average`;
+  if (ratio >= 1.3) return `Eccentric strength is ${n}× your concentric — within the healthy range`;
+  return `Eccentric strength is ${n}× your concentric — below the healthy range of 1.3×`;
 }
 
 type ArxExerciseGroup = {
@@ -2674,8 +2703,16 @@ export function DashboardReactClient({
             const leanLast = [...leanSparkVals].reverse().find((v) => v !== null) ?? null;
             const fatFirst = fatSparkVals.find((v) => v !== null) ?? null;
             const fatLast = [...fatSparkVals].reverse().find((v) => v !== null) ?? null;
-            const leanTrendGood = leanFirst !== null && leanLast !== null ? leanLast >= leanFirst : true;
-            const fatTrendGood = fatFirst !== null && fatLast !== null ? fatLast <= fatFirst : true;
+            const leanTrend = makeTrend(leanFirst !== null && leanLast !== null ? (leanLast >= leanFirst ? "up" : "down") : "none");
+            const fatTrend = makeTrend(fatFirst !== null && fatLast !== null ? (fatLast <= fatFirst ? "down" : "up") : "none");
+            // "last N months" label from actual scan date span
+            const scanSparkTimeLabel = (() => {
+              const oldest = scansAsc[0]?.scanDateRaw;
+              const newest = scansAsc[scansAsc.length - 1]?.scanDateRaw;
+              if (!oldest || !newest || oldest === newest) return null;
+              const months = Math.round((new Date(newest).getTime() - new Date(oldest).getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+              return months >= 1 ? `last ${months} month${months !== 1 ? "s" : ""}` : null;
+            })();
             const scanMetrics: Array<{ label: string; value: string; raw: number | null; prevRaw: number | null; good: "up" | "down" | "neutral"; unit?: string }> = [
               { label: "Lean mass", value: payload.scan.leanMassLbs, raw: currentScan?.leanMassLbsRaw ?? null, prevRaw: prevScan?.leanMassLbsRaw ?? null, good: "up", unit: "lbs" },
               { label: "Body fat %", value: payload.scan.bodyFatPct, raw: currentScan?.bodyFatPctRaw ?? null, prevRaw: prevScan?.bodyFatPctRaw ?? null, good: "down", unit: "%" },
@@ -2691,13 +2728,6 @@ export function DashboardReactClient({
             const arxNow = new Date();
             const arxMonthStart = new Date(arxNow.getFullYear(), arxNow.getMonth(), 1).toISOString().slice(0, 10);
             const arxSessionsThisMonth = payload.arxSessions.filter((s) => s.sessionDate >= arxMonthStart).length;
-            const topExercise = arxGroups[0];
-            const topConc = topExercise?.sessions[0]?.concentricMax ?? null;
-            const topConcHistory = topExercise?.sessions.slice(0, 12).reverse().map((s) => s.concentricMax) ?? [];
-            const topConcPrev = topExercise?.sessions.slice(1, 4).reduce((mx, s) => Math.max(mx, s.concentricMax ?? 0), 0) ?? 0;
-            const strengthTrend = topConc !== null && topConcPrev > 0
-              ? topConc > topConcPrev ? "improving" : topConc < topConcPrev ? "declining" : "stable"
-              : null;
             const latestArxDate = payload.arxSessions[0]?.sessionDate?.slice(0, 10);
             const latestArxSessions = latestArxDate
               ? payload.arxSessions.filter((s) => s.sessionDate.slice(0, 10) === latestArxDate)
@@ -2708,7 +2738,32 @@ export function DashboardReactClient({
               if (!cur || (s.concentricMax ?? 0) > (cur.conc ?? 0)) latestArxByEx.set(s.exercise, { conc: s.concentricMax, ecc: s.eccentricMax });
             }
             const latestConcByEx = arxGroups.map(({ exercise, sessions }) => ({ exercise, value: sessions[0]?.concentricMax ?? 0 }));
+            const latestEccByEx = arxGroups.map(({ exercise, sessions }) => ({ exercise, value: sessions[0]?.eccentricMax ?? 0 }));
             const maxConcAll = latestConcByEx.reduce((m, e) => Math.max(m, e.value), 0);
+            const maxEccAll = latestEccByEx.reduce((m, e) => Math.max(m, e.value), 0);
+            const maxBarAll = Math.max(maxConcAll, maxEccAll, 1);
+            // Top 3 exercises by concentric for summary
+            const top3Exercises = [...latestConcByEx]
+              .filter((e) => e.value > 0)
+              .sort((a, b) => b.value - a.value)
+              .slice(0, 3)
+              .map((e) => {
+                const group = arxGroups.find((g) => g.exercise === e.exercise);
+                const sessions = group?.sessions ?? [];
+                const prevPeak = sessions.slice(1, 5).reduce((mx, s) => Math.max(mx, s.concentricMax ?? 0), 0);
+                const dir: "up" | "down" | "none" = prevPeak > 0
+                  ? e.value > prevPeak ? "up" : e.value < prevPeak ? "down" : "none"
+                  : "none";
+                return { exercise: e.exercise, value: e.value, trend: makeTrend(dir) };
+              });
+            // Top performer: highest concentric, first in sorted order if tied
+            const topPerformerExercise = [...latestConcByEx].sort((a, b) => b.value - a.value)[0]?.exercise ?? null;
+            // Strength trend (neutral by default — no alarming red)
+            const topConc = arxGroups[0]?.sessions[0]?.concentricMax ?? null;
+            const topConcPrev = arxGroups[0]?.sessions.slice(1, 4).reduce((mx, s) => Math.max(mx, s.concentricMax ?? 0), 0) ?? 0;
+            const strengthTrend: TrendData | null = topConc !== null && topConcPrev > 0
+              ? makeTrend(topConc > topConcPrev ? "up" : topConc < topConcPrev ? "down" : "none")
+              : null;
 
             // ── 4. Cardio ─────────────────────────────────────────────────────────
             const rehitSessions = allCarol.filter((s) => normalizeCarolTabKey(s.rideType) === "rehit");
@@ -2724,12 +2779,12 @@ export function DashboardReactClient({
               const olderAvg = rehitWithManp.slice(3, 6).reduce((s, r) => s + (carolNum(r.manp) ?? 0), 0) / 3;
               if (olderAvg > 0) {
                 const pct = ((recentAvg - olderAvg) / olderAvg) * 100;
-                if (pct > 3) { manpTrendLabel = `\u2191 ${pct.toFixed(0)}% vs prior`; manpTrendColor = "#4A7C59"; }
-                else if (pct < -3) { manpTrendLabel = `\u2193 ${Math.abs(pct).toFixed(0)}% vs prior`; manpTrendColor = "#B84040"; }
+                if (pct > 3) { manpTrendLabel = `↑ ${pct.toFixed(0)}% vs prior`; manpTrendColor = "#4A7C59"; }
+                else if (pct < -3) { manpTrendLabel = `↓ ${Math.abs(pct).toFixed(0)}% vs prior`; manpTrendColor = "#B84040"; }
                 else { manpTrendLabel = "Stable"; manpTrendColor = "var(--text3)"; }
               }
             } else if (rehitWithManp.length >= 2) {
-              manpTrendLabel = "Building\u2026";
+              manpTrendLabel = "Building…";
               manpTrendColor = "var(--text3)";
             }
             const carolNow = new Date();
@@ -2738,6 +2793,39 @@ export function DashboardReactClient({
             const carolThisMonth = allCarol.filter((s) => s.sessionDate >= carolMonthStart).length;
             const carolPrevMonth = allCarol.filter((s) => s.sessionDate >= carolPrevMonthStart && s.sessionDate < carolMonthStart).length;
             const RIDE_TYPE_LABELS: Record<string, string> = { REHIT: "REHIT", FAT_BURN_30: "Fat Burn 30", FAT_BURN_45: "Fat Burn 45", FAT_BURN_60: "Fat Burn 60", ENERGISER: "Energiser" };
+
+            // ── 5. Consistency ────────────────────────────────────────────────────
+            const allSessionDates = [
+              ...payload.arxSessions.map((s) => s.sessionDate.slice(0, 10)),
+              ...allCarol.map((s) => s.sessionDate.slice(0, 10)),
+            ];
+            const targetPerWeek = (payload.protocol.arxPerWeek ?? 0) + (payload.protocol.carolPerWeek ?? 0);
+            const consistNow = new Date();
+            const consistDow = consistNow.getDay();
+            const consistMonday = new Date(consistNow);
+            consistMonday.setHours(0, 0, 0, 0);
+            consistMonday.setDate(consistNow.getDate() - (consistDow + 6) % 7);
+            const consistWeeks: { start: string; end: string; count: number; isCurrent: boolean }[] = [];
+            for (let i = 11; i >= 0; i--) {
+              const mon = new Date(consistMonday);
+              mon.setDate(consistMonday.getDate() - i * 7);
+              const sun = new Date(mon);
+              sun.setDate(mon.getDate() + 6);
+              const s = mon.toISOString().slice(0, 10);
+              const e = sun.toISOString().slice(0, 10);
+              consistWeeks.push({ start: s, end: e, count: allSessionDates.filter((d) => d >= s && d <= e).length, isCurrent: i === 0 });
+            }
+            const totalSessions12 = consistWeeks.reduce((sum, w) => sum + w.count, 0);
+            const avgPerWeek = (totalSessions12 / 12).toFixed(1);
+            const consistMax = Math.max(...consistWeeks.map((w) => w.count), targetPerWeek, 1);
+
+            // ── Last updated labels ───────────────────────────────────────────────
+            const fmtDate = (iso: string | null | undefined) =>
+              iso ? new Date(iso + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }) : null;
+            const scanLastUpdated = fmtDate(currentScan?.scanDateRaw);
+            const strengthLastUpdated = fmtDate(latestArxDate);
+            const cardioLastUpdated = fmtDate(allCarol[0]?.sessionDate?.slice(0, 10));
+            const consistLastUpdated = fmtDate(allSessionDates.sort().reverse()[0]);
 
             const sectionLabelStyle: React.CSSProperties = { fontSize: 10, textTransform: "uppercase", letterSpacing: "0.14em", color: "var(--text3)", marginBottom: 12, fontWeight: 600 };
             const detailBtnStyle: React.CSSProperties = { background: "none", border: "none", padding: "8px 0 0", fontSize: 11, color: "#4A7C59", cursor: "pointer", fontWeight: 500, textAlign: "left" };
@@ -2748,7 +2836,7 @@ export function DashboardReactClient({
                   <div className="sec-title">Progress</div>
                 </div>
 
-                {/* ── 1. Healthspan ──────────────────────────────────────────────── */}
+                {/* ── 1. Healthspan — unchanged ───────────────────────────────────── */}
                 <div style={{ marginBottom: 28 }}>
                   <div style={sectionLabelStyle}>Healthspan</div>
                   <div className="card" style={{ padding: "20px 22px" }}>
@@ -2773,8 +2861,8 @@ export function DashboardReactClient({
                         {va.trend !== null && va.trend !== 0 && (
                           <div style={{ fontSize: 12, color: va.trend > 0 ? "#4A7C59" : "#B84040" }}>
                             {va.trend > 0
-                              ? `\u2191 Improved ${va.trend} year${va.trend !== 1 ? "s" : ""} since joining`
-                              : `\u2193 Up ${Math.abs(va.trend)} year${Math.abs(va.trend) !== 1 ? "s" : ""} since last calculation`}
+                              ? `↑ Improved ${va.trend} year${va.trend !== 1 ? "s" : ""} since joining`
+                              : `↓ Up ${Math.abs(va.trend)} year${Math.abs(va.trend) !== 1 ? "s" : ""} since last calculation`}
                           </div>
                         )}
                       </>
@@ -2791,8 +2879,11 @@ export function DashboardReactClient({
 
                 {/* ── 2. Body Composition ────────────────────────────────────────── */}
                 <div style={{ marginBottom: 28 }}>
-                  <div style={sectionLabelStyle}>
-                    Body Composition{currentScan?.scanDate ? ` \u00b7 Last scan ${currentScan.scanDate}` : ""}
+                  <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Body Composition</span>
+                    <span style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--text3)", fontWeight: 400, textTransform: "none" }}>
+                      {scanLastUpdated ? `Last updated ${scanLastUpdated}` : "No data yet"}
+                    </span>
                   </div>
 
                   {!currentScan ? (
@@ -2808,50 +2899,63 @@ export function DashboardReactClient({
                         <div>
                           <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text3)", marginBottom: 6 }}>Muscle Mass</div>
                           <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: 6 }}>
-                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{payload.scan.leanMassLbs !== "--" ? payload.scan.leanMassLbs : "\u2014"}</span>
+                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{payload.scan.leanMassLbs !== "--" ? payload.scan.leanMassLbs : "—"}</span>
                             {payload.scan.leanMassLbs !== "--" && <span style={{ fontSize: 10, color: "var(--text3)" }}>lbs</span>}
                           </div>
-                          {leanSparkVals.some((v) => v !== null) && sparklinePath(leanSparkVals, 100, 28) ? (
-                            <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 4 }}>
-                              <path d={sparklinePath(leanSparkVals, 100, 28)} fill="none" stroke={leanTrendGood ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                          {leanSparkVals.filter((v) => v !== null).length >= 2 && sparklinePath(leanSparkVals, 100, 28) ? (
+                            <>
+                              <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 2 }}>
+                                <path d={sparklinePath(leanSparkVals, 100, 28)} fill="none" stroke={sentimentColor(leanTrend.sentiment)} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              {scanSparkTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4 }}>{scanSparkTimeLabel}</div>}
+                            </>
                           ) : null}
                           {leanFirst !== null && leanLast !== null && (
-                            <div style={{ fontSize: 10, color: leanTrendGood ? "#4A7C59" : "#B84040" }}>
-                              {leanTrendGood ? "\u2191" : "\u2193"} {Math.abs(leanLast - leanFirst).toFixed(1)} lbs since first scan
+                            <div style={{ fontSize: 10, color: sentimentColor(leanTrend.sentiment) }}>
+                              {trendArrow(leanTrend.direction)} {Math.abs(leanLast - leanFirst).toFixed(1)} lbs since first scan
                             </div>
                           )}
                         </div>
                         <div>
                           <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--text3)", marginBottom: 6 }}>Body Fat</div>
                           <div style={{ display: "flex", alignItems: "baseline", gap: 5, marginBottom: 6 }}>
-                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{payload.scan.bodyFatPct !== "--" ? payload.scan.bodyFatPct : "\u2014"}</span>
+                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{payload.scan.bodyFatPct !== "--" ? payload.scan.bodyFatPct : "—"}</span>
                             {payload.scan.bodyFatPct !== "--" && <span style={{ fontSize: 10, color: "var(--text3)" }}>%</span>}
                           </div>
-                          {fatSparkVals.some((v) => v !== null) && sparklinePath(fatSparkVals, 100, 28) ? (
-                            <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 4 }}>
-                              <path d={sparklinePath(fatSparkVals, 100, 28)} fill="none" stroke={fatTrendGood ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
+                          {fatSparkVals.filter((v) => v !== null).length >= 2 && sparklinePath(fatSparkVals, 100, 28) ? (
+                            <>
+                              <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 2 }}>
+                                <path d={sparklinePath(fatSparkVals, 100, 28)} fill="none" stroke={sentimentColor(fatTrend.sentiment)} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                              {scanSparkTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 4 }}>{scanSparkTimeLabel}</div>}
+                            </>
                           ) : null}
                           {fatFirst !== null && fatLast !== null && (
-                            <div style={{ fontSize: 10, color: fatTrendGood ? "#4A7C59" : "#B84040" }}>
-                              {fatTrendGood ? "\u2193" : "\u2191"} {Math.abs(fatLast - fatFirst).toFixed(1)}% since first scan
+                            <div style={{ fontSize: 10, color: sentimentColor(fatTrend.sentiment) }}>
+                              {trendArrow(fatTrend.direction)} {Math.abs(fatLast - fatFirst).toFixed(1)}% since first scan
                             </div>
                           )}
                         </div>
                       </div>
 
-                      {/* Coach insight */}
+                      {/* Dustin's Analysis — before trend label */}
                       {(currentScan || prevScan) && (
-                        <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                        <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 8 }}>
                           <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
                           <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{scanInsight(currentScan, prevScan)}</p>
                         </div>
                       )}
 
+                      {/* Trend label — below analysis, sentiment color */}
+                      {(leanFirst !== null || fatFirst !== null) && (
+                        <div style={{ fontSize: 10, color: sentimentColor(leanTrend.sentiment), fontWeight: 500, marginBottom: 10 }}>
+                          {trendArrow(leanTrend.direction)} {leanTrend.sentiment === "neutral" ? "Recent trend" : leanTrend.direction === "up" ? "Trending up" : "Trending down"}
+                        </div>
+                      )}
+
                       {/* View Details toggle */}
                       <button type="button" style={detailBtnStyle} onClick={() => setProgressExpandBody((v) => !v)}>
-                        {progressExpandBody ? "Hide details \u2191" : "View details \u2193"}
+                        {progressExpandBody ? "Hide details ↑" : "View details ↓"}
                       </button>
 
                       {/* ── Expanded: full Fit3D data ─────────────────────────────── */}
@@ -2862,7 +2966,7 @@ export function DashboardReactClient({
                             {scanMetrics.map((m) => {
                               const change = scanPctChange(m.raw, m.prevRaw);
                               const color = scanChangeColor(change, m.good);
-                              const arrow = change ? (change.direction === "up" ? "\u2191" : "\u2193") : null;
+                              const arrow = change ? (change.direction === "up" ? "↑" : "↓") : null;
                               return (
                                 <div key={m.label} className="metric-row" style={{ borderRight: "none" }}>
                                   <div className="metric-label">{m.label}</div>
@@ -2921,20 +3025,22 @@ export function DashboardReactClient({
                           {scansAsc.length >= 2 && (
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
                               {[
-                                { label: "Lean mass", vals: leanSparkVals, good: "up" as const, first: leanFirst, last: leanLast },
-                                { label: "Body fat %", vals: fatSparkVals, good: "down" as const, first: fatFirst, last: fatLast },
-                                { label: "Weight", vals: wtSparkVals, good: "neutral" as const, first: null, last: null },
+                                { label: "Lean mass", vals: leanSparkVals, trend: leanTrend },
+                                { label: "Body fat %", vals: fatSparkVals, trend: fatTrend },
+                                { label: "Weight", vals: wtSparkVals, trend: makeTrend("none") },
                               ].map((chart) => {
-                                const path = sparklinePath(chart.vals, 100, 36);
-                                const trendGood = chart.good === "neutral" ? true : chart.good === "down" ? (chart.last ?? 0) <= (chart.first ?? 0) : (chart.last ?? 0) >= (chart.first ?? 0);
-                                const lineColor = chart.good === "neutral" ? "var(--text3)" : trendGood ? "#4A7C59" : "#B84040";
+                                const validCount = chart.vals.filter((v) => v !== null).length;
+                                const path = validCount >= 2 ? sparklinePath(chart.vals, 100, 36) : "";
                                 return (
                                   <div key={chart.label} style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
                                     <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>{chart.label}</div>
                                     {path ? (
-                                      <svg viewBox="0 0 100 36" style={{ width: "100%", height: 36, display: "block" }}>
-                                        <path d={path} fill="none" stroke={lineColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
+                                      <>
+                                        <svg viewBox="0 0 100 36" style={{ width: "100%", height: 36, display: "block", marginBottom: 2 }}>
+                                          <path d={path} fill="none" stroke={sentimentColor(chart.trend.sentiment)} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                        {scanSparkTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)" }}>{scanSparkTimeLabel}</div>}
+                                      </>
                                     ) : (
                                       <div style={{ height: 36, display: "flex", alignItems: "center" }}>
                                         <span style={{ fontSize: 10, color: "var(--text3)" }}>Not enough data</span>
@@ -2953,7 +3059,12 @@ export function DashboardReactClient({
 
                 {/* ── 3. Strength ────────────────────────────────────────────────── */}
                 <div style={{ marginBottom: 28 }}>
-                  <div style={sectionLabelStyle}>Strength</div>
+                  <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Strength</span>
+                    <span style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--text3)", fontWeight: 400, textTransform: "none" }}>
+                      {strengthLastUpdated ? `Last updated ${strengthLastUpdated}` : "No data yet"}
+                    </span>
+                  </div>
 
                   {arxGroups.length === 0 ? (
                     <div className="card" style={{ padding: "20px 22px" }}>
@@ -2964,42 +3075,39 @@ export function DashboardReactClient({
                     </div>
                   ) : (
                     <div className="card" style={{ padding: "16px 18px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                        <div>
-                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>Top exercise \u00b7 {topExercise?.exercise}</div>
-                          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-                            <span style={{ fontSize: 24, fontWeight: 700, color: "var(--text)" }}>{topConc !== null ? Math.round(topConc) : "\u2014"}</span>
-                            {topConc !== null && <span style={{ fontSize: 10, color: "var(--text3)" }}>lbs concentric</span>}
+                      {/* Top 3 exercises */}
+                      <div style={{ marginBottom: 14 }}>
+                        {top3Exercises.map((ex, idx) => (
+                          <div key={ex.exercise} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 0", borderBottom: idx < top3Exercises.length - 1 ? "1px solid var(--border)" : "none" }}>
+                            <div style={{ fontSize: 12, color: "var(--text2)", fontWeight: 500 }}>{ex.exercise}</div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text)" }}>{Math.round(ex.value)}</span>
+                              <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span>
+                              {ex.trend.direction !== "none" && (
+                                <span style={{ fontSize: 11, fontWeight: 600, color: sentimentColor(ex.trend.sentiment) }}>
+                                  {trendArrow(ex.trend.direction)}
+                                </span>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                        <div style={{ textAlign: "right" }}>
-                          <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4 }}>This month</div>
-                          <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text)" }}>{arxSessionsThisMonth}</div>
-                        </div>
+                        ))}
                       </div>
 
-                      {topConcHistory.length >= 2 && sparklinePath(topConcHistory, 100, 28) ? (
-                        <>
-                          <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Concentric trend</div>
-                          <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 6 }}>
-                            <path d={sparklinePath(topConcHistory, 100, 28)} fill="none" stroke={strengthTrend === "improving" ? "#4A7C59" : strengthTrend === "declining" ? "#B84040" : "var(--text3)"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </>
-                      ) : null}
-
-                      {strengthTrend && (
-                        <div style={{ fontSize: 11, color: strengthTrend === "improving" ? "#4A7C59" : strengthTrend === "declining" ? "#B84040" : "var(--text3)", fontWeight: 500, marginBottom: 8 }}>
-                          {strengthTrend === "improving" ? "\u2191 Trending up" : strengthTrend === "declining" ? "\u2193 Trending down" : "Stable"}
-                        </div>
-                      )}
-
-                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 10 }}>
+                      {/* Dustin's Analysis — before trend label */}
+                      <div style={{ background: "rgba(196,131,26,0.06)", border: "1px solid rgba(196,131,26,0.18)", borderRadius: "var(--r-sm)", padding: "10px 14px", marginBottom: 8 }}>
                         <div style={{ fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(196,131,26,0.8)", marginBottom: 4 }}>Dustin&apos;s Analysis</div>
                         <p style={{ fontSize: 12, color: "var(--text2)", lineHeight: 1.6, margin: 0 }}>{buildArxInsight(arxGroups)}</p>
                       </div>
 
+                      {/* Trend label — below analysis, sentiment color */}
+                      {strengthTrend && (
+                        <div style={{ fontSize: 10, color: sentimentColor(strengthTrend.sentiment), fontWeight: 500, marginBottom: 10 }}>
+                          {trendArrow(strengthTrend.direction)} {strengthTrend.sentiment === "neutral" ? "Recent trend" : strengthTrend.direction === "up" ? "Trending up" : "Trending down"}
+                        </div>
+                      )}
+
                       <button type="button" style={detailBtnStyle} onClick={() => setProgressExpandStrength((v) => !v)}>
-                        {progressExpandStrength ? "Hide details \u2191" : `View all ${arxGroups.length} exercise${arxGroups.length !== 1 ? "s" : ""} \u2193`}
+                        {progressExpandStrength ? "Hide details ↑" : `View all ${arxGroups.length} exercise${arxGroups.length !== 1 ? "s" : ""} ↓`}
                       </button>
 
                       {progressExpandStrength && (
@@ -3007,7 +3115,7 @@ export function DashboardReactClient({
                           {latestArxDate && latestArxByEx.size > 0 && (
                             <div style={{ marginBottom: 16 }}>
                               <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>
-                                Last workout \u00b7 {new Date(latestArxDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                                Last workout · {new Date(latestArxDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                               </div>
                               {Array.from(latestArxByEx.entries()).map(([ex, vals]) => {
                                 const ratio = vals.conc && vals.ecc ? vals.ecc / vals.conc : null;
@@ -3017,7 +3125,7 @@ export function DashboardReactClient({
                                     <div style={{ display: "flex", gap: 14, fontSize: 11, color: "var(--text3)" }}>
                                       {vals.conc != null && <span>Conc <b style={{ color: "var(--text)" }}>{Math.round(vals.conc)} lbs</b></span>}
                                       {vals.ecc != null && <span>Ecc <b style={{ color: "var(--text)" }}>{Math.round(vals.ecc)} lbs</b></span>}
-                                      {ratio != null && <span style={{ color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}\u00d7</span>}
+                                      {ratio != null && <span style={{ color: eccRatioLabel(ratio).color }}>{ratio.toFixed(2)}×</span>}
                                     </div>
                                   </div>
                                 );
@@ -3025,20 +3133,38 @@ export function DashboardReactClient({
                             </div>
                           )}
 
-                          {latestConcByEx.length > 1 && maxConcAll > 0 && (
+                          {/* Dual-bar output chart */}
+                          {latestConcByEx.length > 1 && maxBarAll > 0 && (
                             <div style={{ marginBottom: 16 }}>
-                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 8 }}>Output by exercise</div>
-                              {[...latestConcByEx].sort((a, b) => b.value - a.value).map(({ exercise, value }) => (
-                                <div key={exercise} style={{ marginBottom: 8 }}>
-                                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                                    <span style={{ fontSize: 11, color: "var(--text2)" }}>{exercise}</span>
-                                    <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text)" }}>{value > 0 ? `${Math.round(value)} lbs` : "\u2014"}</span>
+                              <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text3)", marginBottom: 6 }}>Output by exercise</div>
+                              <div style={{ display: "flex", gap: 10, marginBottom: 8 }}>
+                                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "var(--text3)" }}>
+                                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "#4A7C59" }} /> Concentric
+                                </span>
+                                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "var(--text3)" }}>
+                                  <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "var(--text3)", opacity: 0.45 }} /> Eccentric
+                                </span>
+                              </div>
+                              {[...latestConcByEx].sort((a, b) => b.value - a.value).map(({ exercise, value }) => {
+                                const eccVal = latestEccByEx.find((e) => e.exercise === exercise)?.value ?? 0;
+                                return (
+                                  <div key={exercise} style={{ marginBottom: 10 }}>
+                                    <div style={{ fontSize: 11, color: "var(--text2)", marginBottom: 4 }}>{exercise}</div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                                      <div style={{ flex: 1, height: 5, background: "var(--bg2)", borderRadius: 3, overflow: "hidden" }}>
+                                        <div style={{ height: "100%", width: `${(value / maxBarAll) * 100}%`, background: "#4A7C59", borderRadius: 3 }} />
+                                      </div>
+                                      <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text)", minWidth: 52, textAlign: "right" }}>{value > 0 ? `${Math.round(value)} lbs` : "—"}</span>
+                                    </div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                      <div style={{ flex: 1, height: 5, background: "var(--bg2)", borderRadius: 3, overflow: "hidden" }}>
+                                        <div style={{ height: "100%", width: `${(eccVal / maxBarAll) * 100}%`, background: "var(--text3)", opacity: 0.45, borderRadius: 3 }} />
+                                      </div>
+                                      <span style={{ fontSize: 10, color: "var(--text3)", minWidth: 52, textAlign: "right" }}>{eccVal > 0 ? `${Math.round(eccVal)} lbs` : "—"}</span>
+                                    </div>
                                   </div>
-                                  <div style={{ height: 5, background: "var(--bg2)", borderRadius: 3, overflow: "hidden" }}>
-                                    <div style={{ height: "100%", width: `${(value / maxConcAll) * 100}%`, background: "#4A7C59", borderRadius: 3 }} />
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
 
@@ -3052,24 +3178,47 @@ export function DashboardReactClient({
                               const ratioInfo = ratio !== null ? eccRatioLabel(ratio) : null;
                               const pr = conc !== null ? Math.max(...sessions.map((s) => s.concentricMax ?? 0)) : 0;
                               const isPR = conc !== null && conc >= pr && sessions.length > 1;
-                              const sparkVals = sessions.slice(0, 12).reverse().map((s) => s.concentricMax);
+                              const isTopPerformer = exercise === topPerformerExercise;
+                              // Sparkline — hide if < 2 data points
+                              const sparkSessions = sessions.slice(0, 12).reverse();
+                              const sparkVals = sparkSessions.map((s) => s.concentricMax);
+                              const validSparkCount = sparkVals.filter((v) => v !== null).length;
+                              const path = validSparkCount >= 2 ? sparklinePath(sparkVals, 100, 28) : "";
+                              // Sentiment-based color (neutral = gray by default)
                               const sparkFirst = sparkVals.find((v) => v !== null) ?? null;
                               const sparkLast = [...sparkVals].reverse().find((v) => v !== null) ?? null;
-                              const trending = sparkFirst !== null && sparkLast !== null && sparkLast > sparkFirst;
-                              const path = sparklinePath(sparkVals, 100, 28);
+                              const sparkDir: "up" | "down" | "none" =
+                                sparkFirst !== null && sparkLast !== null
+                                  ? sparkLast > sparkFirst ? "up" : sparkLast < sparkFirst ? "down" : "none"
+                                  : "none";
+                              const exTrend = makeTrend(sparkDir);
+                              // Time range label
+                              const sparkTimeLabel = (() => {
+                                if (sparkSessions.length < 2) return null;
+                                const oldest = sparkSessions[0]?.sessionDate?.slice(0, 10);
+                                const newest = sparkSessions[sparkSessions.length - 1]?.sessionDate?.slice(0, 10);
+                                if (!oldest || !newest || oldest === newest) return null;
+                                const months = Math.round((new Date(newest).getTime() - new Date(oldest).getTime()) / (1000 * 60 * 60 * 24 * 30.44));
+                                return months >= 1 ? `last ${months} month${months !== 1 ? "s" : ""}` : null;
+                              })();
                               const isSelected = selectedArxExercise === exercise;
                               return (
                                 <div key={exercise} className="card"
                                   style={{ padding: "14px 16px", cursor: "pointer", border: isSelected ? "1px solid rgba(74,124,89,0.38)" : undefined, background: isSelected ? "rgba(157,204,58,0.04)" : undefined }}
                                   onClick={() => setSelectedArxExercise(isSelected ? null : exercise)}>
+                                  {/* Header: name + badges */}
                                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 8 }}>
                                     <div>
                                       <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{exercise}</div>
-                                      <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""} \u00b7 {isSelected ? "tap to close" : "tap for full history"}</div>
+                                      <div style={{ fontSize: 10, color: "var(--text3)", marginTop: 1 }}>{sessions.length} session{sessions.length !== 1 ? "s" : ""}</div>
                                     </div>
-                                    {isPR && <span style={{ fontSize: 9, background: "rgba(74,124,89,0.12)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.28)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
+                                    <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                                      {isTopPerformer && <span style={{ fontSize: 9, background: "rgba(74,124,89,0.12)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.28)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>Top performer</span>}
+                                      {isPR && <span style={{ fontSize: 9, background: "rgba(74,124,89,0.12)", color: "#4A7C59", border: "1px solid rgba(74,124,89,0.28)", borderRadius: 4, padding: "2px 6px", fontWeight: 700, letterSpacing: "0.08em" }}>PR</span>}
+                                    </div>
                                   </div>
-                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: path ? 8 : 0 }}>
+                                  {/* Conc / Ecc tiles */}
+                                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
                                     <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "7px 10px" }}>
                                       <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 2 }}>Concentric</div>
                                       <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{conc !== null ? Math.round(conc) : "--"} <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span></div>
@@ -3079,18 +3228,32 @@ export function DashboardReactClient({
                                       <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text)" }}>{ecc !== null ? Math.round(ecc) : "--"} <span style={{ fontSize: 9, color: "var(--text3)" }}>lbs</span></div>
                                     </div>
                                   </div>
-                                  {ratioInfo && (
-                                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: path ? 8 : 0 }}>
-                                      <span style={{ fontSize: 10, color: "var(--text3)" }}>Ecc:Conc</span>
-                                      <span style={{ fontSize: 11, fontWeight: 600, color: ratioInfo.color }}>{ratio!.toFixed(2)}\u00d7</span>
-                                      <span style={{ fontSize: 9, color: ratioInfo.color, background: `${ratioInfo.color}18`, border: `1px solid ${ratioInfo.color}40`, borderRadius: 4, padding: "1px 5px" }}>{ratioInfo.label}</span>
+                                  {/* Ecc:Conc ratio + explanation */}
+                                  {ratioInfo && ratio !== null && (
+                                    <div style={{ marginBottom: 8 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                                        <span style={{ fontSize: 10, color: "var(--text3)" }}>Ecc:Conc</span>
+                                        <span style={{ fontSize: 11, fontWeight: 600, color: ratioInfo.color }}>{ratio.toFixed(2)}×</span>
+                                        <span style={{ fontSize: 9, color: ratioInfo.color, background: `${ratioInfo.color}18`, border: `1px solid ${ratioInfo.color}40`, borderRadius: 4, padding: "1px 5px" }}>{ratioInfo.label}</span>
+                                      </div>
+                                      <div style={{ fontSize: 10, color: "var(--text3)", lineHeight: 1.5 }}>{eccRatioExplanation(ratio)}</div>
                                     </div>
                                   )}
+                                  {/* Sparkline + time label */}
                                   {path ? (
-                                    <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block" }}>
-                                      <path d={path} fill="none" stroke={trending ? "#4A7C59" : "#B84040"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
+                                    <>
+                                      <svg viewBox="0 0 100 28" style={{ width: "100%", height: 28, display: "block", marginBottom: 2 }}>
+                                        <path d={path} fill="none" stroke={sentimentColor(exTrend.sentiment)} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                      {sparkTimeLabel && <div style={{ fontSize: 9, color: "var(--text3)", marginBottom: 6 }}>{sparkTimeLabel}</div>}
+                                    </>
                                   ) : null}
+                                  {/* View history footer */}
+                                  <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4 }}>
+                                    <span style={{ fontSize: 10, color: "#4A7C59", fontWeight: 500 }}>
+                                      {isSelected ? "Close ↑" : "View history →"}
+                                    </span>
+                                  </div>
                                 </div>
                               );
                             })}
@@ -3102,8 +3265,13 @@ export function DashboardReactClient({
                 </div>
 
                 {/* ── 4. Cardio ──────────────────────────────────────────────────── */}
-                <div style={{ marginBottom: 16 }}>
-                  <div style={sectionLabelStyle}>Cardio</div>
+                <div style={{ marginBottom: 28 }}>
+                  <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Cardio</span>
+                    <span style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--text3)", fontWeight: 400, textTransform: "none" }}>
+                      {cardioLastUpdated ? `Last updated ${cardioLastUpdated}` : "No data yet"}
+                    </span>
+                  </div>
 
                   {allCarol.length === 0 ? (
                     <div className="card" style={{ padding: "20px 22px" }}>
@@ -3129,20 +3297,20 @@ export function DashboardReactClient({
                               <span style={{ fontSize: 10, color: vo2Cat.color, fontWeight: 600 }}>{vo2Cat.label}</span>
                             </>
                           ) : (
-                            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text2)" }}>\u2014</div>
+                            <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text2)" }}>—</div>
                           )}
                         </div>
                         <div>
                           <div style={{ fontSize: 10, color: "var(--text3)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.08em" }}>Aerobic Power</div>
                           <div style={{ display: "flex", alignItems: "baseline", gap: 4, marginBottom: 4 }}>
-                            <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "\u2014"}</span>
+                            <span style={{ fontSize: 22, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "—"}</span>
                             {latestManp ? <span style={{ fontSize: 9, color: "var(--text3)" }}>W MANP</span> : null}
                           </div>
                           {manpTrendLabel ? (
                             <div style={{ fontSize: 10, color: manpTrendColor, fontWeight: 500 }}>{manpTrendLabel}</div>
                           ) : (
                             <div style={{ fontSize: 10, color: "var(--text3)" }}>
-                              {rehitWithManp.length < 2 ? "More REHIT sessions needed" : "Building\u2026"}
+                              {rehitWithManp.length < 2 ? "More REHIT sessions needed" : "Building…"}
                             </div>
                           )}
                         </div>
@@ -3154,7 +3322,7 @@ export function DashboardReactClient({
                           </div>
                           {carolPrevMonth > 0 ? (
                             <div style={{ fontSize: 10, color: carolThisMonth >= carolPrevMonth ? "#4A7C59" : "var(--text3)" }}>
-                              {carolThisMonth >= carolPrevMonth ? "\u2191" : "\u2193"} vs {carolPrevMonth} last month
+                              {carolThisMonth >= carolPrevMonth ? "↑" : "↓"} vs {carolPrevMonth} last month
                             </div>
                           ) : (
                             <div style={{ fontSize: 10, color: "var(--text3)" }}>{allCarol.length} total rides</div>
@@ -3168,7 +3336,7 @@ export function DashboardReactClient({
                       </div>
 
                       <button type="button" style={detailBtnStyle} onClick={() => setProgressExpandCardio((v) => !v)}>
-                        {progressExpandCardio ? "Hide details \u2191" : `View all ${allCarol.length} ride${allCarol.length !== 1 ? "s" : ""} \u2193`}
+                        {progressExpandCardio ? "Hide details ↑" : `View all ${allCarol.length} ride${allCarol.length !== 1 ? "s" : ""} ↓`}
                       </button>
 
                       {progressExpandCardio && (
@@ -3179,7 +3347,7 @@ export function DashboardReactClient({
                               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 10 }}>
                                 <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
                                   <div style={{ fontSize: 9, color: "var(--text3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>Latest MANP</div>
-                                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "\u2014"} <span style={{ fontSize: 9, color: "var(--text3)" }}>W</span></div>
+                                  <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)" }}>{latestManp ? Math.round(latestManp) : "—"} <span style={{ fontSize: 9, color: "var(--text3)" }}>W</span></div>
                                   {manpTrendLabel && <div style={{ fontSize: 10, color: manpTrendColor, marginTop: 3 }}>{manpTrendLabel}</div>}
                                 </div>
                                 <div style={{ background: "var(--bg2)", borderRadius: "var(--r-sm)", padding: "10px 12px" }}>
@@ -3190,7 +3358,7 @@ export function DashboardReactClient({
                                       <div style={{ fontSize: 10, color: vo2Cat.color, marginTop: 3 }}>{vo2Cat.label}</div>
                                     </>
                                   ) : (
-                                    <div style={{ fontSize: 14, color: "var(--text3)" }}>\u2014</div>
+                                    <div style={{ fontSize: 14, color: "var(--text3)" }}>—</div>
                                   )}
                                 </div>
                               </div>
@@ -3220,6 +3388,55 @@ export function DashboardReactClient({
                       )}
                     </div>
                   )}
+                </div>
+
+                {/* ── 5. Consistency ─────────────────────────────────────────────── */}
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ ...sectionLabelStyle, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span>Consistency</span>
+                    <span style={{ fontSize: 9, letterSpacing: "0.08em", color: "var(--text3)", fontWeight: 400, textTransform: "none" }}>
+                      {consistLastUpdated ? `Last updated ${consistLastUpdated}` : "No data yet"}
+                    </span>
+                  </div>
+                  <div className="card" style={{ padding: "16px 18px" }}>
+                    {(() => {
+                      const chartW = 280;
+                      const chartH = 72;
+                      const barGap = 3;
+                      const barW = (chartW - barGap * (consistWeeks.length - 1)) / consistWeeks.length;
+                      const refY = targetPerWeek > 0 ? chartH - (targetPerWeek / consistMax) * chartH : null;
+                      return (
+                        <>
+                          <div style={{ overflowX: "auto", marginBottom: 10 }}>
+                            <svg viewBox={`0 0 ${chartW} ${chartH}`} style={{ width: "100%", height: chartH, display: "block", overflow: "visible" }}>
+                              {consistWeeks.map((week, i) => {
+                                const barH = week.count > 0 ? Math.max(3, (week.count / consistMax) * chartH) : 0;
+                                const x = i * (barW + barGap);
+                                const y = chartH - barH;
+                                return (
+                                  <rect key={week.start} x={x.toFixed(1)} y={y.toFixed(1)}
+                                    width={barW.toFixed(1)} height={barH.toFixed(1)}
+                                    fill={week.isCurrent ? "#4A7C59" : "var(--text3)"}
+                                    fillOpacity={week.isCurrent ? 1 : 0.38} rx="2" />
+                                );
+                              })}
+                              {refY !== null && targetPerWeek > 0 && (
+                                <>
+                                  <line x1="0" y1={refY.toFixed(1)} x2={chartW} y2={refY.toFixed(1)}
+                                    stroke="var(--text3)" strokeWidth="1" strokeDasharray="4 3" />
+                                  <text x={chartW - 2} y={(refY - 3).toFixed(1)} textAnchor="end"
+                                    fontSize="8" fill="var(--text3)">Your target</text>
+                                </>
+                              )}
+                            </svg>
+                          </div>
+                          <div style={{ fontSize: 11, color: "var(--text3)" }}>
+                            Averaging <b style={{ color: "var(--text)" }}>{avgPerWeek}</b> sessions / week over 12 weeks
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
                 </div>
               </>
             );
